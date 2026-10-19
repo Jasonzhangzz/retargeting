@@ -1,0 +1,26 @@
+{
+  "sampled-lm": {
+    "cases": 9,
+    "lift_successes": 9,
+    "lift_and_hold_successes": 9,
+    "warm_mean_ms": 120.53904602890852,
+    "warm_p50_ms": 117.18079698039219,
+    "warm_p95_ms": 138.26460551354103,
+    "first_window_p50_ms": 510.80184301827103,
+    "warm_window_count": 1071,
+    "process_wall_seconds_mean": 19.25935755254209,
+    "under_30ms_fraction": 0.0
+  },
+  "no-admm": {
+    "cases": 9,
+    "lift_successes": 8,
+    "lift_and_hold_successes": 8,
+    "warm_mean_ms": 109.80006662337848,
+    "warm_p50_ms": 116.55730794882402,
+    "warm_p95_ms": 125.23898502695374,
+    "first_window_p50_ms": 580.1136009977199,
+    "warm_window_count": 1071,
+    "process_wall_seconds_mean": 17.87229120733294,
+    "under_30ms_fraction": 0.0
+  }
+}

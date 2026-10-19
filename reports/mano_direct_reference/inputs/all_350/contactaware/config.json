@@ -1,0 +1,10 @@
+{
+  "hand": "wuji_right",
+  "hand_qpos_dim": 26,
+  "base_qpos_dim": 6,
+  "collision_target": "mesh",
+  "sequence_policy": {
+    "dataset": "DexYCB",
+    "contact_query_region": "terminal_pad"
+  }
+}

@@ -1,0 +1,10 @@
+# Versions used for standalone verification (Python 3.11, Linux/CUDA).
+numpy==2.2.6
+scipy==1.15.3
+mujoco==3.11.0
+warp-lang==1.17.0
+casadi==3.7.2
+PyYAML==6.0.3
+# Used by result replay/video export.
+imageio==2.37.0
+imageio-ffmpeg>=0.6,<0.7

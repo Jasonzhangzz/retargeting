@@ -1,0 +1,38 @@
+{
+  "frame": 154,
+  "pair": [
+    "right_finger3_link3",
+    "right_finger4_link3"
+  ],
+  "meshes_watertight": [
+    false,
+    false
+  ],
+  "directions": [
+    {
+      "vertices_inside_other_mesh": 213,
+      "maximum_inside_depth_mm": 4.450286565772985
+    },
+    {
+      "vertices_inside_other_mesh": 162,
+      "maximum_inside_depth_mm": 2.450243534453303
+    }
+  ],
+  "triangle_surface_intersection_confirmed": true,
+  "intersection_witness": {
+    "source_edge": 0,
+    "target_triangle": 548,
+    "edge_fraction": 0.9180355369780595,
+    "triangle_barycentric": [
+      0.028548871119871505,
+      0.8155801906339835,
+      0.15587093824614504
+    ],
+    "point_world": [
+      0.47766864165667605,
+      0.3313669487176928,
+      0.2332916607979295
+    ]
+  },
+  "winding_depth_is_not_a_certified_penetration_depth": "Meshes are not watertight; only the edge-triangle intersection is conclusive."
+}

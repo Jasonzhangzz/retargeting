@@ -1,0 +1,47 @@
+{
+  "input": "/home/zz/retarget/outputs/noise_inputs/noise_cli_hand_only/inputs/noise",
+  "loaded_guidance": "/home/zz/retarget/outputs/noise_inputs/noise_cli_hand_only/inputs/noise/contactaware/contact_guidance.npz",
+  "reference_frame": 40,
+  "query_positions_equal_to_noisy_file": true,
+  "physical_contact_positions_equal_to_noisy_file": true,
+  "max_active_template_shift_at_frame_mm": 19.867412567138672,
+  "mean_active_template_shift_at_frame_mm": 8.643953323364258,
+  "loaded_action_equal_to_noisy_reference": true,
+  "wrist_change_max": 0.0,
+  "finger_change_max_rad": 0.29518699645996094,
+  "max_hand_finger_change_per_dof_rad": [
+    0.15633416175842285,
+    0.07832749933004379,
+    0.003576854011043906,
+    0.14866210520267487,
+    0.14242571592330933,
+    0.1162286251783371,
+    0.29518699645996094,
+    0.09008166193962097,
+    0.16814470291137695,
+    0.24252012372016907,
+    0.04173937439918518,
+    0.021163277328014374,
+    0.06589615345001221,
+    0.1955205798149109,
+    0.09813937544822693,
+    0.05396345630288124,
+    0.042882442474365234,
+    0.20840974152088165,
+    0.0950976014137268,
+    0.08561575412750244
+  ],
+  "retained_original_guidance_fields": [
+    "contact_mask",
+    "contact_weight",
+    "hand_query_body_ids",
+    "hand_query_local_pos",
+    "link_labels"
+  ],
+  "notes": [
+    "Runtime load_sequence -> make_window -> assign_target was executed on CPU Warp buffers.",
+    "No full solver run was repeated; this audit checks the actual loss-target assignment path.",
+    "Input derives from an originally feasible Wuji reference via differential MANO chain fitting.",
+    "Wrist, original contact semantics/timing/local hand coordinates retained; perturbation ramps at frames 21-23."
+  ]
+}

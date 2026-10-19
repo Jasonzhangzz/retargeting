@@ -1,0 +1,75 @@
+bounds:
+  init_base_pos: 0.05
+  init_base_rot: 0.16
+  init_finger: 0.24
+contact:
+  age_ramp_frames: 0
+  finger_joint_surface_margin_mm: 2.0
+  marked_query_dist_mm: 10.0
+  marked_query_temp_mm: 1.0
+  penetration_limit: 0.008
+  target_phi: -0.004
+contact_physics:
+  contact_topk: 1
+  gs_distance_offset: 0.0
+loss:
+  action_ref_base: 10.0
+  action_ref_base_rot: 3.0
+  action_ref_finger: 0.03
+  contact_robustness: 40.0
+  finger_joint_collision: 100.0
+  grasp_closure: 1000.0
+  grasp_wrench: 1000.0
+  init: 0.5
+  marked_query_pos: 1.0
+  obj_ang_vel: 0.03
+  obj_pos: 1.0
+  obj_rot: 0.3
+  obj_vel: 0.1
+  penetration: 75.0
+  reference_pose_scale: 100.0
+  soft_penetration: 15.0
+  terminal: 2.0
+optimizer:
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1.0e-08
+  contact_dynamics: soft
+  contact_softness: 100.0
+  grad_clip: 50.0
+  horizon: 5
+  lr_max: 0.0015
+  lr_min: 1.0e-05
+  multistart_count: 64
+  multistart_ctrl_std: 0.003
+  multistart_init_raw_limit: 0.5
+  multistart_init_std: 0.03
+  multistart_seed: 0
+  n_iter: 40
+  warm_shift_scale: 1.0
+sequence:
+  hand: wuji_right
+  hold_frame: -1
+  hold_seconds: 0.0
+  scene: sdf
+  start: 0
+simulator:
+  action_dt: 0.03
+  exec_backend: comfree
+  exec_dt: 0.01
+  knot_dt: 0.06
+  mpc_dt: 0.01
+  ref_dt: 0.03333333333333333
+smoothing:
+  control_acceleration_base_position_scale: 50.0
+  control_acceleration_base_rotation_scale: 50.0
+  control_acceleration_finger_scale: 500.0
+  control_acceleration_weight: 1.0
+  control_velocity_base_position_scale: 10.0
+  control_velocity_base_rotation_scale: 3.0
+  control_velocity_finger_scale: 1.0
+  control_velocity_weight: 1.0
+  enabled: true
+  hand_state_weight: 1.0
+video:
+  fps: 30.0

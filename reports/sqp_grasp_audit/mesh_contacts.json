@@ -1,0 +1,19 @@
+{
+  "frame": 23,
+  "contact_rho": 0.1,
+  "comparison": "actual AdamW first mesh contact block vs SQP helper, exactly equal inputs",
+  "same_input_max_delta_mm": 0.0,
+  "same_input_equal": true,
+  "measured_vs_rollout_max_delta_mm": 5.395606160163879,
+  "final_adamw_vs_sqp_max_delta_mm": 5.33787626773119,
+  "final_adamw_vs_sqp_equal": false,
+  "adamw_contact_rounds": 3,
+  "shape": [
+    31,
+    19,
+    3
+  ],
+  "surface_solver": "bounded_mesh_wrench_search",
+  "sqp_runtime_uses_forward_comfree_rollout": false,
+  "full_alternating_outputs_equal": false
+}

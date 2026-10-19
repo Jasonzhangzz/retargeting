@@ -1,0 +1,58 @@
+{
+  "hold_cases": {
+    "without_velocity": {
+      "position_error_end_mm": 15.454093933105469,
+      "orientation_error_end_deg": 7.908965110778809,
+      "linear_speed_rms_m_s": 0.06361010670661926,
+      "angular_speed_rms_rad_s": 0.1707836091518402
+    },
+    "with_velocity": {
+      "position_error_end_mm": 14.45762825012207,
+      "orientation_error_end_deg": 7.767057418823242,
+      "linear_speed_rms_m_s": 0.05177121236920357,
+      "angular_speed_rms_rad_s": 0.15716171264648438
+    }
+  },
+  "native_gradient": {
+    "objective": 0.36365778125,
+    "only_velocity_tracking": true,
+    "rows": [
+      {
+        "coordinate": 2,
+        "analytic": 0.005495921611785888,
+        "finite_difference": [
+          0.005449999999999899,
+          0.005545312499999344
+        ],
+        "relative_error": 0.008906781757288089
+      },
+      {
+        "coordinate": 3,
+        "analytic": -0.013192726373672485,
+        "finite_difference": [
+          -0.013423437500000024,
+          -0.013189062499999182
+        ],
+        "relative_error": 0.00027771921963110936
+      },
+      {
+        "coordinate": 6,
+        "analytic": 0.0024138931185007095,
+        "finite_difference": [
+          0.0021710937499988536,
+          0.0023796875000009488
+        ],
+        "relative_error": 0.014170311948611129
+      },
+      {
+        "coordinate": 106,
+        "analytic": -0.0020210893154144287,
+        "finite_difference": [
+          -0.0019429687499988857,
+          -0.0020484375000018318
+        ],
+        "relative_error": 0.01335075372686674
+      }
+    ]
+  }
+}

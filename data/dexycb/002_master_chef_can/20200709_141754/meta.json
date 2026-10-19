@@ -1,0 +1,20 @@
+{
+  "dataset": "DexYCB",
+  "source_release": "dex-ycb-20210415",
+  "source_url": "https://dex-ycb.github.io/",
+  "license": "CC-BY-NC-4.0",
+  "subject": "20200709-subject-01",
+  "sequence": "20200709_141754",
+  "object": "002_master_chef_can",
+  "ycb_id": 1,
+  "object_index": 0,
+  "camera_serial": "836212060125",
+  "hand_side": "right",
+  "fps": 30,
+  "frames": 72,
+  "valid_frames": 63,
+  "pose_encoding": "MANO PCA coefficients: first 48 pose entries; last 3 entries translation in metres (camera coordinates)",
+  "object_pose_encoding": "qx qy qz qw tx ty tz; camera coordinates; metres",
+  "modifications": "Stacked original per-frame pose_m, pose_y and joint_3d; added quaternion conversion, times and validity mask; no temporal subsampling or pose refitting",
+  "sha256": "35f6e5dffa58bc2181bd9ad208478c0aba45dfa32f30d7ceb95cb223033b1319"
+}

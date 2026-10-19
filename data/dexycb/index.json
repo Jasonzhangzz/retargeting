@@ -1,0 +1,47 @@
+[
+  {
+    "object": "002_master_chef_can",
+    "sequence": "20200709_141754",
+    "frames": 72,
+    "valid_frames": 63,
+    "fps": 30,
+    "path": "002_master_chef_can/20200709_141754/mano.npz",
+    "sha256": "35f6e5dffa58bc2181bd9ad208478c0aba45dfa32f30d7ceb95cb223033b1319"
+  },
+  {
+    "object": "003_cracker_box",
+    "sequence": "20200709_142211",
+    "frames": 72,
+    "valid_frames": 72,
+    "fps": 30,
+    "path": "003_cracker_box/20200709_142211/mano.npz",
+    "sha256": "31ab39efca6793578471f2535a54f3e703aa56791a2bc1fe07bba8a472c1dfc6"
+  },
+  {
+    "object": "004_sugar_box",
+    "sequence": "20200709_142517",
+    "frames": 74,
+    "valid_frames": 74,
+    "fps": 30,
+    "path": "004_sugar_box/20200709_142517/mano.npz",
+    "sha256": "a3c5f6aea75ed6bc2a6bd8dfc2e5524c82f051260b9d17a38a35db68a3e871a3"
+  },
+  {
+    "object": "005_tomato_soup_can",
+    "sequence": "20200709_142853",
+    "frames": 74,
+    "valid_frames": 69,
+    "fps": 30,
+    "path": "005_tomato_soup_can/20200709_142853/mano.npz",
+    "sha256": "d781d0ad50b001ebd6aae0de6b1ba5b1fd3f5d23cbd9252f106ac40f70a941f3"
+  },
+  {
+    "object": "006_mustard_bottle",
+    "sequence": "20200709_143211",
+    "frames": 72,
+    "valid_frames": 72,
+    "fps": 30,
+    "path": "006_mustard_bottle/20200709_143211/mano.npz",
+    "sha256": "c33a320022d66fdbe51fd199e9f2033145f2eb5d0a01b22f2e986b4621814153"
+  }
+]

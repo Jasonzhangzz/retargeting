@@ -1,0 +1,15 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5060 Ti",
+  "driver": "595.84",
+  "python": "3.13.13 | packaged by Anaconda, Inc. | (main, Apr 14 2026, 06:19:41) [GCC 14.3.0]",
+  "platform": "Linux-7.0.0-31-generic-x86_64-with-glibc2.39",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "mujoco": "3.10.0",
+  "warp": "1.16.0",
+  "viewer": false,
+  "threads": {
+    "OPENBLAS_NUM_THREADS": 1,
+    "OMP_NUM_THREADS": 1
+  }
+}

@@ -1,0 +1,2677 @@
+{
+  "thumb_350__fixed": {
+    "optimized_task_feasible_fraction": 0.9659090909090909,
+    "repaired_infeasible_windows": 0,
+    "input_infeasible_windows": 2,
+    "windows": [
+      {
+        "window": 32,
+        "frame": 29,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 33,
+        "frame": 30,
+        "task_feasible": false,
+        "input_feasible": true
+      },
+      {
+        "window": 34,
+        "frame": 31,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 35,
+        "frame": 32,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 36,
+        "frame": 33,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 37,
+        "frame": 34,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 38,
+        "frame": 34,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 39,
+        "frame": 35,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 40,
+        "frame": 36,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 41,
+        "frame": 37,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 42,
+        "frame": 38,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 43,
+        "frame": 39,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 44,
+        "frame": 40,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 45,
+        "frame": 41,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 46,
+        "frame": 42,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 47,
+        "frame": 43,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 48,
+        "frame": 44,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 49,
+        "frame": 44,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 50,
+        "frame": 45,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 51,
+        "frame": 46,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 52,
+        "frame": 47,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 53,
+        "frame": 48,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 54,
+        "frame": 49,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 55,
+        "frame": 50,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 56,
+        "frame": 51,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 57,
+        "frame": 52,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 58,
+        "frame": 53,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 59,
+        "frame": 53,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 60,
+        "frame": 54,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 61,
+        "frame": 55,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 62,
+        "frame": 56,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 63,
+        "frame": 57,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 64,
+        "frame": 58,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 65,
+        "frame": 59,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 66,
+        "frame": 60,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 67,
+        "frame": 61,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 68,
+        "frame": 62,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 69,
+        "frame": 62,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 70,
+        "frame": 63,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 71,
+        "frame": 64,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 72,
+        "frame": 65,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 73,
+        "frame": 66,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 74,
+        "frame": 67,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 75,
+        "frame": 68,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 76,
+        "frame": 69,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 77,
+        "frame": 70,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 78,
+        "frame": 70,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 79,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 80,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 81,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 82,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 83,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 84,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 85,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 86,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 87,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 88,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 89,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 90,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 91,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 92,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 93,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 94,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 95,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 96,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 97,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 98,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 99,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 100,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 101,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 102,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 103,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 104,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 105,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 106,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 107,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 108,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 109,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 110,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 111,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 112,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 113,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 114,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 115,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 116,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 117,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 118,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 119,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      }
+    ]
+  },
+  "thumb_350__sampled-lm": {
+    "optimized_task_feasible_fraction": 1.0,
+    "repaired_infeasible_windows": 2,
+    "input_infeasible_windows": 2,
+    "windows": [
+      {
+        "window": 32,
+        "frame": 29,
+        "task_feasible": true,
+        "input_feasible": false
+      },
+      {
+        "window": 33,
+        "frame": 30,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 34,
+        "frame": 31,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 35,
+        "frame": 32,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 36,
+        "frame": 33,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 37,
+        "frame": 34,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 38,
+        "frame": 34,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 39,
+        "frame": 35,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 40,
+        "frame": 36,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 41,
+        "frame": 37,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 42,
+        "frame": 38,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 43,
+        "frame": 39,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 44,
+        "frame": 40,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 45,
+        "frame": 41,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 46,
+        "frame": 42,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 47,
+        "frame": 43,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 48,
+        "frame": 44,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 49,
+        "frame": 44,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 50,
+        "frame": 45,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 51,
+        "frame": 46,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 52,
+        "frame": 47,
+        "task_feasible": true,
+        "input_feasible": false
+      },
+      {
+        "window": 53,
+        "frame": 48,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 54,
+        "frame": 49,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 55,
+        "frame": 50,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 56,
+        "frame": 51,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 57,
+        "frame": 52,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 58,
+        "frame": 53,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 59,
+        "frame": 53,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 60,
+        "frame": 54,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 61,
+        "frame": 55,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 62,
+        "frame": 56,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 63,
+        "frame": 57,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 64,
+        "frame": 58,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 65,
+        "frame": 59,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 66,
+        "frame": 60,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 67,
+        "frame": 61,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 68,
+        "frame": 62,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 69,
+        "frame": 62,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 70,
+        "frame": 63,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 71,
+        "frame": 64,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 72,
+        "frame": 65,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 73,
+        "frame": 66,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 74,
+        "frame": 67,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 75,
+        "frame": 68,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 76,
+        "frame": 69,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 77,
+        "frame": 70,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 78,
+        "frame": 70,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 79,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 80,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 81,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 82,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 83,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 84,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 85,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 86,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 87,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 88,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 89,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 90,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 91,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 92,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 93,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 94,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 95,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 96,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 97,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 98,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 99,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 100,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 101,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 102,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 103,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 104,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 105,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 106,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 107,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 108,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 109,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 110,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 111,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 112,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 113,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 114,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 115,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 116,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 117,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 118,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 119,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      }
+    ]
+  },
+  "thumb_350__qp": {
+    "optimized_task_feasible_fraction": 0.9545454545454546,
+    "repaired_infeasible_windows": 0,
+    "input_infeasible_windows": 2,
+    "windows": [
+      {
+        "window": 32,
+        "frame": 29,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 33,
+        "frame": 30,
+        "task_feasible": false,
+        "input_feasible": true
+      },
+      {
+        "window": 34,
+        "frame": 31,
+        "task_feasible": false,
+        "input_feasible": true
+      },
+      {
+        "window": 35,
+        "frame": 32,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 36,
+        "frame": 33,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 37,
+        "frame": 34,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 38,
+        "frame": 34,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 39,
+        "frame": 35,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 40,
+        "frame": 36,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 41,
+        "frame": 37,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 42,
+        "frame": 38,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 43,
+        "frame": 39,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 44,
+        "frame": 40,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 45,
+        "frame": 41,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 46,
+        "frame": 42,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 47,
+        "frame": 43,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 48,
+        "frame": 44,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 49,
+        "frame": 44,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 50,
+        "frame": 45,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 51,
+        "frame": 46,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 52,
+        "frame": 47,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 53,
+        "frame": 48,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 54,
+        "frame": 49,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 55,
+        "frame": 50,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 56,
+        "frame": 51,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 57,
+        "frame": 52,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 58,
+        "frame": 53,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 59,
+        "frame": 53,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 60,
+        "frame": 54,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 61,
+        "frame": 55,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 62,
+        "frame": 56,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 63,
+        "frame": 57,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 64,
+        "frame": 58,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 65,
+        "frame": 59,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 66,
+        "frame": 60,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 67,
+        "frame": 61,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 68,
+        "frame": 62,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 69,
+        "frame": 62,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 70,
+        "frame": 63,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 71,
+        "frame": 64,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 72,
+        "frame": 65,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 73,
+        "frame": 66,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 74,
+        "frame": 67,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 75,
+        "frame": 68,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 76,
+        "frame": 69,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 77,
+        "frame": 70,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 78,
+        "frame": 70,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 79,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 80,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 81,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 82,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 83,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 84,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 85,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 86,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 87,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 88,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 89,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 90,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 91,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 92,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 93,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 94,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 95,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 96,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 97,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 98,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 99,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 100,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 101,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 102,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 103,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 104,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 105,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 106,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 107,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 108,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 109,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 110,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 111,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 112,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 113,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 114,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 115,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 116,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 117,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 118,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      },
+      {
+        "window": 119,
+        "frame": 71,
+        "task_feasible": true,
+        "input_feasible": true
+      }
+    ]
+  },
+  "thumb_600__fixed": {
+    "optimized_task_feasible_fraction": 0.0,
+    "repaired_infeasible_windows": 0,
+    "input_infeasible_windows": 88,
+    "windows": [
+      {
+        "window": 32,
+        "frame": 29,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 33,
+        "frame": 30,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 34,
+        "frame": 31,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 35,
+        "frame": 32,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 36,
+        "frame": 33,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 37,
+        "frame": 34,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 38,
+        "frame": 34,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 39,
+        "frame": 35,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 40,
+        "frame": 36,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 41,
+        "frame": 37,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 42,
+        "frame": 38,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 43,
+        "frame": 39,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 44,
+        "frame": 40,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 45,
+        "frame": 41,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 46,
+        "frame": 42,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 47,
+        "frame": 43,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 48,
+        "frame": 44,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 49,
+        "frame": 44,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 50,
+        "frame": 45,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 51,
+        "frame": 46,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 52,
+        "frame": 47,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 53,
+        "frame": 48,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 54,
+        "frame": 49,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 55,
+        "frame": 50,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 56,
+        "frame": 51,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 57,
+        "frame": 52,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 58,
+        "frame": 53,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 59,
+        "frame": 53,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 60,
+        "frame": 54,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 61,
+        "frame": 55,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 62,
+        "frame": 56,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 63,
+        "frame": 57,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 64,
+        "frame": 58,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 65,
+        "frame": 59,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 66,
+        "frame": 60,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 67,
+        "frame": 61,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 68,
+        "frame": 62,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 69,
+        "frame": 62,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 70,
+        "frame": 63,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 71,
+        "frame": 64,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 72,
+        "frame": 65,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 73,
+        "frame": 66,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 74,
+        "frame": 67,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 75,
+        "frame": 68,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 76,
+        "frame": 69,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 77,
+        "frame": 70,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 78,
+        "frame": 70,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 79,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 80,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 81,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 82,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 83,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 84,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 85,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 86,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 87,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 88,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 89,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 90,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 91,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 92,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 93,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 94,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 95,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 96,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 97,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 98,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 99,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 100,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 101,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 102,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 103,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 104,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 105,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 106,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 107,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 108,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 109,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 110,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 111,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 112,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 113,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 114,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 115,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 116,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 117,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 118,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 119,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      }
+    ]
+  },
+  "thumb_600__sampled-lm": {
+    "optimized_task_feasible_fraction": 0.0,
+    "repaired_infeasible_windows": 0,
+    "input_infeasible_windows": 88,
+    "windows": [
+      {
+        "window": 32,
+        "frame": 29,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 33,
+        "frame": 30,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 34,
+        "frame": 31,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 35,
+        "frame": 32,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 36,
+        "frame": 33,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 37,
+        "frame": 34,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 38,
+        "frame": 34,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 39,
+        "frame": 35,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 40,
+        "frame": 36,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 41,
+        "frame": 37,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 42,
+        "frame": 38,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 43,
+        "frame": 39,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 44,
+        "frame": 40,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 45,
+        "frame": 41,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 46,
+        "frame": 42,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 47,
+        "frame": 43,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 48,
+        "frame": 44,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 49,
+        "frame": 44,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 50,
+        "frame": 45,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 51,
+        "frame": 46,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 52,
+        "frame": 47,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 53,
+        "frame": 48,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 54,
+        "frame": 49,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 55,
+        "frame": 50,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 56,
+        "frame": 51,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 57,
+        "frame": 52,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 58,
+        "frame": 53,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 59,
+        "frame": 53,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 60,
+        "frame": 54,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 61,
+        "frame": 55,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 62,
+        "frame": 56,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 63,
+        "frame": 57,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 64,
+        "frame": 58,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 65,
+        "frame": 59,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 66,
+        "frame": 60,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 67,
+        "frame": 61,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 68,
+        "frame": 62,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 69,
+        "frame": 62,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 70,
+        "frame": 63,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 71,
+        "frame": 64,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 72,
+        "frame": 65,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 73,
+        "frame": 66,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 74,
+        "frame": 67,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 75,
+        "frame": 68,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 76,
+        "frame": 69,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 77,
+        "frame": 70,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 78,
+        "frame": 70,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 79,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 80,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 81,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 82,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 83,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 84,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 85,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 86,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 87,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 88,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 89,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 90,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 91,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 92,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 93,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 94,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 95,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 96,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 97,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 98,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 99,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 100,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 101,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 102,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 103,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 104,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 105,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 106,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 107,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 108,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 109,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 110,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 111,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 112,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 113,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 114,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 115,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 116,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 117,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 118,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      },
+      {
+        "window": 119,
+        "frame": 71,
+        "task_feasible": false,
+        "input_feasible": false
+      }
+    ]
+  }
+}

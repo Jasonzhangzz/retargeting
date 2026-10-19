@@ -1,0 +1,159 @@
+{
+  "slot_selection": [
+    {
+      "frame": 23,
+      "all_slots": [
+        0,
+        4,
+        5,
+        10,
+        13,
+        16,
+        17
+      ],
+      "all_bodies": [
+        "right_finger2_link4",
+        "right_finger2_link2",
+        "right_finger3_link4",
+        "right_finger5_link4",
+        "right_finger4_link4",
+        "right_finger4_link3",
+        "right_finger1_link4"
+      ],
+      "old_selected": [
+        0,
+        4,
+        5,
+        10
+      ],
+      "old_bodies": [
+        "right_finger2_link4",
+        "right_finger2_link2",
+        "right_finger3_link4",
+        "right_finger5_link4"
+      ]
+    },
+    {
+      "frame": 24,
+      "all_slots": [
+        0,
+        3,
+        4,
+        5,
+        10,
+        13,
+        16,
+        17,
+        18
+      ],
+      "all_bodies": [
+        "right_finger2_link4",
+        "right_finger2_link3",
+        "right_finger2_link2",
+        "right_finger3_link4",
+        "right_finger5_link4",
+        "right_finger4_link4",
+        "right_finger4_link3",
+        "right_finger1_link4",
+        "right_finger1_link3"
+      ],
+      "old_selected": [
+        0,
+        3,
+        4,
+        5
+      ],
+      "old_bodies": [
+        "right_finger2_link4",
+        "right_finger2_link3",
+        "right_finger2_link2",
+        "right_finger3_link4"
+      ]
+    },
+    {
+      "frame": 30,
+      "all_slots": [
+        1,
+        3,
+        4,
+        5,
+        8,
+        10,
+        12,
+        13,
+        16,
+        17,
+        18
+      ],
+      "all_bodies": [
+        "right_finger2_link4",
+        "right_finger2_link3",
+        "right_finger2_link2",
+        "right_finger3_link4",
+        "right_finger3_link3",
+        "right_finger5_link4",
+        "right_finger5_link3",
+        "right_finger4_link4",
+        "right_finger4_link3",
+        "right_finger1_link4",
+        "right_finger1_link3"
+      ],
+      "old_selected": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "old_bodies": [
+        "right_finger2_link4",
+        "right_finger2_link3",
+        "right_finger2_link2",
+        "right_finger3_link4"
+      ]
+    },
+    {
+      "frame": 45,
+      "all_slots": [
+        1,
+        3,
+        4,
+        6,
+        8,
+        9,
+        11,
+        12,
+        14,
+        16,
+        17,
+        18
+      ],
+      "all_bodies": [
+        "right_finger2_link4",
+        "right_finger2_link3",
+        "right_finger2_link2",
+        "right_finger3_link4",
+        "right_finger3_link3",
+        "right_finger3_link2",
+        "right_finger5_link4",
+        "right_finger5_link3",
+        "right_finger4_link4",
+        "right_finger4_link3",
+        "right_finger1_link4",
+        "right_finger1_link3"
+      ],
+      "old_selected": [
+        1,
+        3,
+        4,
+        6
+      ],
+      "old_bodies": [
+        "right_finger2_link4",
+        "right_finger2_link3",
+        "right_finger2_link2",
+        "right_finger3_link4"
+      ]
+    }
+  ],
+  "tip_cost_hand_gradient_norm": 0.0
+}
