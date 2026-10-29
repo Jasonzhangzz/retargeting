@@ -8,3 +8,7 @@ PyYAML==6.0.3
 # Used by result replay/video export.
 imageio==2.37.0
 imageio-ffmpeg>=0.6,<0.7
+
+# Humanoid ADMM prediction/execution and finite-difference action gradients.
+mujoco-warp>=3.10,<3.12
+torch>=2.5,<3

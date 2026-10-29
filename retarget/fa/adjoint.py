@@ -73,7 +73,7 @@ def fuse_tape_zero(tape):
 def install(backend):
     """Only replace tapes owned by this optimizer, never global Warp methods."""
     import torch
-    stream=torch.cuda.ExternalStream(wp.get_stream(backend.device).cuda_stream,device=str(backend.device))
+    streams={}
     for runtime in backend.steps:
         recorded=runtime.recorded
         for name in ('pose_tape','contact_tape','coefficient_tape','integration_tape'):
@@ -96,5 +96,13 @@ def install(backend):
         _copy_loss_cotangent=loss,_copy_observation_cotangent=observation_copy)
     original=MethodType(function,backend)
     def backward(*args,**kwargs):
+        # A backend may be captured/replayed on its node's independent stream.
+        # Binding this wrapper to the installation-time stream sends gradient
+        # clears outside that graph and creates implicit cross-node barriers.
+        current=wp.get_stream(backend.device)
+        if current.cuda_stream not in streams:
+            streams[current.cuda_stream]=torch.cuda.ExternalStream(
+                current.cuda_stream,device=str(backend.device))
+        stream=streams[current.cuda_stream]
         with torch.cuda.stream(stream),torch.no_grad():return original(*args,**kwargs)
     backend._backward=backward

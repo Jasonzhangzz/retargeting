@@ -100,6 +100,20 @@ def main(argv=None):
         args.case_name = label+('_noise' if args.noise else '')+'_'+datetime.now().strftime('%Y%m%d_%H%M%S_%f')
     if Path(args.case_name).name != args.case_name or args.case_name in ('.','..'):
         parser.error('--case-name must be a single directory name')
+    experiment = args.experiment.expanduser().resolve()
+    if not (experiment / 'forceaware.yaml').is_file():
+        raw = ([experiment / 'mano.npz'] if (experiment / 'mano.npz').is_file()
+               else sorted(experiment.glob('*/mano.npz')))
+        if raw:
+            parser.error(
+                f'{experiment} 是原始 DexYCB MANO 数据，不是已准备的运行目录。'
+                '当前没有原始数据自动转换入口；需要生成 Wuji 参考、接触指导、'
+                '对应物体网格和 SDF/MuJoCo 场景以及 forceaware.yaml。'
+                '完整可运行示例：python run.py --experiment data/example；'
+                '输入格式见 README.md 的“更换物体”和 data/dexycb/README.md。')
+        parser.error(f'实验目录缺少 {experiment / "forceaware.yaml"}；'
+                     '请传入已准备的实验目录，格式见 README.md 的“更换物体”。')
+    args.experiment = experiment
     # Diagnose missing compiled dependencies before allocating GPU state.
     if args.hand_solver == 'acados-rti':
         from retarget.support.acados_env import ensure_acados_env

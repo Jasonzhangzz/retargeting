@@ -262,7 +262,8 @@ def allocate_output(compiled: CompiledKinematics, worlds: int,
 
 
 def kinematics(compiled: CompiledKinematics, qpos: wp.array,
-               output: KinematicOutput) -> None:
+               output: KinematicOutput, *, record_tape: bool = True) -> None:
+  """Evaluate FK; analytic-VJP callers can omit the staged kernel tape."""
   for depth in range(compiled.max_depth + 1):
     source = output.stages[depth]
     target = output.stages[depth + 1]
@@ -277,10 +278,10 @@ def kinematics(compiled: CompiledKinematics, qpos: wp.array,
     target_view.quaternion = target.quaternion
     wp.launch(_kinematic_level, dim=(qpos.shape[0], compiled.body_count),
               inputs=[level], outputs=[target_view],
-              device=compiled.device)
+              device=compiled.device, record_tape=record_tape)
   wp.launch(_body_matrices, dim=(qpos.shape[0], compiled.body_count),
             inputs=[output.body_quaternion], outputs=[output.body_matrix],
-            device=compiled.device)
+            device=compiled.device, record_tape=record_tape)
   joint_input = JointFrameInput()
   joint_input.model = compiled.model
   joint_input.qpos = qpos
@@ -292,4 +293,4 @@ def kinematics(compiled: CompiledKinematics, qpos: wp.array,
   joint_output.quaternion = output.joint_quaternion
   wp.launch(_joint_frames, dim=(qpos.shape[0], compiled.body_count),
             inputs=[joint_input], outputs=[joint_output],
-            device=compiled.device)
+            device=compiled.device, record_tape=record_tape)

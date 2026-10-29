@@ -2,6 +2,7 @@
 from types import SimpleNamespace
 import numpy as np
 import warp as wp
+import pytest
 from scipy.optimize import linprog
 from retarget.contact_exploration import ObjectMeshSurface
 from retarget.contact_solvers import SampledComFreeLM,QPContactSolver,contact_basis,grasp_matrix
@@ -27,7 +28,8 @@ def task_witness(points,normals,torque):
         A_ub=np.kron(np.eye(4),np.ones((1,4))),b_ub=np.full(4,10./np.sqrt(1+.6**2)),bounds=(0,None),method='highs')
 
 
-def test_default_device_lm_repairs_task_infeasible_points_within_radius():
+@pytest.mark.parametrize('spider_pose',[False,True])
+def test_default_device_lm_repairs_task_infeasible_points_within_radius(spider_pose):
     surface,initial,hand,normals=problem();torque=.003
     assert not task_witness(initial,normals,torque).success
     assert task_witness(hand,normals,torque).success
@@ -40,8 +42,9 @@ def test_default_device_lm_repairs_task_infeasible_points_within_radius():
         position=array(np.zeros((1,1,3)),wp.vec3),velocity=array(np.zeros((1,1,6)),wp.spatial_vector),
         goal=array(goal[None,None],wp.spatial_vector))
     explorer=SampledComFreeLM(surface,device=device)
-    solver=DeviceLambdaLM(explorer,groups=1,contacts=4,worlds=1,device=wp.get_device(device),
-        physics=dict(inverse=inverse,com=np.zeros(3),gravity=np.array([0,0,-9.81]),floor=None,support_vertices=np.zeros((1,3))))
+    physics=dict(inverse=inverse,com=np.zeros(3),gravity=np.array([0,0,-9.81]),floor=None,support_vertices=np.zeros((1,3)))
+    if spider_pose:physics['spider_pose_weights']=[1.,1.,1.,.3,.3,.3]
+    solver=DeviceLambdaLM(explorer,groups=1,contacts=4,worlds=1,device=wp.get_device(device),physics=physics)
     solver.bind(batch,initial[None],np.ones((1,4)),.1)
     result=solver.solve().numpy();stats=solver.job.statistics.numpy()[0]
     assert stats[7]==0 and stats[8]==1 and stats[10]==1

@@ -1,8 +1,44 @@
 """AdamW checked against an independent Torch optimizer."""
 import numpy as np
 import torch
+import pytest
 
 from retarget.fa.adamw import AdamW
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(),reason='CUDA required')
+def test_cuda_adamw_matches_existing_reference_across_blocks_and_persistence():
+    start = np.array([[2.,3.],[-1.,2.]])
+    def evaluate(x,gradient):
+        return np.sum(x*x,axis=1),2*x if gradient else None
+    cpu = AdamW(learning_rate=.1,persist=True)
+    gpu = AdamW(learning_rate=.1,persist=True,device='cuda:0')
+    for continued,advance in [(False,0.),(True,.5),(False,.5)]:
+        expected,_,_ = cpu.update(start,evaluate,iterations=3,horizon=2,advance=advance,continue_window=continued)
+        actual,_,diag = gpu.update(start,evaluate,iterations=3,horizon=2,advance=advance,continue_window=continued)
+        np.testing.assert_allclose(actual,expected,atol=1e-12,rtol=1e-12)
+        assert gpu.memory[0].is_cuda and gpu._cuda_window_memory[0].is_cuda
+        np.testing.assert_allclose(gpu.memory[0].cpu(),cpu.memory[0],atol=1e-12)
+        np.testing.assert_allclose(gpu.memory[1].cpu(),cpu.memory[1],atol=1e-12)
+        assert gpu.memory[2] == cpu.memory[2]
+        assert diag['parameter_update_backend'] == 'torch_cuda'
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(),reason='CUDA required')
+def test_cuda_adamw_keeps_objective_callback_on_device():
+    start=np.array([[2.,-.5],[.7,-1.]])
+    calls=[]
+    def evaluate_gpu(x,gradient):
+        assert x.is_cuda
+        calls.append(gradient)
+        return (x*x).sum(dim=1),2*x if gradient else None
+    def evaluate_cpu(x,gradient):
+        return np.sum(x*x,axis=1),2*x if gradient else None
+    expected,_,_=AdamW(learning_rate=.1).update(start,evaluate_cpu,iterations=5,horizon=1,advance=0.)
+    actual,_,diag=AdamW(learning_rate=.1,device='cuda:0').update(start,evaluate_gpu,
+        iterations=5,horizon=1,advance=0.,evaluate_on_device=True)
+    np.testing.assert_allclose(actual,expected,atol=1e-12,rtol=1e-12)
+    assert calls.count(True)==5 and diag['device_objective_callback']
 
 
 def test_adamw_matches_torch_with_decoupled_decay():

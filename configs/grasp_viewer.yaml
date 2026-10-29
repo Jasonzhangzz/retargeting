@@ -1,0 +1,14 @@
+# 修改后刷新浏览器页面即可重新加载筛选条件和最新批次。
+# 结果自动读取 outputs/grasp_results/<方法>/<手型>/，无需指定 path。
+server:
+  host: 127.0.0.1
+  port: 8081
+
+# 类别编号或完整模板名；也可写 all，例如 categories: all。
+categories: [2, 6, 13, 14, 17]
+# cem_explicit / cem / adamw；写 all 可在侧栏比较所有方法。
+methods: [cem_explicit]
+# wuji1 = 一代手，wuji2 = WUJI Hand 2.2；也可写 all。
+hands: [wuji2]
+# 初始显示阶段：ik / optimized；两种姿态可以在侧栏切换。
+stage: optimized

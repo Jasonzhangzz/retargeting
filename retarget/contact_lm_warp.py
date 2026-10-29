@@ -8,6 +8,7 @@ from functools import lru_cache
 import numpy as np
 import warp as wp
 from retarget.contact_projection import closest_triangle
+from retarget.spider_pose import quat_log, quat_exp, right_jacobian, inverse_right_jacobian
 
 Vec6=wp.spatial_vector
 Mat6=wp.types.matrix(shape=(6,6),dtype=wp.float32)
@@ -77,6 +78,8 @@ def kernels(contacts):
         seed: int
         floor_enabled: int
         sweep: int
+        spider_pose: int
+        pose_weights: Vec6
 
     @wp.func
     def basis(outward: wp.vec3):
@@ -201,6 +204,31 @@ def kernels(contacts):
                 if i == j:
                     element+=factor
                 pose_jac[i+3,j+3]=scale*wp.sqrt(.3)*element
+        if job.spider_pose!=0:
+            # Only the task residual changes. The force LM, friction
+            # projection, candidate sampling and selection remain shared.
+            phi=factor*omega
+            goal=wp.vec3(p.goal[3],p.goal[4],p.goal[5])
+            error=quat_log(wp.quat_inverse(quat_exp(goal))*quat_exp(phi))
+            log_jac=inverse_right_jacobian(error)*right_jacobian(phi)
+            increment=wp.mat33(0.)
+            for i in range(3):
+                for j in range(3):
+                    element=df*omega[i]*omega[j]
+                    if i==j:element+=factor
+                    increment[i,j]=element
+            rotation_jac=log_jac*increment
+            physical=0.
+            # Keep run.py's contact-radius normalization for LM conditioning;
+            # candidate task ranking below uses the unscaled SPIDER pose norm.
+            scale=wp.sqrt(job.wrench_weight)/job.radius
+            for i in range(3):
+                position=(job.dt*v[i]-p.goal[i])*job.pose_weights[i]
+                rotation=error[i]*job.pose_weights[i+3]
+                residual[i]=scale*position;residual[i+3]=scale*rotation
+                physical+=position*position+rotation*rotation
+                pose_jac[i,i]=scale*job.pose_weights[i]*job.dt
+                for j in range(3):pose_jac[i+3,j+3]=scale*job.pose_weights[i+3]*rotation_jac[i,j]
         jacobian=pose_jac*mobility*job.inverse*matrix*job.dt
         return residual,jacobian,wp.sqrt(physical)
 
@@ -348,6 +376,8 @@ class DeviceLambdaLM:
         job.radius,job.rho=explorer.radius,explorer.rho
         job.motion_tolerance,job.min_improvement=explorer.motion_tolerance,explorer.min_improvement
         job.wrench_weight,job.seed=explorer.wrench_weight,explorer.seed
+        job.spider_pose=int('spider_pose_weights' in physics)
+        job.pose_weights=Vec6(*physics.get('spider_pose_weights',np.ones(6)))
         job.inverse=Mat6(*np.asarray(physics['inverse'],np.float32).ravel())
         job.com=wp.vec3(*physics['com']);job.gravity=wp.vec3(*physics['gravity'])
         job.floor_enabled=int(physics['floor'] is not None)

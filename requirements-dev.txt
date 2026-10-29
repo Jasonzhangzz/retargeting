@@ -1,4 +1,2 @@
 -r requirements.txt
 pytest>=8,<9
-# Independent AdamW reference tests only.
-torch>=2.5,<3

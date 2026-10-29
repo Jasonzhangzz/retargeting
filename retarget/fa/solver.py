@@ -41,6 +41,21 @@ class SolverSettings:
     contact_min_improvement: float = .01
     rti_validate: bool = False
 
+
+def settings_from_args(args):
+    """One settings adapter for both run.py and Dexonomy-built grasp inputs."""
+    from dataclasses import fields
+    defaults = SolverSettings()
+    values = {field.name: getattr(args, field.name, getattr(defaults, field.name))
+              for field in fields(defaults)}
+    values.update(compiled_threads=getattr(args, 'threads', defaults.compiled_threads),
+                  contact_radius=args.contact_radius_mm/1000,
+                  contact_seed=args.seed,
+                  contact_admm=not getattr(args, 'no_admm', False),
+                  contact_exploration=not getattr(args, 'no_contact_exploration', False),
+                  contact_motion_tolerance=args.contact_motion_tolerance_mm/1000)
+    return SolverSettings(**values)
+
 @wp.struct
 class PointState:
     c: wp.array2d(dtype=wp.vec3)
@@ -317,7 +332,8 @@ def optimizer_class(settings):
             if settings.hand_solver=='adamw':
                 from retarget.fa.adamw import AdamW
                 self.adamw=AdamW(learning_rate=settings.adamw_lr,
-                    weight_decay=settings.adamw_weight_decay,persist=settings.adamw_persist)
+                    weight_decay=settings.adamw_weight_decay,persist=settings.adamw_persist,
+                    device=self.backend.device if self.backend.device.is_cuda else None)
             if settings.hand_solver=='acados-rti':
                 from retarget.fa.trigrasp_comfree_sqp import TrigraspComFreeSQP
                 self.trigrasp_sqp=TrigraspComFreeSQP(
@@ -362,7 +378,7 @@ def optimizer_class(settings):
         def _contact_block(self, variables):
             """Pack the horizon once; solve all stages, starts and contact sets in batches."""
             rollout_started=perf_counter()
-            if not np.array_equal(variables,getattr(self,'_forward_variables',None)):
+            if not self._same_variables(variables):
                 self._evaluate(variables, False)
             self._contact_rollout_seconds.append(perf_counter()-rollout_started)
             b = self.backend
@@ -538,6 +554,8 @@ def optimizer_class(settings):
             return plan.points, plan.diagnostics
 
         def _evaluate(self,variables,gradient):
+            if settings.hand_solver == 'adamw' and self.backend.device.is_cuda:
+                return self._evaluate_cuda(variables,gradient)
             b=self.backend
             same=settings.reuse_forward and np.array_equal(variables,getattr(self,'_forward_variables',None))
             dirty=getattr(self,'_objective_dirty',False)
@@ -577,6 +595,73 @@ def optimizer_class(settings):
             self._forward_value=value.copy()
             return value,g
 
+        def _same_variables(self,variables):
+            previous=getattr(self,'_forward_variables',None)
+            if previous is None:return False
+            if settings.hand_solver == 'adamw' and self.backend.device.is_cuda:
+                import torch
+                current=torch.as_tensor(variables,device=str(self.backend.device),dtype=torch.float64)
+                return torch.equal(current,previous)
+            return np.array_equal(variables,previous)
+
+        def _evaluate_cuda(self,variables,gradient):
+            """Common AdamW callback without control/value/gradient host copies."""
+            import torch
+            b=self.backend
+            on_device=isinstance(variables,torch.Tensor)
+            current=torch.as_tensor(variables,device=str(b.device),dtype=torch.float64)
+            same=settings.reuse_forward and self._same_variables(current)
+            dirty=getattr(self,'_objective_dirty',False)
+            if same and not gradient and not dirty:
+                self.evaluations+=1
+                if hasattr(self,'value_reuses'):self.value_reuses+=1
+                value=self._forward_value.clone()
+                return (value if on_device else value.cpu().numpy()),None
+            reuse=gradient and same
+            key=('objective',gradient) if same and dirty else ('backward' if reuse else gradient)
+            # Capture on Warp's own non-default stream. Torch's legacy
+            # default stream cannot be captured by Warp on all versions.
+            stream=wp.get_stream(b.device)
+            caller_stream=torch.cuda.current_stream(current.device)
+            if not hasattr(self,'_adamw_torch_stream'):
+                self._adamw_torch_stream=torch.cuda.ExternalStream(stream.cuda_stream,device=current.device)
+            torch_stream=self._adamw_torch_stream
+            if not hasattr(self,'_device_variable_scale'):
+                self._device_variable_scale=torch.as_tensor(self.variable_scale,device=current.device)
+            torch_stream.wait_stream(caller_stream)
+            with torch.no_grad(),torch.cuda.stream(torch_stream):
+                if not same:
+                    wp.to_torch(b.control.raw)[:,b.index.action_dim:].copy_(current*self._device_variable_scale)
+                    b.control.valid.fill_(1)
+                def launch():
+                    if same:
+                        if dirty:b.objective.evaluate(b.control,allow_init=False)
+                        if gradient:b._backward(allow_init=False)
+                    else:self._launch(gradient)
+                if key not in self.graphs:
+                    launch();wp.synchronize_device(b.device)
+                    with wp.ScopedCapture(device=b.device) as capture:launch()
+                    self.graphs[key]=capture.graph
+                wp.capture_launch(self.graphs[key])
+                wp.synchronize_device(b.device)
+                value=wp.to_torch(b.loss.total).double()*1e-6
+                valid=wp.to_torch(b.control.valid).bool()&torch.isfinite(value)
+                g=None
+                if gradient:
+                    g=wp.to_torch(b.control.gradient)[:,b.index.action_dim:].double()*self._device_variable_scale
+                    valid=valid&torch.isfinite(g).all(dim=1)
+                    g[~valid]=0.
+                value[~valid]=torch.inf
+                self._forward_value=value.clone()
+                self._forward_variables=current.clone()
+            caller_stream.wait_stream(torch_stream)
+            self._objective_dirty=False;self.evaluations+=1
+            if hasattr(self,'forward_calls'):
+                self.forward_calls+=int(not same);self.backward_calls+=int(gradient);self.backward_reuses+=int(reuse)
+                self.objective_only_calls+=int(same and dirty)
+            if on_device:return value,g
+            return value.cpu().numpy(),None if g is None else g.cpu().numpy()
+
         def _launch(self,gradient):
             b=self.backend;b._clear_contact_history();b._set_contact_dynamics();b._forward(allow_init=False)
             b._validate_simulator_candidates();b.objective.evaluate(b.control,allow_init=False)
@@ -587,7 +672,7 @@ def optimizer_class(settings):
                 variables,accepted,diagnostic=self.adamw.update(variables,self._evaluate,
                     iterations=iterations,horizon=self.backend.settings.horizon,
                     advance=self._current_execution_steps/self.backend.cfg.simulator.time_grid.knot_substeps,
-                    continue_window=continue_window)
+                    continue_window=continue_window,evaluate_on_device=self.backend.device.is_cuda)
                 self.hand_diagnostics.append(diagnostic)
                 return variables,accepted
             self._forward_variables=None
@@ -743,8 +828,7 @@ def optimizer_class(settings):
             valid=np.isfinite(values); selected=int(np.argmin(values))
             if not valid.any(): raise FloatingPointError('All solver candidates are invalid')
             if self.adamw is not None and self.adamw.persist:
-                m, v, count = self.adamw._window_memory
-                self.adamw.memory = (m[selected].copy(), v[selected].copy(), int(count[selected]))
+                self.adamw.retain_candidate_memory(selected)
             if settings.hand_solver == 'adamw' and self.contact_explorer is not None:
                 from retarget.contact_memory import allocate,remember
                 workspaces=(*b.loss.immediate,b.loss.terminal)

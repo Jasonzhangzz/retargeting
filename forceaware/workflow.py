@@ -59,6 +59,40 @@ class RuntimeModels:
     executor: ExecutorRuntime
 
 
+class RollingController:
+    """Shared window scheduling and feedback state for trajectory and hold tasks.
+
+    The caller supplies measured states and executes the returned controls.
+    Only commit after execution, so warm shifting and contact-memory timing
+    describe the interval actually applied to the physical system.
+    """
+    def __init__(self, cfg, index, sequence, optimizer, initial, *, allow_init=True):
+        self.cfg, self.index, self.sequence, self.optimizer = cfg, index, sequence, optimizer
+        self.initial, self.allow_init = initial, allow_init
+        self.warm = initial.warm.copy()
+        self.previous = initial.previous_action.copy()
+        self.window = self.executed_steps = 0
+
+    def solve(self, qpos, qvel, *, execution_steps, start_time, targets=None):
+        if targets is None:
+            targets = make_window(self.sequence, executed_steps=self.executed_steps,
+                horizon=self.cfg.optimizer.horizon, time_grid=self.cfg.simulator.time_grid,
+                start_frame=self.initial.start_frame, end_frame=self.cfg.sequence.end,
+                hold_frame=self.cfg.sequence.hold_frame)
+        plan = self.optimizer.solve(qpos, qvel, targets, warm=self.warm,
+            previous_action=self.previous, allow_init=self.allow_init and self.window == 0,
+            seed=self.cfg.optimizer.multistart_seed + self.window,
+            execution_steps=execution_steps, start_time=start_time)
+        return plan, targets
+
+    def commit(self, plan, *, execution_steps):
+        self.warm = _shift_warm(plan.raw, self.index.action_dim, self.cfg,
+                                execution_steps=execution_steps)
+        self.previous = plan.control_sequence[execution_steps - 1].copy()
+        self.executed_steps += execution_steps
+        self.window += 1
+
+
 def rolling_mpc_retarget(
     cfg: RetargetConfig,
     *,
@@ -258,27 +292,17 @@ def _start_frame(cfg: RetargetConfig) -> float:
 def _run_steps(ctx: RunContext, *, reference_gate=None) -> None:
     cfg, initial = ctx.cfg, ctx.initial
     qpos, qvel = initial.qpos, initial.qvel
-    warm, previous = initial.warm, initial.previous_action
+    controller = RollingController(cfg, ctx.index, ctx.sequence, ctx.optimizer, initial)
     executed_steps = 0
     for window, execution_steps in enumerate(
         initial.request.execution_steps_per_window
     ):
-        targets = (reference_gate.make_targets(ctx.sequence, cfg) if reference_gate is not None
-                   else _step_targets(ctx, window, executed_steps=executed_steps))
+        targets = (reference_gate.make_targets(ctx.sequence, cfg) if reference_gate is not None else None)
         if reference_gate is not None:
             ctx.optimizer.reference_gate_diagnostic = reference_gate.diagnostic()
         allow_init = window == 0
-        plan = ctx.optimizer.solve(
-            qpos,
-            qvel,
-            targets,
-            warm=warm,
-            previous_action=previous,
-            allow_init=allow_init,
-            seed=cfg.optimizer.multistart_seed + window,
-            execution_steps=execution_steps,
-            start_time=ctx.executor.elapsed,
-        )
+        plan, targets = controller.solve(qpos, qvel, targets=targets,
+            execution_steps=execution_steps, start_time=ctx.executor.elapsed)
         execution_qpos = plan.initial_qpos if allow_init else qpos
         execution = ctx.executor.execute_action_sequence(
             execution_qpos, qvel, actions=plan.control_sequence
@@ -290,19 +314,14 @@ def _run_steps(ctx: RunContext, *, reference_gate=None) -> None:
             reference_gate.observe(execution.contact_fingers)
         if allow_init:
             ctx.recorder.replace_initial(plan.initial_qpos, qvel)
-        warm = _shift_warm(
-            plan.raw,
-            ctx.index.action_dim,
-            cfg,
-            execution_steps=execution_steps,
-        )
+        controller.commit(plan, execution_steps=execution_steps)
         ctx.recorder.record(
             plan,
             targets,
             qpos_sequence=execution.qpos_sequence,
             qvel_sequence=execution.qvel_sequence,
             index=ctx.index,
-            warm=warm,
+            warm=controller.warm,
             display_frames=_display_frames(
                 cfg,
                 initial.start_frame,
@@ -312,11 +331,6 @@ def _run_steps(ctx: RunContext, *, reference_gate=None) -> None:
         )
         qpos = execution.next_qpos
         qvel = execution.next_qvel
-        # Carry the action actually applied at the end of this execution
-        # interval into the next window.  Using the first MPC action here
-        # creates an artificial jump at every window boundary and defeats the
-        # MANO-speed limit used by the direct trigrasp SQP path.
-        previous = plan.control_sequence[execution_steps - 1].copy()
         executed_steps += execution_steps
         _print_step(
             window,
@@ -330,20 +344,6 @@ def _run_steps(ctx: RunContext, *, reference_gate=None) -> None:
             f"executed={executed_steps}, "
             f"required={initial.request.total_physics_steps}"
         )
-
-
-def _step_targets(ctx: RunContext, window: int, *, executed_steps: int):
-    cfg = ctx.cfg
-    targets = make_window(
-        ctx.sequence,
-        executed_steps=executed_steps,
-        horizon=cfg.optimizer.horizon,
-        time_grid=cfg.simulator.time_grid,
-        start_frame=ctx.initial.start_frame,
-        end_frame=cfg.sequence.end,
-        hold_frame=cfg.sequence.hold_frame,
-    )
-    return targets
 
 
 def _display_frames(

@@ -11,8 +11,7 @@ third_party/
 *.egg-info/
 .DS_Store
 *.log
-reports/**/*.jsonl
-reports/**/*.npz
-reports/**/*.npy
-reports/**/*.mp4
-reports/**/*.png
+.aws
+data/
+reports/
+supermimic_vibed/

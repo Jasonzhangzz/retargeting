@@ -28,19 +28,8 @@ def run(args):
     setup_runtime(cfg)
     from forceaware import workflow as workflow
     from forceaware.executor import ActionExecution, ExecutorRuntime
-    from retarget.fa.solver import SolverSettings, optimizer_class
-    settings = SolverSettings(hand_solver=args.hand_solver,trust_radius=args.trust_radius,
-        compiled_threads=args.threads,adamw_lr=args.adamw_lr,
-        adamw_weight_decay=args.adamw_weight_decay,adamw_persist=args.adamw_persist,
-        contact_rounds=args.contact_rounds, contact_radius=args.contact_radius_mm/1000,
-        contact_admm=not args.no_admm, contact_exploration=not args.no_contact_exploration,
-        contact_sweeps=args.contact_sweeps, contact_wrench_weight=args.contact_wrench_weight,
-        contact_rho=args.contact_rho,contact_solver=args.contact_solver,
-        contact_samples=args.contact_samples,contact_lm_iterations=args.contact_lm_iterations,
-        contact_qp_iterations=args.contact_qp_iterations,contact_seed=args.seed,
-        contact_motion_tolerance=args.contact_motion_tolerance_mm/1000,
-        contact_wrench_tolerance=args.contact_wrench_tolerance,
-        contact_min_improvement=args.contact_min_improvement)
+    from retarget.fa.solver import settings_from_args, optimizer_class
+    settings = settings_from_args(args)
     optimizer_base = optimizer_class(settings)
     snapshots = []
     snapshot_indices = []
