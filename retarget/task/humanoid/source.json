@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/facebookresearch/spider",
+  "commit": "44717007de41cbef7565dff7ff9f4453557a2d3d",
+  "license": "CC BY-NC 4.0",
+  "functions": {
+    "_weight_diff_qpos": "ee0668b1344c752bba4569f0f7e7c134eaecd7797ccb6a917d29c2d1a294289e",
+    "_diff_qpos": "9ea9218d458c0b75d6426f61dcc7d656ffe580840dd3a8b4a25a982a971a13ee",
+    "get_reward": "e3774a410129f5eceb87145ec044e0688c4c8cdebd8b75026cb0759febeb4a99",
+    "get_terminal_reward": "4bf01c972e91424bceb3b36d5fb0a01463a0d7f9b060a3b353d02c1be2085452",
+    "get_terminate": "403d98cd89809d7cc7ec21bc08b980e62d93bdcfa46c02432bf4aa396b44af40"
+  }
+}

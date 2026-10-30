@@ -1,0 +1,6 @@
+mode: replay
+output:
+  name: humanoid_move_largebox_cem
+visualization:
+  live: true
+  save_video: true

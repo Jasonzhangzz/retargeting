@@ -1,0 +1,18 @@
+environment:
+  device: cuda:0
+mode: solve
+output:
+  name: humanoid_move_largebox_cem
+seed: 0
+solver:
+  iterations: 16
+  population: 1024
+  type: cem
+  worlds: 128
+task:
+  type: humanoid
+  name: move_largebox
+  data: ../data/humanoid/move_largebox
+visualization:
+  live: false
+  save_video: true

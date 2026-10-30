@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/asu-iris/comfree_warp",
+  "commit": "ba8b9969f5f7859d51b1f738f458f8d2f49be080",
+  "source": "comfree_warp/comfree_core/_src/forward.py",
+  "source_sha256": "fe92709a14af2d9abf4fd9caf5115fc55b6018b0b0201c88168900e531c7a9c3",
+  "ast_sha256": {
+    "_advance_vel": "c3e9a65ad18162d6534c1ffa90fd6e2c20b7db2413a37723deb7e7c86fbde3d5",
+    "_compute_qfrc_constraint": "14a8dc8e96cd89d60a6219061e9d2ab18fa91010e9b056867ad97e8d09829184",
+    "_compute_qfrc_total": "d86aecf3b9d0bf8d6167deacf9e6d9e46c2b3734b853ba75262c2f7d43e60c04"
+  },
+  "scope": "Only three original contact response kernels; environment uses installed MJWarp.",
+  "constraint_mapping": {
+    "efc_dist": "MJWarp efc.pos",
+    "efc_mass": "MJWarp efc.D, with upstream fixed solimp width 0.01"
+  }
+}

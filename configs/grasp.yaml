@@ -1,0 +1,27 @@
+environment:
+  device: cuda:0
+mode: solve
+output:
+  name: grasp_cem
+seed: 0
+solver:
+  iterations: 16
+  population: 1024
+  type: cem
+  worlds: 128
+task:
+  type: grasp
+  name: primitive
+  data: ../data/grasp
+  templates:
+  - '1'
+  radius_scales:
+  - 1.0
+  height_scales:
+  - 1.0
+  options:
+    hand_model: wuji2
+    primary_shape_only: true
+visualization:
+  live: false
+  save_video: true

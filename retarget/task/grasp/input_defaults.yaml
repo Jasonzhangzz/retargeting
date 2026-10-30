@@ -1,0 +1,35 @@
+cone_edges: 16
+contact_tolerance_mm: 2.0
+dexonomy_root: templates
+friction: null
+hand_model: wuji2
+height: null
+height_scales:
+- 1.0
+init_inplane: 8
+init_iterations: 60
+init_points: 24
+init_selection: matching
+load_conditioning: true
+no_template_fit: false
+object_mass: 0.2
+penetration_tolerance_mm: 2.0
+physics_reference: ../dexycb/prepared/sugar_box/sequence/scene/wuji_right/sugar_box_sdf.xml
+planning_gravity: 9.81
+primary_shape_only: false
+primitive: null
+radius: null
+radius_scales:
+- 0.75
+- 1.0
+- 1.25
+scale: 1.0
+starts: 1
+template_refinements: 2
+templates:
+- '1'
+wrist_pose_prior: true
+wrist_pose_reference: wrist_pose_references.json
+wrist_pose_rotation_deg: 15.0
+wrist_pose_translation_mm: 5.0
+wrist_pose_weight: 100000.0

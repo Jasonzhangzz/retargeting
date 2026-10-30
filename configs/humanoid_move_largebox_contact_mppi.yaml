@@ -1,0 +1,27 @@
+environment:
+  device: cuda:0
+  dynamics: frozen_contact
+  frames: 1
+  contact_cost:
+    contact_weight: 1.0
+    soft_penetration_weight: 15.0
+    penetration_weight: 75.0
+    soft_penetration_limit: 0.002
+    penetration_limit: 0.01
+    object_motion_weight: 1.0
+mode: solve
+output:
+  name: humanoid_move_largebox_contact_mppi
+seed: 0
+solver:
+  iterations: 4
+  population: 64
+  type: mppi
+  worlds: 32
+task:
+  type: humanoid
+  name: move_largebox
+  data: ../data/humanoid/move_largebox
+visualization:
+  live: false
+  save_video: false

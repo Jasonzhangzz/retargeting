@@ -1,0 +1,5 @@
+mode: web
+output:
+  name: viewer
+visualization:
+  port: 8081

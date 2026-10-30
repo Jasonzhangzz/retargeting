@@ -2,10 +2,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
-outputs/
-outputs_*/
+output/
 .cache/
-third_party/
 *.so
 *.o
 *.egg-info/
@@ -13,5 +11,3 @@ third_party/
 *.log
 .aws
 data/
-reports/
-supermimic_vibed/

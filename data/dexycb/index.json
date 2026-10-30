@@ -5,7 +5,7 @@
     "frames": 72,
     "valid_frames": 63,
     "fps": 30,
-    "path": "002_master_chef_can/20200709_141754/mano.npz",
+    "path": "sequences/002_master_chef_can/20200709_141754/mano.npz",
     "sha256": "35f6e5dffa58bc2181bd9ad208478c0aba45dfa32f30d7ceb95cb223033b1319"
   },
   {
@@ -14,7 +14,7 @@
     "frames": 72,
     "valid_frames": 72,
     "fps": 30,
-    "path": "003_cracker_box/20200709_142211/mano.npz",
+    "path": "sequences/003_cracker_box/20200709_142211/mano.npz",
     "sha256": "31ab39efca6793578471f2535a54f3e703aa56791a2bc1fe07bba8a472c1dfc6"
   },
   {
@@ -23,7 +23,7 @@
     "frames": 74,
     "valid_frames": 74,
     "fps": 30,
-    "path": "004_sugar_box/20200709_142517/mano.npz",
+    "path": "sequences/004_sugar_box/20200709_142517/mano.npz",
     "sha256": "a3c5f6aea75ed6bc2a6bd8dfc2e5524c82f051260b9d17a38a35db68a3e871a3"
   },
   {
@@ -32,7 +32,7 @@
     "frames": 74,
     "valid_frames": 69,
     "fps": 30,
-    "path": "005_tomato_soup_can/20200709_142853/mano.npz",
+    "path": "sequences/005_tomato_soup_can/20200709_142853/mano.npz",
     "sha256": "d781d0ad50b001ebd6aae0de6b1ba5b1fd3f5d23cbd9252f106ac40f70a941f3"
   },
   {
@@ -41,7 +41,62 @@
     "frames": 72,
     "valid_frames": 72,
     "fps": 30,
-    "path": "006_mustard_bottle/20200709_143211/mano.npz",
+    "path": "sequences/006_mustard_bottle/20200709_143211/mano.npz",
     "sha256": "c33a320022d66fdbe51fd199e9f2033145f2eb5d0a01b22f2e986b4621814153"
+  },
+  {
+    "object": "007_tuna_fish_can",
+    "subject": "20200709-subject-01",
+    "sequence": "20200709_143626",
+    "camera_serial": "836212060125",
+    "frames": 72,
+    "valid_frames": 69,
+    "fps": 30,
+    "path": "sequences/007_tuna_fish_can/20200709_143626/mano.npz",
+    "sha256": "11714c1711cd4a87e4db268b8bfdcd3d38a733ecf48c45adf13087a4a94013f5"
+  },
+  {
+    "object": "008_pudding_box",
+    "subject": "20200709-subject-01",
+    "sequence": "20200709_143957",
+    "camera_serial": "836212060125",
+    "frames": 72,
+    "valid_frames": 67,
+    "fps": 30,
+    "path": "sequences/008_pudding_box/20200709_143957/mano.npz",
+    "sha256": "a6064467048917cc2f4562000c301d4f58a4562693e790ba826b7a609257b05d"
+  },
+  {
+    "object": "009_gelatin_box",
+    "subject": "20200709-subject-01",
+    "sequence": "20200709_144357",
+    "camera_serial": "836212060125",
+    "frames": 72,
+    "valid_frames": 71,
+    "fps": 30,
+    "path": "sequences/009_gelatin_box/20200709_144357/mano.npz",
+    "sha256": "3f0e1f4068327d136f88f654f1096d887dbfb285a13fec46ed704d49ff02f140"
+  },
+  {
+    "object": "010_potted_meat_can",
+    "subject": "20200709-subject-01",
+    "sequence": "20200709_144814",
+    "camera_serial": "836212060125",
+    "frames": 72,
+    "valid_frames": 72,
+    "fps": 30,
+    "path": "sequences/010_potted_meat_can/20200709_144814/mano.npz",
+    "sha256": "600f1ad33fee8ab0d812d156bfa671636dd6f3b2d65884f729ea50a2838fd659"
+  },
+  {
+    "object": "011_banana",
+    "subject": "20200709-subject-01",
+    "sequence": "20200709_145401",
+    "camera_serial": "836212060125",
+    "frames": 74,
+    "valid_frames": 71,
+    "fps": 30,
+    "path": "sequences/011_banana/20200709_145401/mano.npz",
+    "sha256": "b533eccc06b89c40fbb8283155e540ba6a7ecc9aa4677c474189c49f104cea8e"
   }
 ]
