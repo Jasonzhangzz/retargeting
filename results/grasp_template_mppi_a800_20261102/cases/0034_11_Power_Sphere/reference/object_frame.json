@@ -1,9 +1,0 @@
-{
-  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_solved_1x_scaled_ik_20261102/template_initialization/11_Power_Sphere_sphere/source_1x.obj",
-  "scale": 1.0,
-  "recenter_offset_m": [
-    6.930701674791317e-05,
-    -6.977502437627292e-05,
-    4.660660746225176e-10
-  ]
-}

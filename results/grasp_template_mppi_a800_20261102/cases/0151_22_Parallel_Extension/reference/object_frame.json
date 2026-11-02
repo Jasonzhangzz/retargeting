@@ -1,9 +1,0 @@
-{
-  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_articulation_20261102/template_initialization/22_Parallel_Extension_plate/source_1x.obj",
-  "scale": 1.0,
-  "recenter_offset_m": [
-    0.0,
-    0.0,
-    0.0
-  ]
-}

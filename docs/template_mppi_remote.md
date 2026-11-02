@@ -1,3 +1,17 @@
+# 当前缓存与历史远端求解
+
+最新的可移植缓存为 `results/grasp_current_20261103`，包含修正后的 640 个原始抓姿和
+39,007 个插值姿态，所有 grid 共享一份场景 XML。直接运行：
+
+```bash
+.venv-contact/bin/python scripts/verify_grasp_cache.py results/grasp_current_20261103
+.venv-contact/bin/python visualize.py --port 8089
+```
+
+旧 A800 展开式结果已由紧凑缓存替换；历史数据和下面的复现命令保留在
+[84331ee 版本](https://github.com/Jasonzhangzz/retargeting/tree/84331ee/results/grasp_template_mppi_a800_20261102)。
+以下为历史求解记录，旧目录命令需要该历史版本。当前存储说明见 [grasp_pose_cache.md](grasp_pose_cache.md)。
+
 # 远端 GPU 求解
 
 本轮已完成，并下载到 `results/grasp_template_mppi_a800_20261102`。31 类、640 个尺寸全部保留，其中 31 个标准尺寸沿用已审计结果，609 个相邻尺寸重新求解。投影闭合 610/640，patch 内部贴合率 ≥80% 为 420/640；Type 16 的 17 个尺寸和 Type 24 的 13 个尺寸未通过闭合。Type 9 的 17 个尺寸均通过闭合及贴合检查。总耗时 46.14 分钟，GPU 求解批次耗时 44.39 分钟。

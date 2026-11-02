@@ -20,7 +20,7 @@ def test_default_primary_inventory_has_183_unique_physical_instances():
     assert all(p['size_policy_version'] == 4 for p in size_specifications(10))
 
 
-@pytest.mark.parametrize("number,lower,upper", [(10,.8,1.3),(11,1,1.5),(12,.75,1),(18,1,2),
+@pytest.mark.parametrize("number,lower,upper", [(10,.8,1.3),(11,1,1.5),(12,.75,1),
     (26,.75,1.5),(28,1,1.5),(33,1,2)])
 def test_requested_radial_ranges(number, lower, upper):
     rows = size_specifications(number, CATALOG[number][0][0])
@@ -64,9 +64,10 @@ def test_tip_pinch_extends_diameter_below_one_mm_without_changing_reference():
 def test_extension_uses_a_broad_disk_and_preserves_other_types_policy():
     assert CATALOG[18] == [("disk", .08, .008)]
     rows = size_specifications(18)
-    np.testing.assert_allclose([p["radius_m"] for p in rows], np.linspace(.08,.16,9))
-    assert all(p["height_m"] == .008 and p["kind"] == "disk" for p in rows)
-    assert all(p["size_policy_version"] == 5 for p in rows)
+    np.testing.assert_allclose([p["height_m"] for p in rows], np.linspace(.008,.016,9))
+    assert all(p["radius_m"] == .08 and p["kind"] == "disk" for p in rows)
+    assert all(p["size_axis"] == "thickness" and p["radial_scale"] == 1. for p in rows)
+    assert all(p["size_policy_version"] == 6 for p in rows)
     assert size_specifications(12)[0]["size_policy_version"] == 4
 
 

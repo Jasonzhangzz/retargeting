@@ -5,6 +5,8 @@ import json, time, threading
 import numpy as np
 import mujoco
 from retarget.config.run import ROOT
+from retarget.viewer.dense_pose import load_dense_grid, dense_revision
+from retarget.viewer.snapshot import get_snapshot, read_summary
 
 
 def scan(root=None):
@@ -45,6 +47,13 @@ def filter_rows(rows, method="全部", task="全部", hand="全部", template="�
 
 
 def load_case(batch, case, *, final_only=False):
+    if 'cached_case' in case:
+        snapshot = get_snapshot(batch)
+        index = int(case['cached_case'])
+        model, qs = snapshot.model(index), snapshot.poses['qpos'][index:index+1].copy()
+        if qs.shape != (1,model.nq) or not np.isfinite(qs).all():
+            raise ValueError('Cached pose does not match the shared scene')
+        return model, qs
     path = Path(case["model"])
     path = path if path.is_absolute() else batch / path
     model = mujoco.MjModel.from_xml_path(str(path))
@@ -122,6 +131,8 @@ def final_summary(summary):
 
 def load_patch_coverage(row, template_file):
     """Metric-only batches may store sidecars beside a separate summary."""
+    if 'cached_case' in row:
+        return get_snapshot(row['batch']).patch_coverage(int(row['cached_case']))
     explicit = row.get("patch_coverage")
     path = row["batch"] / explicit if explicit else template_file.with_name("patch_contact_coverage.json")
     return json.loads(path.read_text()) if explicit or path.is_file() else None
@@ -292,7 +303,7 @@ def replay(config):
 
 
 def nearest_size(scales, value):
-    """Snap to a recorded size; never interpolate a hand pose across objects."""
+    """Snap historical/discrete batches to a recorded size."""
     return min(scales, key=lambda s: abs(s-value)) if scales else None
 
 
@@ -340,7 +351,7 @@ def web(config):
         grasp = client.gui.add_dropdown("抓型", ("全部",))
         stage = client.gui.add_dropdown("阶段", ("全部", "接触建立", "静止保持", "MPPI轨迹", "CA失败预览", "失败信息", "GraspADMM评测"), visible=not final_only)
         size = client.gui.add_slider("尺寸倍率", min=.5, max=1.5, step=.25,
-            initial_value=1., hint="拖动选择已保存的尺寸倍率；不插值或重新求解。")
+            initial_value=1., hint="拖动选择尺寸；提供加密数据时连续插值预览。")
         all_sizes = client.gui.add_checkbox("全部尺寸", initial_value=False)
         size_info = client.gui.add_markdown("")
         selection = client.gui.add_dropdown("结果", ("无结果",))
@@ -351,7 +362,10 @@ def web(config):
         show_contacts=client.gui.add_checkbox('显示接触 patch 与投影' if final_only else '显示接触点',initial_value=True)
         playback_status = client.gui.add_markdown("")
         details = client.gui.add_markdown("选择结果查看状态、cost 与耗时。")
-        state = dict(rows={}, handles=[], model=None, qs=None, data=None, busy=False, initialized=False,
+        display_root = client.scene.add_frame("/display", show_axes=False)
+        state = dict(dense_grid=None, dense_palm_anchor=None, dense_last_scale=None,
+            dense_base_primitive=None, dense_dimensions=None, object_geom=None, projection_handle=None,
+            dense_summary_cache={}, dense_revision=None, rows={}, handles=[], model=None, qs=None, data=None, busy=False, initialized=False,
             index=0, playing=False, times=None, scales=[], path=None, loaded=None, row=None,
             points=[],actual_contact_handle=None,contact_points=None,contact_forces=None,contact_counts=None)
         render_lock = threading.RLock()
@@ -372,7 +386,26 @@ def web(config):
             data.qpos[:] = state["qs"][state["index"]]
             mujoco.mj_kinematics(model, data)
             with client.atomic():
+                palm = hand_body_id(model, "right_palm_link")
+                if state["dense_grid"] is not None and palm >= 0:
+                    rotation = data.xmat[palm].reshape(3,3)
+                    origin = data.xpos[palm]
+                    if state["dense_palm_anchor"] is None:
+                        state["dense_palm_anchor"] = (origin.copy(), rotation.copy())
+                    anchor_position, anchor_rotation = state["dense_palm_anchor"]
+                    transform = anchor_rotation @ rotation.T
+                    display_root.position = anchor_position-transform@origin
+                    display_root.wxyz = Rotation.from_matrix(transform).as_quat(scalar_first=True)
                 for geom, handle in state["handles"]:
+                    if geom == state["object_geom"]:
+                        body = model.geom_bodyid[geom]
+                        handle.position = data.xpos[body]
+                        handle.wxyz = Rotation.from_matrix(data.xmat[body].reshape(3,3)).as_quat(scalar_first=True)
+                        primitive = state["dense_base_primitive"]
+                        dimensions = state["dense_dimensions"]
+                        handle.scale = (dimensions[0]/primitive['radius_m'], dimensions[0]/primitive['radius_m'],
+                            dimensions[1]/primitive['height_m'])
+                        continue
                     handle.position = data.geom_xpos[geom]
                     handle.wxyz = Rotation.from_matrix(
                         data.geom_xmat[geom].reshape(3, 3)
@@ -388,6 +421,42 @@ def web(config):
                     state['actual_contact_handle'].points=points.astype(np.float32)
                     state['actual_contact_handle'].colors=np.tile(np.asarray([255,120,30],np.uint8),(len(points),1))
                     state['actual_contact_handle'].visible=show_contacts.value and len(points)>0
+
+        @serialized
+        def show_dense_size(value):
+            grid = state["dense_grid"]
+            if grid is None or state["model"] is None:
+                return
+            value = float(np.clip(value, grid.scales[0], grid.scales[-1]))
+            if state["dense_last_scale"] is not None and abs(value-state["dense_last_scale"]) < 1.e-12:
+                return
+            sample = grid.sample(value)
+            state["dense_last_scale"] = value
+            state["qs"] = sample["qpos"][None]
+            state["index"] = 0
+            state["dense_dimensions"] = (sample["radius_m"], sample["height_m"])
+            p = state["dense_base_primitive"]
+            axis = {"radius":"半径", "thickness":"厚度", "height":"高度"}.get(p.get("size_axis"), "尺寸")
+            with client.atomic():
+                if state["projection_handle"] is not None:
+                    points = sample['projected_points']
+                    if points is not None:
+                        state["projection_handle"].points = points.astype(np.float32)
+                        state["projection_handle"].visible = show_contacts.value
+                    else:
+                        state["projection_handle"].visible = False
+                size_info.content = (f"**{p['kind']} · {axis} {value:.5g}×** · "
+                    f"半径 {sample['radius_m']*1000:.3f} mm · 高度/厚度 {sample['height_m']*1000:.3f} mm")
+                playback_status.content = "已保存求解点。" if sample['solved'] else "连续插值预览（未重新求解或评测）。"
+                if sample['solved'] and getattr(grid, 'source_rows', None):
+                    row = grid.source_rows[sample['source_index']]
+                    key = (str(state['row']['batch']), row.get('cached_case', row['summary']))
+                    if key not in state['dense_summary_cache']:
+                        state['dense_summary_cache'][key] = final_summary(read_summary(state['row']['batch'], row))
+                    details.content = state['dense_summary_cache'][key]
+                else:
+                    details.content = "物体尺寸与手姿插值；接触、闭合和碰撞指标未重新验证。"
+                move(0)
 
         @serialized
         def focus_hand(_=None):
@@ -418,19 +487,32 @@ def web(config):
                 for _,handle,_ in state['points']:handle.remove()
                 if state['actual_contact_handle'] is not None:state['actual_contact_handle'].remove()
                 state.update(points=[],actual_contact_handle=None)
-                state.update(handles=[], path=None, model=None, qs=None, loaded=None, playing=False)
+                state.update(handles=[], path=None, model=None, qs=None, loaded=None, playing=False, dense_grid=None)
                 play.disabled = True
                 playback_status.content = "当前筛选条件下没有保存的结果。"
                 details.content = "请选择其他抓型或尺寸。" if final_only else "请选择其他抓型、尺寸或阶段。"
                 return
+            if (state["dense_grid"] is not None and state["row"] is not None
+                    and row.get("template") == state["row"].get("template")
+                    and row.get("primitive",{}).get("kind") == state["row"].get("primitive",{}).get("kind")
+                    and row["batch"] == state["row"]["batch"]
+                    and state['dense_revision'] == dense_revision(row['batch'])):
+                show_dense_size(size_scale(row))
+                return
             try:
-                key = (row["label"], (row["batch"]/row["trajectory"]).stat().st_mtime_ns)
+                key = (row["label"], (row["batch"]/row["trajectory"]).stat().st_mtime_ns, dense_revision(row["batch"]) if final_only else None)
                 if state["loaded"] == key:
                     return
                 model, qs = load_case(row["batch"], row, final_only=final_only)
-                with np.load(row["batch"]/row["trajectory"], allow_pickle=False) as values:
-                    times = values["time"].copy() if "time" in values else np.arange(len(qs))*row.get("dt", 1/30)
-                    contacts={key:values[key].copy() if key in values else None for key in ('contact_points','contact_normal_force','contact_counts')}
+                primitive = row.get('primitive')
+                dense_grid = load_dense_grid(row['batch'], row.get('template'), primitive.get('kind')) if final_only and primitive else None
+                if 'cached_case' in row:
+                    times = np.array([0.])
+                    contacts = dict(contact_points=None,contact_normal_force=None,contact_counts=None)
+                else:
+                    with np.load(row["batch"]/row["trajectory"], allow_pickle=False) as values:
+                        times = values["time"].copy() if "time" in values else np.arange(len(qs))*row.get("dt", 1/30)
+                        contacts={key:values[key].copy() if key in values else None for key in ('contact_points','contact_normal_force','contact_counts')}
                 if final_only:
                     times = np.array([0.])
                     contacts = {key: value[-1:] if value is not None else None for key, value in contacts.items()}
@@ -443,7 +525,7 @@ def web(config):
                 camera_in_palm = None
                 previous = state["row"]
                 if (previous is not None and previous.get("template")==row.get("template")
-                        and previous.get("hand")==row.get("hand") and state["model"] is not None):
+                        and previous.get("hand")==row.get("hand") and state["model"] is not None and state["dense_grid"] is None):
                     old_palm = hand_body_id(state["model"], "right_palm_link")
                     if old_palm >= 0:
                         old_data = state["data"]
@@ -455,10 +537,25 @@ def web(config):
                     handle.remove()
                 if state["path"] is not None:
                     state["path"].remove()
+                display_root.position = (0.,0.,0.)
+                display_root.wxyz = (1.,0.,0.,0.)
+                state.update(dense_grid=dense_grid, dense_palm_anchor=None, dense_last_scale=None,
+                    dense_base_primitive=primitive, dense_dimensions=(primitive['radius_m'],primitive['height_m']) if primitive else None,
+                    object_geom=None, projection_handle=None,
+                    dense_revision=dense_revision(row['batch']) if dense_grid is not None else None)
                 state.update(model=model, qs=qs, data=mujoco.MjData(model), handles=[],
                     index=0, times=times, playing=False, path=None, loaded=key, row=row)
                 state.update(points=[],actual_contact_handle=None,contact_points=contacts['contact_points'],
                     contact_forces=contacts['contact_normal_force'],contact_counts=contacts['contact_counts'])
+                selection.visible = not (final_only and dense_grid is not None and not all_sizes.value)
+                state['data'].qpos[:] = qs[-1]
+                mujoco.mj_kinematics(model,state['data'])
+                if dense_grid is not None:
+                    state['busy'] = True
+                    size.min, size.max = float(dense_grid.scales[0]), float(dense_grid.scales[-1])
+                    size.step = (size.max-size.min)/10000
+                    size.value = float(np.clip(size_scale(row),size.min,size.max))
+                    state['busy'] = False
                 for g in range(model.ngeom):
                     if model.geom_rgba[g, 3] == 0:
                         continue
@@ -478,15 +575,23 @@ def web(config):
                         vertices, faces = m.vertices, m.faces
                     else:
                         continue
+                    is_object = dense_grid is not None and model.body(int(model.geom_bodyid[g])).name == 'grasp_object'
+                    if is_object:
+                        # Store object vertices in its body frame. Per-axis
+                        # scaling then changes dimensions without mesh uploads.
+                        data = state['data']; body = model.geom_bodyid[g]
+                        world = vertices @ data.geom_xmat[g].reshape(3,3).T + data.geom_xpos[g]
+                        vertices = (world-data.xpos[body]) @ data.xmat[body].reshape(3,3)
+                        state['object_geom'] = g
                     handle = client.scene.add_mesh_simple(
-                        f"/model/{g}",
+                        f"/display/model/{g}",
                         vertices=vertices,
                         faces=faces,
                         color=tuple((model.geom_rgba[g, :3] * 255).astype(int)),
                     )
                     state["handles"].append((g, handle))
                 template_file = row["batch"] / Path(row["trajectory"]).parent / "template_contacts.json"
-                patch_coverage = load_patch_coverage(row, template_file) if final_only else None
+                patch_coverage = load_patch_coverage(row, template_file) if final_only and dense_grid is None else None
                 if patch_coverage is not None:
                     projections = []
                     for i, patch in enumerate(patch_coverage["patches"]):
@@ -494,57 +599,58 @@ def web(config):
                         if body < 0:
                             raise ValueError(f"Missing contact patch body: {patch['body']}")
                         if patch["local_points"]:
-                            handle = client.scene.add_point_cloud(f'/guidance/patch/{i}',
+                            handle = client.scene.add_point_cloud(f'/display/guidance/patch/{i}',
                                 points=np.asarray(patch["local_points"], dtype=np.float32),
                                 colors=(80,200,120) if patch["fitted"] else (240,150,40),
                                 point_size=.0012, visible=show_contacts.value)
                             state['points'].append((body, handle, 'contact'))
                         witness = patch.get("witness")
                         if witness is not None and witness["fitted"]:
-                            handle = client.scene.add_point_cloud(f'/guidance/patch_contact/{i}',
+                            handle = client.scene.add_point_cloud(f'/display/guidance/patch_contact/{i}',
                                 points=np.asarray([witness["local_point"]], dtype=np.float32),
                                 colors=(30,255,80), point_size=.003, visible=show_contacts.value)
                             state['points'].append((body, handle, 'contact'))
                             projections.append(witness["projected_point"])
                     if projections:
-                        handle = client.scene.add_point_cloud('/guidance/patch_projections',
+                        handle = client.scene.add_point_cloud('/display/guidance/patch_projections',
                             points=np.asarray(projections, dtype=np.float32), colors=(40,160,255),
                             point_size=.002, visible=show_contacts.value)
                         state['points'].append((0, handle, 'contact'))
-                elif final_only and template_file.is_file():
-                    template = json.loads(template_file.read_text())
+                elif final_only and (template_file.is_file() or 'cached_case' in row):
+                    template = get_snapshot(row['batch']).template(int(row['cached_case'])) if 'cached_case' in row else json.loads(template_file.read_text())
                     names = np.asarray(template["body_names"])
                     local = np.asarray(template["local_points"], dtype=np.float32)
                     for name in dict.fromkeys(names):
                         body = hand_body_id(model, str(name))
                         if body >= 0:
-                            handle = client.scene.add_point_cloud(f'/guidance/template/{body}',
+                            handle = client.scene.add_point_cloud(f'/display/guidance/template/{body}',
                                 points=local[names == name], colors=(255,120,30), point_size=.003,
                                 visible=show_contacts.value)
                             state['points'].append((body, handle, 'contact'))
                     projection_file = template_file.with_name("projection_force_closure.json")
-                    if projection_file.is_file():
-                        projection = json.loads(projection_file.read_text())
-                        handle = client.scene.add_point_cloud('/guidance/projections',
+                    if projection_file.is_file() or 'cached_case' in row:
+                        projection = get_snapshot(row['batch']).diagnostics(int(row['cached_case'])) if 'cached_case' in row else json.loads(projection_file.read_text())
+                        handle = client.scene.add_point_cloud('/display/guidance/projections',
                             points=np.asarray(projection["projected_points"], dtype=np.float32),
                             colors=(40,160,255), point_size=.002, visible=show_contacts.value)
                         state['points'].append((0, handle, 'contact'))
+                        if dense_grid is not None:state['projection_handle'] = handle
                 if row.get('seed_source'):
                     with np.load(Path(row['seed_source'])/'spider_seed.npz',allow_pickle=False) as seed:
                         bodies=seed['palm_bodies'];local=seed['palm_local']
                         for body in np.unique(bodies):
-                            handle=client.scene.add_point_cloud(f'/guidance/palm/{body}',points=local[bodies==body].astype(np.float32),
+                            handle=client.scene.add_point_cloud(f'/display/guidance/palm/{body}',points=local[bodies==body].astype(np.float32),
                                 colors=(35,200,230),point_size=.0015,visible=show_palm.value)
                             state['points'].append((int(body),handle,'palm'))
                     if state['contact_points'] is not None:
-                        state['actual_contact_handle']=client.scene.add_point_cloud('/guidance/actual_contacts',points=np.empty((0,3),np.float32),
+                        state['actual_contact_handle']=client.scene.add_point_cloud('/display/guidance/actual_contacts',points=np.empty((0,3),np.float32),
                             colors=(255,120,30),point_size=.003,visible=show_contacts.value)
                     elif row.get('acquisition_report'):
                         path=Path(row['acquisition_report']).parent/'contacts.npz'
                         if path.is_file():
                             with np.load(path) as raw:
                                 for body in np.unique(raw['bodies']):
-                                    handle=client.scene.add_point_cloud(f'/guidance/contacts/{body}',points=raw['local'][raw['bodies']==body].astype(np.float32),
+                                    handle=client.scene.add_point_cloud(f'/display/guidance/contacts/{body}',points=raw['local'][raw['bodies']==body].astype(np.float32),
                                         colors=(255,120,30),point_size=.003,visible=show_contacts.value)
                                     state['points'].append((int(body),handle,'contact'))
                 play.disabled = len(qs) < 2
@@ -559,7 +665,7 @@ def web(config):
                     play.label='播放接触建立'
                 if final_only:
                     playback_status.content = ("绿色：已贴合 patch；亮绿大点：内部接触；橙色：未贴合 patch；蓝色：接触的物面投影。手部边界/尖锐棱边内缩 1 mm。"
-                        if patch_coverage is not None else "橙色：手部模板接触；蓝色：物面投影。" if template_file.is_file() else "最终优化姿态。")
+                        if patch_coverage is not None else "橙色：手部模板接触；蓝色：物面投影。" if template_file.is_file() or 'cached_case' in row else "最终优化姿态。")
                 axis = p.get("size_axis", "radius") if p else "radius"
                 axis_label = {"thickness": "厚度", "height": "长度", "radius": "半径"}.get(axis, axis)
                 scale_value = size_scale(row)
@@ -586,8 +692,8 @@ def web(config):
                         client.camera.up_direction = rotation@camera_in_palm[2]
                 else:
                     focus_hand()
-                summary = row["batch"] / row["summary"]
-                details.content = final_summary(json.loads(summary.read_text())) if final_only else "**"+row.get("stage", "结果")+"**\n\n```json\n" + summary.read_text() + "\n```"
+                summary = read_summary(row['batch'], row)
+                details.content = final_summary(summary) if final_only else "**"+row.get("stage", "结果")+"**\n\n```json\n" + json.dumps(summary,ensure_ascii=False,indent=2) + "\n```"
             except Exception as exc:
                 details.content = f"加载失败：{exc}"
 
@@ -646,13 +752,21 @@ def web(config):
                     selection.value = choice
                 state["initialized"] = True
             state["busy"] = False
+            selection.visible = not (final_only and state['dense_grid'] is not None and not all_sizes.value)
             show()
 
         @serialized
         def size_changed(_=None):
             if state["busy"]:
                 return
-            # Keep the same grasp/shape while selecting another sampled size.
+            if state['dense_grid'] is not None and state['dense_revision'] != dense_revision(state['row']['batch']):
+                state['dense_grid'] = None
+                update()
+                return
+            if state['dense_grid'] is not None and grasp.value != '全部':
+                show_dense_size(size.value)
+                return
+            # Historical batches keep discrete saved-size selection.
             update()
 
         @serialized

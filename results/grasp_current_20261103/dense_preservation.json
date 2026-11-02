@@ -1,0 +1,467 @@
+[
+  {
+    "file": "dense/1_Large_Diameter_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "a79d642e3ae912a12d311b563af9f6709c97eccefd5010a14bf921aeceed90e0",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "058283520f24b6ad0fc4eeeaaeb467bdf6b7615e760e6d1e25c1632cc19e19f6",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "6fa1bf9196470ce1a5f3df46fa7c0550339712d8fbe96b217071410a55b40753",
+      "height_m": "1c900399d4185e96d7fbc34cb453e6da2d61a24ee6fec87c6c79faa28ac8caff",
+      "dimensions_m": "5fa1be1a67081c789596bf543bf154d580a25acad9c15ac83742941aceb552e7",
+      "source_projected_points": "df2e054f9575b5f87c0f7a588cd5c76944667cb2a1e283f90d02cbb3910663be"
+    },
+    "original_projected_points_sha256": "d2e264b4fdc97958864cd5e85f6444a5b5394a547edb0b5194d6a974674478ee"
+  },
+  {
+    "file": "dense/6_Prismatic_4_Finger_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "7a98764a0228673c6ba5603bdff8620170d4e71b3a5707485ce93f29dc8c07cf",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "6d849c4a80c6dbf3ca3d9bc7582ee26070db467afbeba1c3ee9240a1f7d21848",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "4037dcede33d10b08c94e36285729678e17b4b5928715e4d5b95d2bc2fc2c829",
+      "height_m": "1c900399d4185e96d7fbc34cb453e6da2d61a24ee6fec87c6c79faa28ac8caff",
+      "dimensions_m": "9265ba1528291c7e3566a47ca887b52cf1c91a1e87ede9229afdf0ae0d74977d",
+      "source_projected_points": "2f21dd3e1108e4852d460e2ac56badda5816ef6f0d9e239bf3bc3498e6d0a763"
+    },
+    "original_projected_points_sha256": "1b651e139ecc91c62d5faadd10b245ff73ec4f7beb88d5d8bd182aa48894f5c0"
+  },
+  {
+    "file": "dense/11_Power_Sphere_sphere.npz",
+    "arrays": {
+      "scales": "204ffad0d577181fde12e227a5aaca9c9bd3fc963d389f777f3146da59187f2d",
+      "qpos": "73c639f7527fc6fa924f88a7c39faedfdf83ee1ab0b96c0c3bb6fe81bbd996fb",
+      "source_scales": "1ac15090891e3b3ac532415e7c5993c8840b159cfc9badfb0114f03bc21b7518",
+      "source_qpos": "b87ddeaca904c2071b80940c616e91f3c9751238b054dd3b79b99542c34ed27e",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "a8616bf2ff3df8df8330f507890dbe022c80743ad5b796b5f80bd86ffbde7877",
+      "height_m": "6a8f4336feaf872e241d862cdabc5d46c2838f33b908c767f6dc264a6f792146",
+      "dimensions_m": "470b500099d12b4c3153b94e795f8ad3d73dc81abfbd91cef912597e287f1822",
+      "source_projected_points": "a9c22d50665907c8156a62db4d7aa5004e68fd974924d66c5f0bf2e0bc273b6a"
+    },
+    "original_projected_points_sha256": "6ee8609479e16631f964c93762c99b8b5c58276d11aa202025dafa7aeac190f5"
+  },
+  {
+    "file": "dense/16_Lateral_plate.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "8c2954f7933c46487e876329eda88d1ce253445fa4d84a172ce968d255197ce2",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "0cfd327215a8fdae4906ed888257e0cc3471e3e79caac984fab418c516727e6e",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "665bf192f4db6b2fe584af3fc6774309134732b4cb718b333b7a25cfd7d9aea6",
+      "height_m": "f3c9c20c20002d283ecd9da0f488492f4437ea0fe1d4339e4b492e53ad8b6f61",
+      "dimensions_m": "56f4e64affde374ab5c012e30f955a34af140588b24d48e4348e2c4f2faa2bfc",
+      "source_projected_points": "6bd69fea965fc91575a32bff2c11094ee3e7b31c286eaad70236cf43266b306a"
+    },
+    "original_projected_points_sha256": "a09cc24cd968053234f654c16276ac3318181c7d22d2705b4a8423f01b136322"
+  },
+  {
+    "file": "dense/18_Extensior_Type_disk.npz",
+    "arrays": {
+      "scales": "7bf82990c18ea375e521bce3a3def45c026c2e0f87445b63930f1ee207fe2548",
+      "qpos": "e7a95eb2e12fc350ae2c7d23936bcc6ec99bd03138fd6987ec851ee13f602f05",
+      "source_scales": "5c246e5fdd4e4703c24e75efe8a0641a1a4646f539a349b0fd73b82f7fdb1322",
+      "source_qpos": "a7b5b59d5c913ed993b38a06f5d805ea93c918d5d32d2e6c6070440b4c4b2b02",
+      "source_indices": "779d971402719963832e1a52b1acc830876f7948e668abec81573b1d459858ee",
+      "radius_m": "63f90834d2300130b4824e4ca4e8ed2ee898bcb9697e8c6a99295fe573aa63c0",
+      "height_m": "36cba7a39c45fe34fddd9dc30d400505e189c928fd421bff7b2735728de25b9b",
+      "dimensions_m": "abee05bb3e415e2e750112592c932153b57eb657560d8f62d2f3a41c26eacf65",
+      "source_projected_points": "afc7939a6ddc15ce03634574a8edf96f2c58cd06705253659a9862eb1a91f550"
+    },
+    "original_projected_points_sha256": "6c4119f4a3dbf9d8254b1621a43b1f7e308cdf3cf436be9171111944c2bde4c6"
+  },
+  {
+    "file": "dense/23_Adduction_Grip_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "46099e8860236e6b2d5f28694e1a2eb2178a15b6854b024241b412b8635ba197",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "e43875198894983b0f255089f06ba50265cccac05a7ee21b6294a845eaa9fc3c",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "42910e4993a7ee3006f572cd8f365402e9640f55ff2917f6a436643ba2766032",
+      "height_m": "eef77679d53b17d544b95999b14b50e58e9251ac3eb8ecbcea4e7724c041a41e",
+      "dimensions_m": "dc15a163c19f3016de19d094056135b2662800958d9ee0b76b993d9598c64a9d",
+      "source_projected_points": "c0df244ca00426a01fc0aad1ca4fb70a9d67fbaa407bfaba2333c74040701227"
+    },
+    "original_projected_points_sha256": "422663b30ca599fa03379d96a474e0bb5d2e4357e84b0d27bb1511e71c34b681"
+  },
+  {
+    "file": "dense/25_Lateral_Tripod_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "4f149e9bf7a529675562cae55922d2de04ae7f7b0679b3191e0961fa6839656d",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "457f47c6cf797470400a538beec1508c8efe7e285435ae9e38428d6f761c2beb",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "bde4fd7ad7496e2bfc9570f5ef78d920131d603e492df853da272618f7844844",
+      "height_m": "ec181712021b33f5e178d949325aeefc3bd76ce37d4961d66ca849f6602b2cf2",
+      "dimensions_m": "7ae2daf2b4d2c0b3fa2855c1f5330117d0801d5dc62e500aff7a331997b34e6d",
+      "source_projected_points": "7b5eb3e0c4fb98efc76523f936d6d8cbc95dd281d93522a2db56bebabcd1e70c"
+    },
+    "original_projected_points_sha256": "702d34fc2c4100b05ad7b5850da46557282038bd1ecd0197c4786d619acf86aa"
+  },
+  {
+    "file": "dense/28_Sphere_3_Finger_sphere.npz",
+    "arrays": {
+      "scales": "204ffad0d577181fde12e227a5aaca9c9bd3fc963d389f777f3146da59187f2d",
+      "qpos": "92ae5016b09c6000fbfa73e65a879dc0caaa47c7c0100fd46ad6803e9ad59a33",
+      "source_scales": "1ac15090891e3b3ac532415e7c5993c8840b159cfc9badfb0114f03bc21b7518",
+      "source_qpos": "255508383cd64265952f9bd9ece24e296b71fe3161834f721fdd2b71e930afd3",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "21ca4429523d5363bd7744201e99833511f09118490486c5e182494c0f09f540",
+      "height_m": "183cd903c6246890716db832b026463322364a9ba64c87237b07bf66373a4110",
+      "dimensions_m": "e55fe8d42ad0d5a81b8596af9a27f356cb3e6dbfcdbcd8233221b809b253616e",
+      "source_projected_points": "048912c476d1bc4cdc465b1c87762a680361de0d0c785c1acfb3724e82449773"
+    },
+    "original_projected_points_sha256": "088b8bb93549f6354d647b8e97fc3f0ab1d1815d743fa6b341a2deacdbd609eb"
+  },
+  {
+    "file": "dense/30_Palmar_disk.npz",
+    "arrays": {
+      "scales": "98590a633b2d6bdb730f1d00eb629c7f691fb17a452deb6901ef35db44c9f148",
+      "qpos": "cfb895c7f4e41b550b2f85dc864b67081c263c17cea6bea4fec20fb048ec79fa",
+      "source_scales": "55a3fdc8979ab1764680a2b0b1322c2f10acf4fa470b125a38545491233beca1",
+      "source_qpos": "c261b6ea673f3c376a688a27ebac2b51a5504ef9a48ce380df9cb9efd4279796",
+      "source_indices": "1c42d8abdd8294a9c02af7bda515a1c91cdb508aa6eb5d2744a6edb722837b86",
+      "radius_m": "bb653bc7a26e8cf6f958c63c7297051fb8d772090b7eb9ab9a8b71dff8a1f5d3",
+      "height_m": "8a8b9021baab196fe2cd4ed4734f9dbb0b8b6db8b007621dfbc112383261077e",
+      "dimensions_m": "38eef4f4fed6f581b0455a35b69835186af33e09fa4f04031b106158239a9bce",
+      "source_projected_points": "853c6331691dd66f74910696b5a595293aceea31321d8762a37847f426d60c2a"
+    },
+    "original_projected_points_sha256": "932a5dd8902548fcb7650269a383333a1583c49ce5d271898623831748e9c776"
+  },
+  {
+    "file": "dense/31_Ring_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "a543910000a9771724b3cca82c0a02abf9e7387a00eb1c893aa574256c3a401b",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "7580c437ca5504315fc4801dbad7815c14ae9a7783fea7af2384fbabea3b4998",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "bc89120effe5c7b40c3857f4a851b9b205309636eff4fff9c1dc7cf3ccca78d7",
+      "height_m": "bd3ecfc1e4c6109d235836d90c35aa35a860501e8abc97c0b0c019d98414072d",
+      "dimensions_m": "5ff216c452769a2a6c730f99106600c0234eef599ad74a90e8e46d365721a6fd",
+      "source_projected_points": "e71b9e8741f601dec76b429d563e95a63518bc1b7c75491aa1cd1cb40869e9cf"
+    },
+    "original_projected_points_sha256": "a14cd0a8c6fff3c581e23c8d93119fc6bbb82f3c8738a836fe445d4bbf451ea7"
+  },
+  {
+    "file": "dense/2_Small_Diameter_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "8aa55474c510dfc8eeee89237331a6bb14d2d465bde72060b01cb77e0c3a6294",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "4f85fe3d3af129e25d5bda483edc9d69b8e16b6d15a440b109f3e3a5cbb26918",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "56adb74b7989445da22fcc83d1544aa2bd4d61c88802ea17a2e05d4416438de1",
+      "height_m": "1c900399d4185e96d7fbc34cb453e6da2d61a24ee6fec87c6c79faa28ac8caff",
+      "dimensions_m": "a8fc7584e42b705f8a260f147267ee56c6f525580cea4d334d914ca984758ad3",
+      "source_projected_points": "de3860d0e1081304c8156e029a3729810bd21bab43c491d0d9028ee9d278ef47"
+    },
+    "original_projected_points_sha256": "08c75459610bafc7e6da9b2507d38ffc1fd1f3f3727ef581562d569e08624945"
+  },
+  {
+    "file": "dense/3_Medium_Wrap_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "e5ac56bb2e708200b73a65771c077f1699535d5d6cfa1ef8b91be77c3bf5fe02",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "368dae7a96ac2480e6715f1b8c946639b8d3c21ffd283fb669e2a0b1c3c20f60",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "bc89120effe5c7b40c3857f4a851b9b205309636eff4fff9c1dc7cf3ccca78d7",
+      "height_m": "1c900399d4185e96d7fbc34cb453e6da2d61a24ee6fec87c6c79faa28ac8caff",
+      "dimensions_m": "9d01d05adc3de0782f82eeccd8ced5a620e8b0592094fdcaafef0c0cc9b77343",
+      "source_projected_points": "2cd6aabb26b2baab80ea55d055fb226b6471d7639d3cca72ecad386134fd17e3"
+    },
+    "original_projected_points_sha256": "279120c99409a3d6aa1c5b492efdadf940427875d32542e029bfb7a5986ef7e5"
+  },
+  {
+    "file": "dense/4_Adducted_Thumb_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "849a52e493594d2b805bdde9c815f2b26a6ae5881c1dbbae8233e1dbbd7ba1c5",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "e80f167fef4a414db94c39ecf4b986b561bfcebbb1f8bf6041610f115ed55430",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "bd412c39b166d35067f2bfb634890a17555320c63460eee20131efef39139683",
+      "height_m": "1c900399d4185e96d7fbc34cb453e6da2d61a24ee6fec87c6c79faa28ac8caff",
+      "dimensions_m": "23d3d762710ed12cca274524c53ec56af12417d4f710ddc5fea63b822a6222b2",
+      "source_projected_points": "fe300dcdac0ca0675430fd7a3c0e70d7a2911b355a69322c37f5d0cf7fa38410"
+    },
+    "original_projected_points_sha256": "dcdeb48d6a5f044e969f4d0f670ce20a2c000cd929e44cd86edab90c6caa59be"
+  },
+  {
+    "file": "dense/5_Light_Tool_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "f8b999ac071db604b788d117444f11fb9ee09ff089a0f6c1925bc5a616af301d",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "8911360cd428519551039b01ef4475b72b5ff0b4e68c49750a834c4831c5bcab",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "42910e4993a7ee3006f572cd8f365402e9640f55ff2917f6a436643ba2766032",
+      "height_m": "1c900399d4185e96d7fbc34cb453e6da2d61a24ee6fec87c6c79faa28ac8caff",
+      "dimensions_m": "c5a031da76b5a55acf2d32398e4825bdc4e353ab8987102e5a0fa01794d197f3",
+      "source_projected_points": "357f71b065d78c736d7ed8747c1c3963dc79c824980274d84558644026e798cc"
+    },
+    "original_projected_points_sha256": "97148b3cf620e6722976dacb1a88abfaf01a62787eba68108b43b72eb689353a"
+  },
+  {
+    "file": "dense/7_Prismatic_3_Finger_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "c49a3ed181cb2f91525f368fb97fa4a1e80577810561eab3629e78ec388b0934",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "5fcdf09b5e29e32659e794a64c7a476e8fc4a7875da32f02aa85b04fde2f48d4",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "56adb74b7989445da22fcc83d1544aa2bd4d61c88802ea17a2e05d4416438de1",
+      "height_m": "b147761a505f1e06d9d29eae52212c4e9e7a4f87f5957961fadbf28b0c61a909",
+      "dimensions_m": "45215096e8f73ac8b93ed792383d7d8eb3ef7ccf3b93f6074eb316c2fa40d55e",
+      "source_projected_points": "f844756f0066e10879fc99388c8c7acea1ae94784524ab6524c9dbdb9d7d0b5c"
+    },
+    "original_projected_points_sha256": "d2a1746f02bcd3675e542ce5fde732bdb2beffea315a4156a6950fb6c5fe1459"
+  },
+  {
+    "file": "dense/8_Prismatic_2_Finger_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "45bc800320c6bf5e5bff7a2687cf888149c00c9df9f17d62a10875db33959d52",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "a28881431a869994eaaf98ef7e84e34a7d1c62b7959279df9fdd47e801c38812",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "677a106010a8deb3b95cadab3f07600465c37973df942948e8345ef699d15644",
+      "height_m": "b147761a505f1e06d9d29eae52212c4e9e7a4f87f5957961fadbf28b0c61a909",
+      "dimensions_m": "9404876bbcceb26bf9473bf040036effdfc4713396a8d39f2fc80a4c7ee181a8",
+      "source_projected_points": "1d470f469f4c9ee7bc0ba3682fb6aad913c4409d65978823590befb97feddda4"
+    },
+    "original_projected_points_sha256": "028fb8bc7069b6008833713e2ff6f02c6b9f0dd326b3a95269cf0d70bc305e2f"
+  },
+  {
+    "file": "dense/10_Power_Disk_disk.npz",
+    "arrays": {
+      "scales": "78fbbd478fdc274f66903b4c5034437be4a1a9ba64bdb56f08077a9dec34fd73",
+      "qpos": "19865b51de9b37726e0125e77229fbb4f59d129083d7b0fa04c47f827b54558c",
+      "source_scales": "9053085be26c8f4e72934c3f250c75c9b907b39a07d6bd65a0e5d7655e08ad0a",
+      "source_qpos": "45a20922bf5ca4fe5d874abb52c063df5e5295109b5945e0873a3f728b0285ba",
+      "source_indices": "478580e44cf3a3ffc8c7d5a1db6c54b8c09fdb1d41d4c337c60083b20dd541c8",
+      "radius_m": "d22a077caa264cf1f4130208e71e0836af7175d1598f6f4d0816c8356a7d9c92",
+      "height_m": "d47c2570bf05108a074cb274492502a78c27c5996541a2971e8048b975eb9c6e",
+      "dimensions_m": "701423757dbac8d7b04b77cfe2b2bdff478331f744e4eeeacdadf2207f25efd2",
+      "source_projected_points": "9bea59a49ab2db46de3b1d82128f641b9a0cf001b1e3865fdbc27a4c49d74c13"
+    },
+    "original_projected_points_sha256": "a78a7f49815fad3b0bc8ea6db2a47a484f364eea84e13d07cca99a2bb71f0e3f"
+  },
+  {
+    "file": "dense/24_Tip_Pinch_cylinder.npz",
+    "arrays": {
+      "scales": "367afa2ed1a1e901e02092299aa8d3e5710d5e5c6bd6516cbb48e096ef195bc6",
+      "qpos": "88647cd12d096b338196105f49367907a27d0c524f505070a0defe5d79a323af",
+      "source_scales": "1bd0ba14b69fc803fe7a79aa4317035c8e693b2287173ef86bf2265670dec145",
+      "source_qpos": "2cd321332c383772300b725c1718d6aba42ae466b9a5ad4f2722c8771665fc6e",
+      "source_indices": "8ab76297e847c0e3dd613b3fc40fba8063bdff0c42037798788d208e276cca4c",
+      "radius_m": "5c743a7d5665df47b9d911c4222cddad206a0862fb09f2b97126a61d8f2e814b",
+      "height_m": "bce9e763411ec71e2edf7712062f20ef30f202d5a50b809819b71660d6cfa4d0",
+      "dimensions_m": "25ab509aae51aff146eeb0c57e7e14568394dffa57a729c7cde209f81ed504b4",
+      "source_projected_points": "381ee175e627cd756cf430073d39eea5c40b16c4ceaa4330e8600df4db859a10"
+    },
+    "original_projected_points_sha256": "505a70a43863907f6ac094dd47de3271ecbfdfcf839d87ceb57c237b4d96fbc2"
+  },
+  {
+    "file": "dense/27_Quadpod_sphere.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "9e0074e3c1ce02ddc2903dce2cf42e9c5b6129eb6d246ef2211b0d20d618e6a5",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "e2523f89a81dbbe80fe01f3d67aaa587ae9aea9b480b6e8013168e23606ebe6d",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "4037dcede33d10b08c94e36285729678e17b4b5928715e4d5b95d2bc2fc2c829",
+      "height_m": "149e8f39cdf360f86c4da183e3552f0c35a050aca66358e97e7913b1ff4e2755",
+      "dimensions_m": "a48767ed4a30d5aa14a2715acf12fa7c8513e12e46f63fe337e37bb66b4e2f17",
+      "source_projected_points": "8e95bc92348a0def48ff0338ab8ef3d4f583d01ecb25c8b9752f8cc9402965d2"
+    },
+    "original_projected_points_sha256": "5a77d53819337201b0a42040f1d03632e6dcc5e2e1be7900720ffb11f56f6abe"
+  },
+  {
+    "file": "dense/32_Ventral_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "95d751ddcab128ca876742bb65f2726ccde97d6d205683a282b245a61b77f7cc",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "35992b4bee5beed864e58b30459ccd99ba30acbdff409dd04e54d37d32827129",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "a972a5c67ca9278b657311b0a72dbfe02c001c29249ac3f7f3009c65ac682575",
+      "height_m": "691d081b418886770061b95b60ce9e168424dbd8247b1eefcb2fdae09a233d2d",
+      "dimensions_m": "354bd32546cfb8a66c11338ddeb9b7dd86ce96cb764eea51502a6e775e839c51",
+      "source_projected_points": "d7d438eb48e59cc18b310f494a65bb07c368f497aec65c3fdcaaf32f2642ff3d"
+    },
+    "original_projected_points_sha256": "05bcd97651cebb40065d28fc03f1af5a070303a0695e75e1549dccbef89ddb6a"
+  },
+  {
+    "file": "dense/9_Palmar_Pinch_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "f43f6104c888121306c5792043478773a4292f7192bfad4416b28d1c5a3b36a6",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "0b78ca3c3f5a81eafbf40d623b6eb0468e1cc4b968e62b1bc23ddf5856d6e907",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "3603a3b20232bedb8a6394d09aabd728362b830194bf01a0693af78d17416354",
+      "height_m": "b147761a505f1e06d9d29eae52212c4e9e7a4f87f5957961fadbf28b0c61a909",
+      "dimensions_m": "a399de7665cdfc097b827a43c595172a59805e772966ea4a2413a84a892b9589",
+      "source_projected_points": "1200fc892ac41c82109cf7461a46bf3b1a18af3a12d3f441e5f9a498cb90532d"
+    },
+    "original_projected_points_sha256": "0b0e4671ed2b1612da908cf6a1bfe9439f0d327bb271d526d3ffd140cf7fe083"
+  },
+  {
+    "file": "dense/12_Precision_Disk_disk.npz",
+    "arrays": {
+      "scales": "c24ada4c843902b2ee9f5d3cfc483ad098af5325d65493d9da06d0f13daa2f47",
+      "qpos": "fb9ff10d14aeb8bbdc8a4b036d869c6a3996aa21da24ad324b76a11a43c47937",
+      "source_scales": "815d60af0ae2f6306b8bcdcc62da147611725b00d1f235133941abd4688da525",
+      "source_qpos": "58f1ae504200d81df3bf74fd6ccbe78269acccb6277eeeabb370b2c43ea2b98e",
+      "source_indices": "cde00c929de0be6f3bef205d9e2d95b8e0a138f9dd27a9ee57c28503d4ad47a3",
+      "radius_m": "45985507631f521bf1cb9d0fe2823f6e0785a7af8d69a2bea71fa104a736c001",
+      "height_m": "0677f342fd9be3db70054922a2085c38ea58cb30ac99549864e560a62c794107",
+      "dimensions_m": "726213cc346827ac9a1d748dc00bee35cdd9e1c4aabf79f873567a08fceb85e8",
+      "source_projected_points": "e304158521fbdaa9b535bddd2ad1e4b2052b120b5f80c2f1a233f3734fb475e5"
+    },
+    "original_projected_points_sha256": "2cab00d64c2bf5b35ef53042f42f97d869669f971db11cc08c65d4b2fb60ba8e"
+  },
+  {
+    "file": "dense/13_Precision_Sphere_sphere.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "08b5bad3e0efce318a48699900df967a6e43b3e376c2699894f202db9189c3cb",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "2706b6db9305d0c39b4d352f17caf2d13b8c41eda03830c4b775b40006c91f52",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "4037dcede33d10b08c94e36285729678e17b4b5928715e4d5b95d2bc2fc2c829",
+      "height_m": "149e8f39cdf360f86c4da183e3552f0c35a050aca66358e97e7913b1ff4e2755",
+      "dimensions_m": "a48767ed4a30d5aa14a2715acf12fa7c8513e12e46f63fe337e37bb66b4e2f17",
+      "source_projected_points": "8a283b4166472950af0de62bd91d29e01752ecacfc3ede296ea33abbd21c93f4"
+    },
+    "original_projected_points_sha256": "35aff5c37fd5615eb20408322debe603436752528d461f8466d5b86dba08ab8b"
+  },
+  {
+    "file": "dense/14_Tripod_sphere.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "9fb442cc84777196a99f9255b4579e504cf4471db4c6bed89244fa6b6df8766d",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "1f5f97e26beac2b03199fdc53e1f14d39b5f03182cf90873c795c6b39503263b",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "21d9b35a0df02138acd656b828569f366a30a07362f996b48640138bd97e35f5",
+      "height_m": "376e398fb4ff2e8b31dd96bec32d480bfe9adba9d82fafca3206472c425ab9ac",
+      "dimensions_m": "d919437de55634c5ac62d03205280c6f2caff8a1d9d88f4b501421dd1bad84df",
+      "source_projected_points": "60ada9cd6118665c524968e947051e9ba3b097068e8c3afaa4631610b90e1605"
+    },
+    "original_projected_points_sha256": "135d5679910644df8c8cd4fb2e22ccbde6bb54fc0d79946e55aa49fb2f05e1cf"
+  },
+  {
+    "file": "dense/15_Fixed_Hook_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "5c8a482a0e613f893b4d96d37b5b577944a5d45b3944329f2152f126f7e637ba",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "99e5e1ab6270e688ca75f999c428bbd152cbc42bbb2c06de806ec4fc321c4b90",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "21d9b35a0df02138acd656b828569f366a30a07362f996b48640138bd97e35f5",
+      "height_m": "691d081b418886770061b95b60ce9e168424dbd8247b1eefcb2fdae09a233d2d",
+      "dimensions_m": "2323a28131389e8109553b43da2dbc4ee2d2386c9ab33254497ed770e302712d",
+      "source_projected_points": "1e417b439c251ce7b71957cfe26f4804768e9f05a9a95f5a575495851cd02651"
+    },
+    "original_projected_points_sha256": "977dc351bb084e3a61d86511a7d338cdee334f3fe3908b19065a3ea7c7d1c267"
+  },
+  {
+    "file": "dense/17_Index_Finger_Extension_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "54b57e92ba2d25c1df86cba6ad16ccd15a5a9ba46abadd25c1963d112d7c825c",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "3a05c4f8e8b07bb0dc0678c16d2fa6089549c2e4d74d79d31d7c97a60f5e644e",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "bc89120effe5c7b40c3857f4a851b9b205309636eff4fff9c1dc7cf3ccca78d7",
+      "height_m": "691d081b418886770061b95b60ce9e168424dbd8247b1eefcb2fdae09a233d2d",
+      "dimensions_m": "14810bea32d5653140c2803f85c98ec463469592c8a2da793651313a1a4f2562",
+      "source_projected_points": "e58f6c39914a4a48563bb12f8d23f19a4cabf4557dfa04c84ca7e03d7e490cd8"
+    },
+    "original_projected_points_sha256": "21b0bb692451118d9670acf80fdc619480bcb96137c47a937e714419aab93056"
+  },
+  {
+    "file": "dense/20_Writing_Tripod_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "9a47850754b8c8ee1f66eea773b2cf5cf0b2fcdc8f59c0e8f6b6de646802fdfd",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "761b35bc466bda69465e13d5505fbd9a34cbd58ebd76c9547b92010596c363ba",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "f3dc60df510441318720be9d252c23b624e456d4650b7ec60046d6ab506f6d48",
+      "height_m": "b147761a505f1e06d9d29eae52212c4e9e7a4f87f5957961fadbf28b0c61a909",
+      "dimensions_m": "b4fdc4fa267ef6c4e2fac43174d586e60673cac6a961c1c45a307142a58fbb04",
+      "source_projected_points": "1a766c60f7d63d89ad64857ef7381ce85f08fd9dcea5a97cbdb3a798d9e25631"
+    },
+    "original_projected_points_sha256": "c983f397ae221cf9f28e3e6efea0323fc21050ec9bcc7a0edb6dd44b10b6b796"
+  },
+  {
+    "file": "dense/22_Parallel_Extension_plate.npz",
+    "arrays": {
+      "scales": "98590a633b2d6bdb730f1d00eb629c7f691fb17a452deb6901ef35db44c9f148",
+      "qpos": "10f0b36188b60a486a340f5cfcaf1b2a79b2202f1f0a2150d4990f94e4c23a1e",
+      "source_scales": "55a3fdc8979ab1764680a2b0b1322c2f10acf4fa470b125a38545491233beca1",
+      "source_qpos": "fbdf01d345c3a11403b69006fdd7961723136a43eaabc6164f7e2ab0d9bd5817",
+      "source_indices": "1c42d8abdd8294a9c02af7bda515a1c91cdb508aa6eb5d2744a6edb722837b86",
+      "radius_m": "d0fba503b73d7ec62efec3cb639a1ae20f1c6c595ee730707eb473299bd29548",
+      "height_m": "8a8b9021baab196fe2cd4ed4734f9dbb0b8b6db8b007621dfbc112383261077e",
+      "dimensions_m": "4247b286b59c08af40e3008ca27f4ec3da7e137b223a06c4f43edb3c37a96682",
+      "source_projected_points": "88a39fa1affceaac4222ee7acff2e4917f985905e3889747a7f3905ec47381cc"
+    },
+    "original_projected_points_sha256": "54daeacfc5114b5167f98dc95d2ce777b68f6ca9c0b60d764dfe6bee7d5f36e6"
+  },
+  {
+    "file": "dense/26_Sphere_4_Finger_sphere.npz",
+    "arrays": {
+      "scales": "68e96056f358eba5ccd8f20125d1e53930f9e218afb7488ec14c72712e167130",
+      "qpos": "ac125ba5879e28dd06bdd2a7684c06759ffe8c65b343250b539274f80ad95cba",
+      "source_scales": "7ff782fc9d434db1854dfddb7fe6577eab886f308e40632791509c817161e4ad",
+      "source_qpos": "3703438f72f40548d31de75604ff2e3aad1046811b2fba187fa2eda25ef46e12",
+      "source_indices": "1ec026f99e106def61870b1c3afcbda3085a14cfa9c931d6cbe92c3be5a482c4",
+      "radius_m": "7e5d5f3da1569aaa83c590e7fd74b2d7d03062d94a6016f04fe042dffff57658",
+      "height_m": "96d16871f310f30d715c348e25e4cd3d527fdac0039b5425a82927056df1e4d4",
+      "dimensions_m": "435b71c1e6cbf5e38fe7cfef03257b96815ef240b5ea134b5cbd20e87a771464",
+      "source_projected_points": "7274f4bffc6a243f80a18a918ac3a5e1b156d87638eb40a4f283299a8a0bed87"
+    },
+    "original_projected_points_sha256": "b1bc51c9d20ab2f30ab8ceee12a8a6f5934d8f4a229974f64f5987cb558c2299"
+  },
+  {
+    "file": "dense/29_Stick_cylinder.npz",
+    "arrays": {
+      "scales": "4920a55263e73753cf3bd31048035ca7e8dfbf4f7f9ef5e2c03edcd5accb0c0d",
+      "qpos": "f1bfe91ba48d01937af0b28ac79ff414ea53105c6bd741b76ccd29cdc1ee9724",
+      "source_scales": "8d9dfa682897ad9d943098b376acae2d7b643bf2411ffbd44bd0adae0864d0ab",
+      "source_qpos": "8682bb66d3cbb1f92d2104f01ba693115e5d99603e010cf0c955168185ef4a77",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "bde4fd7ad7496e2bfc9570f5ef78d920131d603e492df853da272618f7844844",
+      "height_m": "691d081b418886770061b95b60ce9e168424dbd8247b1eefcb2fdae09a233d2d",
+      "dimensions_m": "31582998e8b1d527473e4ce7ba985d7dd21999d203a23e83aa366727491f32b6",
+      "source_projected_points": "121103940ac735385bc1ee4176ae45d09f439b03dbbe19d48b6f2db9b57946b2"
+    },
+    "original_projected_points_sha256": "bd158372d35b44c80699ce48342c75c55c3fcded2293aee2f9a5c7d5bd846667"
+  },
+  {
+    "file": "dense/33_Inferior_Pincer_sphere.npz",
+    "arrays": {
+      "scales": "f21ed2b2d90e9365b55540858054d41a81c65ec2f52b9693011bc67763db8678",
+      "qpos": "adbe450c84296a8eff09b82fa4ab77107c65b6108ad57fa1cbd6da27a0727646",
+      "source_scales": "6050eb15e37ef1b4c316485016ce4e235073f73af533d8d9fdf694123595f6b0",
+      "source_qpos": "d3a92349742bb5dd21c553a6505038660534072235f8dafd890aaf6b9a18f4bc",
+      "source_indices": "2e5dc49fa49cac6487795ab0f38b8d577f769f45eb6c786945b1dbcb75099f15",
+      "radius_m": "09d082b201296ef7f2f87b31e3db46e89ea9af6fd89c7da60a1257c8e77270ca",
+      "height_m": "001211bf708f9a12179cde62d9f1229fe76931f78a089263591de01582df75b2",
+      "dimensions_m": "b8b54527422936695561d39cc2e57350b06a9b3f372478d8e8f34db0d1fe55e7",
+      "source_projected_points": "bd89f540fea7fbe8f607131d199cc1709d5d63c396eb930cee51fa47082dc6c2"
+    },
+    "original_projected_points_sha256": "38b25dbbd2b16fb19b8cd39ac7ffea70b4b68f152da1d8d7d1c790998b49250e"
+  }
+]

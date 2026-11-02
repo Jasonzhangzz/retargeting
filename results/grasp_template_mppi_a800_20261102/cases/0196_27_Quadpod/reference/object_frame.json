@@ -1,9 +1,0 @@
-{
-  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_articulation_20261102/template_initialization/27_Quadpod_sphere/source_1x.obj",
-  "scale": 1.0,
-  "recenter_offset_m": [
-    3.9606355130672455e-05,
-    -3.987457603216171e-05,
-    0.0
-  ]
-}

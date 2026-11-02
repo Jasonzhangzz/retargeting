@@ -1,0 +1,3854 @@
+{
+  "passed": true,
+  "cases": 640,
+  "grids": 31,
+  "dense_poses": 39007,
+  "source_poses_preserved_exactly": true,
+  "dense_projections_reconstructed_exactly": true,
+  "source_comparison": false,
+  "maximum_primitive_reconstruction_error_m": null,
+  "projected_closed": 612,
+  "coverage_80_percent": 414,
+  "rows": [
+    {
+      "case": "0000_1_Large_Diameter",
+      "collision_error_m": 1.4949750970581072e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0001_1_Large_Diameter",
+      "collision_error_m": 4.534632704056296e-10,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0002_1_Large_Diameter",
+      "collision_error_m": 1.1516865945290777e-08,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0003_1_Large_Diameter",
+      "collision_error_m": 7.401238591182163e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0004_1_Large_Diameter",
+      "collision_error_m": 5.69906146146576e-10,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0005_1_Large_Diameter",
+      "collision_error_m": 1.5280674925269647e-08,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0006_1_Large_Diameter",
+      "collision_error_m": 2.9943529173109135e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0007_1_Large_Diameter",
+      "collision_error_m": 3.374185088885623e-09,
+      "closure": true,
+      "coverage": 0.9333333333333333
+    },
+    {
+      "case": "0008_1_Large_Diameter",
+      "collision_error_m": 1.5098581634086228e-09,
+      "closure": true,
+      "coverage": 0.8666666666666667
+    },
+    {
+      "case": "0009_1_Large_Diameter",
+      "collision_error_m": 7.507012059291412e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0010_1_Large_Diameter",
+      "collision_error_m": 4.955823324631625e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0011_1_Large_Diameter",
+      "collision_error_m": 2.494960927093559e-09,
+      "closure": true,
+      "coverage": 0.8666666666666667
+    },
+    {
+      "case": "0012_1_Large_Diameter",
+      "collision_error_m": 5.0420556002919725e-09,
+      "closure": true,
+      "coverage": 0.9333333333333333
+    },
+    {
+      "case": "0013_1_Large_Diameter",
+      "collision_error_m": 6.833403335196331e-08,
+      "closure": true,
+      "coverage": 0.8666666666666667
+    },
+    {
+      "case": "0014_1_Large_Diameter",
+      "collision_error_m": 7.014612120846697e-08,
+      "closure": true,
+      "coverage": 0.9333333333333333
+    },
+    {
+      "case": "0015_1_Large_Diameter",
+      "collision_error_m": 2.9866696685254546e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0016_1_Large_Diameter",
+      "collision_error_m": 6.57902347565853e-08,
+      "closure": true,
+      "coverage": 0.8666666666666667
+    },
+    {
+      "case": "0017_6_Prismatic_4_Finger",
+      "collision_error_m": 1.5661251664771635e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0018_6_Prismatic_4_Finger",
+      "collision_error_m": 6.8662369303706255e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0019_6_Prismatic_4_Finger",
+      "collision_error_m": 7.735977440288897e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0020_6_Prismatic_4_Finger",
+      "collision_error_m": 4.311600429007627e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0021_6_Prismatic_4_Finger",
+      "collision_error_m": 1.1463639751439075e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0022_6_Prismatic_4_Finger",
+      "collision_error_m": 2.461999757817808e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0023_6_Prismatic_4_Finger",
+      "collision_error_m": 5.033301508114256e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0024_6_Prismatic_4_Finger",
+      "collision_error_m": 6.988025581041064e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0025_6_Prismatic_4_Finger",
+      "collision_error_m": 7.870566433179974e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0026_6_Prismatic_4_Finger",
+      "collision_error_m": 4.469493137355604e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0027_6_Prismatic_4_Finger",
+      "collision_error_m": 8.00095404859813e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0028_6_Prismatic_4_Finger",
+      "collision_error_m": 8.240792191867297e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0029_6_Prismatic_4_Finger",
+      "collision_error_m": 3.75809859794185e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0030_6_Prismatic_4_Finger",
+      "collision_error_m": 1.9392280012700547e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0031_6_Prismatic_4_Finger",
+      "collision_error_m": 5.178368313579068e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0032_6_Prismatic_4_Finger",
+      "collision_error_m": 4.778346878332035e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0033_6_Prismatic_4_Finger",
+      "collision_error_m": 6.372519338604388e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0034_11_Power_Sphere",
+      "collision_error_m": 5.0872125637469595e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0035_11_Power_Sphere",
+      "collision_error_m": 2.512328473079986e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0036_11_Power_Sphere",
+      "collision_error_m": 2.2247183643908652e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0037_11_Power_Sphere",
+      "collision_error_m": 1.365604799683992e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0038_11_Power_Sphere",
+      "collision_error_m": 1.2718588283250343e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0039_11_Power_Sphere",
+      "collision_error_m": 1.2200106094210211e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0040_11_Power_Sphere",
+      "collision_error_m": 3.436663384859956e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0041_11_Power_Sphere",
+      "collision_error_m": 7.706808716374802e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0042_11_Power_Sphere",
+      "collision_error_m": 6.310080491976622e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0043_11_Power_Sphere",
+      "collision_error_m": 8.349692054952784e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0044_11_Power_Sphere",
+      "collision_error_m": 7.644072127447471e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0045_11_Power_Sphere",
+      "collision_error_m": 4.021244682074834e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0046_11_Power_Sphere",
+      "collision_error_m": 9.367078200768486e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0047_11_Power_Sphere",
+      "collision_error_m": 5.148236780459781e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0048_11_Power_Sphere",
+      "collision_error_m": 4.112700802312574e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0049_11_Power_Sphere",
+      "collision_error_m": 2.5928642093629717e-09,
+      "closure": true,
+      "coverage": 0.9
+    },
+    {
+      "case": "0050_11_Power_Sphere",
+      "collision_error_m": 1.8319719794976375e-09,
+      "closure": true,
+      "coverage": 0.9
+    },
+    {
+      "case": "0051_16_Lateral",
+      "collision_error_m": 1.215829956814152e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0052_16_Lateral",
+      "collision_error_m": 7.335297953954285e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0053_16_Lateral",
+      "collision_error_m": 1.1959301790548252e-08,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0054_16_Lateral",
+      "collision_error_m": 3.5775620788307955e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0055_16_Lateral",
+      "collision_error_m": 6.054244489040687e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0056_16_Lateral",
+      "collision_error_m": 9.86308489967099e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0057_16_Lateral",
+      "collision_error_m": 9.590369282980139e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0058_16_Lateral",
+      "collision_error_m": 1.1794483533551173e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0059_16_Lateral",
+      "collision_error_m": 1.1545061523541428e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0060_16_Lateral",
+      "collision_error_m": 1.027856187695627e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0061_16_Lateral",
+      "collision_error_m": 4.787250771850788e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0062_16_Lateral",
+      "collision_error_m": 4.439336796497988e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0063_16_Lateral",
+      "collision_error_m": 1.2095901219663294e-08,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0064_16_Lateral",
+      "collision_error_m": 2.625686411784206e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0065_16_Lateral",
+      "collision_error_m": 7.529430854844033e-12,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0066_16_Lateral",
+      "collision_error_m": 4.178368155920327e-09,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0067_16_Lateral",
+      "collision_error_m": 3.4018981295153017e-10,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0068_18_Extensior_Type",
+      "collision_error_m": 4.169170224332941e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0069_18_Extensior_Type",
+      "collision_error_m": 2.227670822547295e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0070_18_Extensior_Type",
+      "collision_error_m": 1.0980238068607207e-08,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0071_18_Extensior_Type",
+      "collision_error_m": 3.6396054494888808e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0072_18_Extensior_Type",
+      "collision_error_m": 5.901607837838219e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0073_18_Extensior_Type",
+      "collision_error_m": 8.675149609088662e-10,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0074_18_Extensior_Type",
+      "collision_error_m": 2.5795400615882813e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0075_18_Extensior_Type",
+      "collision_error_m": 6.90088290547855e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0076_18_Extensior_Type",
+      "collision_error_m": 1.5355102948692856e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0077_18_Extensior_Type",
+      "collision_error_m": 1.2210552438954303e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0078_18_Extensior_Type",
+      "collision_error_m": 3.3790289620180824e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0079_18_Extensior_Type",
+      "collision_error_m": 1.8711169657952e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0080_18_Extensior_Type",
+      "collision_error_m": 1.171511556600363e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0081_18_Extensior_Type",
+      "collision_error_m": 1.4527323250607127e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0082_18_Extensior_Type",
+      "collision_error_m": 8.405152387459813e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0083_18_Extensior_Type",
+      "collision_error_m": 2.825379999404909e-10,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0084_18_Extensior_Type",
+      "collision_error_m": 6.273830495916177e-10,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0085_18_Extensior_Type",
+      "collision_error_m": 1.8754644113758157e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0086_18_Extensior_Type",
+      "collision_error_m": 1.5768541134289493e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0087_18_Extensior_Type",
+      "collision_error_m": 5.290527581129634e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0088_18_Extensior_Type",
+      "collision_error_m": 4.3715292497026326e-10,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0089_18_Extensior_Type",
+      "collision_error_m": 3.1891601885367105e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0090_18_Extensior_Type",
+      "collision_error_m": 4.62196854096944e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0091_18_Extensior_Type",
+      "collision_error_m": 1.6446945650012978e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0092_18_Extensior_Type",
+      "collision_error_m": 2.260043603652395e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0093_18_Extensior_Type",
+      "collision_error_m": 6.977758006815327e-10,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0094_18_Extensior_Type",
+      "collision_error_m": 1.7722253872753946e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0095_18_Extensior_Type",
+      "collision_error_m": 8.801958762544304e-10,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0096_18_Extensior_Type",
+      "collision_error_m": 1.1888980867499899e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0097_18_Extensior_Type",
+      "collision_error_m": 1.8370149737316488e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0098_18_Extensior_Type",
+      "collision_error_m": 1.7889765862276474e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0099_18_Extensior_Type",
+      "collision_error_m": 3.530920299199547e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0100_18_Extensior_Type",
+      "collision_error_m": 8.593324142547321e-10,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0101_23_Adduction_Grip",
+      "collision_error_m": 4.066736785648603e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0102_23_Adduction_Grip",
+      "collision_error_m": 5.1369265184880025e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0103_23_Adduction_Grip",
+      "collision_error_m": 5.200314174506199e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0104_23_Adduction_Grip",
+      "collision_error_m": 4.325849780380947e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0105_23_Adduction_Grip",
+      "collision_error_m": 4.111385824238228e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0106_23_Adduction_Grip",
+      "collision_error_m": 5.4183067654985095e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0107_23_Adduction_Grip",
+      "collision_error_m": 3.8818063000101155e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0108_23_Adduction_Grip",
+      "collision_error_m": 1.7138854259413083e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0109_23_Adduction_Grip",
+      "collision_error_m": 3.1007149708366794e-06,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0110_23_Adduction_Grip",
+      "collision_error_m": 5.66063244888948e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0111_23_Adduction_Grip",
+      "collision_error_m": 4.314069357389677e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0112_23_Adduction_Grip",
+      "collision_error_m": 5.143277331375734e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0113_23_Adduction_Grip",
+      "collision_error_m": 5.369637557511853e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0114_23_Adduction_Grip",
+      "collision_error_m": 2.391935219553734e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0115_23_Adduction_Grip",
+      "collision_error_m": 2.8424157235817232e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0116_23_Adduction_Grip",
+      "collision_error_m": 1.8998863645508512e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0117_23_Adduction_Grip",
+      "collision_error_m": 2.5124111248473607e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0118_25_Lateral_Tripod",
+      "collision_error_m": 4.660895783800516e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0119_25_Lateral_Tripod",
+      "collision_error_m": 8.125514705525916e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0120_25_Lateral_Tripod",
+      "collision_error_m": 1.5384678929029547e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0121_25_Lateral_Tripod",
+      "collision_error_m": 1.47599854929438e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0122_25_Lateral_Tripod",
+      "collision_error_m": 4.8003759551369304e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0123_25_Lateral_Tripod",
+      "collision_error_m": 6.651880981580968e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0124_25_Lateral_Tripod",
+      "collision_error_m": 1.1685846366526337e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0125_25_Lateral_Tripod",
+      "collision_error_m": 7.208710397057019e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0126_25_Lateral_Tripod",
+      "collision_error_m": 9.490900739579297e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0127_25_Lateral_Tripod",
+      "collision_error_m": 4.5574331294494924e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0128_25_Lateral_Tripod",
+      "collision_error_m": 7.008975449508681e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0129_25_Lateral_Tripod",
+      "collision_error_m": 1.887008074102914e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0130_25_Lateral_Tripod",
+      "collision_error_m": 7.046986436661656e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0131_25_Lateral_Tripod",
+      "collision_error_m": 2.9037974681039858e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0132_25_Lateral_Tripod",
+      "collision_error_m": 6.430917075771203e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0133_25_Lateral_Tripod",
+      "collision_error_m": 4.749204206982993e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0134_25_Lateral_Tripod",
+      "collision_error_m": 2.8723431111897513e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0135_28_Sphere_3_Finger",
+      "collision_error_m": 2.809334117984466e-09,
+      "closure": true,
+      "coverage": 0.5833333333333334
+    },
+    {
+      "case": "0136_28_Sphere_3_Finger",
+      "collision_error_m": 7.725076827357069e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0137_28_Sphere_3_Finger",
+      "collision_error_m": 7.795005266264532e-10,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0138_28_Sphere_3_Finger",
+      "collision_error_m": 3.2633812939268647e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0139_28_Sphere_3_Finger",
+      "collision_error_m": 5.168030264152135e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0140_28_Sphere_3_Finger",
+      "collision_error_m": 2.1748821949114927e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0141_28_Sphere_3_Finger",
+      "collision_error_m": 2.7915814295592645e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0142_28_Sphere_3_Finger",
+      "collision_error_m": 1.5333516661247826e-10,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0143_28_Sphere_3_Finger",
+      "collision_error_m": 1.4479997470159822e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0144_28_Sphere_3_Finger",
+      "collision_error_m": 3.3632875330244505e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0145_28_Sphere_3_Finger",
+      "collision_error_m": 1.7546112826560822e-10,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0146_28_Sphere_3_Finger",
+      "collision_error_m": 1.8572842395980782e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0147_28_Sphere_3_Finger",
+      "collision_error_m": 1.3366568268891044e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0148_28_Sphere_3_Finger",
+      "collision_error_m": 7.290082600086567e-11,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0149_28_Sphere_3_Finger",
+      "collision_error_m": 7.788805867631199e-10,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0150_28_Sphere_3_Finger",
+      "collision_error_m": 2.2042747948106123e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0151_28_Sphere_3_Finger",
+      "collision_error_m": 2.179147415466709e-09,
+      "closure": true,
+      "coverage": 0.9166666666666666
+    },
+    {
+      "case": "0152_30_Palmar",
+      "collision_error_m": 1.020242047311895e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0153_30_Palmar",
+      "collision_error_m": 8.456190647883333e-10,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0154_30_Palmar",
+      "collision_error_m": 7.1223512144481804e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0155_30_Palmar",
+      "collision_error_m": 5.74526810110873e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0156_30_Palmar",
+      "collision_error_m": 1.6494904549885225e-08,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0157_30_Palmar",
+      "collision_error_m": 2.0501909404977564e-08,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0158_30_Palmar",
+      "collision_error_m": 1.0523867286296729e-08,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0159_30_Palmar",
+      "collision_error_m": 1.7668118267033517e-08,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0160_30_Palmar",
+      "collision_error_m": 9.125683601146628e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0161_30_Palmar",
+      "collision_error_m": 4.860500647796417e-10,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0162_30_Palmar",
+      "collision_error_m": 3.84121250389044e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0163_30_Palmar",
+      "collision_error_m": 1.4579498862962031e-08,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0164_30_Palmar",
+      "collision_error_m": 2.5871965214294135e-08,
+      "closure": true,
+      "coverage": 0.6
+    },
+    {
+      "case": "0165_30_Palmar",
+      "collision_error_m": 2.91415952671098e-08,
+      "closure": true,
+      "coverage": 0.6
+    },
+    {
+      "case": "0166_30_Palmar",
+      "collision_error_m": 3.025044159393406e-08,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0167_30_Palmar",
+      "collision_error_m": 1.1682552758952164e-08,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0168_30_Palmar",
+      "collision_error_m": 1.6947401520334138e-08,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0169_30_Palmar",
+      "collision_error_m": 3.368811099437735e-09,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0170_30_Palmar",
+      "collision_error_m": 3.251479875707869e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0171_30_Palmar",
+      "collision_error_m": 1.7479063695122893e-08,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0172_30_Palmar",
+      "collision_error_m": 4.084786942720742e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0173_30_Palmar",
+      "collision_error_m": 5.840776430218741e-10,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0174_30_Palmar",
+      "collision_error_m": 3.570996348883221e-09,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0175_30_Palmar",
+      "collision_error_m": 5.972926363359207e-09,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0176_30_Palmar",
+      "collision_error_m": 2.2772098976463206e-09,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0177_30_Palmar",
+      "collision_error_m": 1.140793390828898e-08,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0178_30_Palmar",
+      "collision_error_m": 7.2692556392708885e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0179_30_Palmar",
+      "collision_error_m": 1.4474171501112354e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0180_30_Palmar",
+      "collision_error_m": 4.207289714969892e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0181_30_Palmar",
+      "collision_error_m": 1.2210165639854609e-08,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0182_30_Palmar",
+      "collision_error_m": 4.3268367430626675e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0183_30_Palmar",
+      "collision_error_m": 5.959067191085854e-09,
+      "closure": true,
+      "coverage": 0.8666666666666667
+    },
+    {
+      "case": "0184_30_Palmar",
+      "collision_error_m": 6.416938505733605e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0185_30_Palmar",
+      "collision_error_m": 1.0113266561868894e-08,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0186_30_Palmar",
+      "collision_error_m": 1.3078777268225178e-08,
+      "closure": true,
+      "coverage": 0.6
+    },
+    {
+      "case": "0187_30_Palmar",
+      "collision_error_m": 7.828547428367916e-10,
+      "closure": true,
+      "coverage": 0.5333333333333333
+    },
+    {
+      "case": "0188_30_Palmar",
+      "collision_error_m": 1.5887363992092562e-08,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0189_31_Ring",
+      "collision_error_m": 3.835482436861937e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0190_31_Ring",
+      "collision_error_m": 1.125095990439813e-08,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0191_31_Ring",
+      "collision_error_m": 1.8975852115327152e-08,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0192_31_Ring",
+      "collision_error_m": 2.7818076882811515e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0193_31_Ring",
+      "collision_error_m": 1.935961055138033e-08,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0194_31_Ring",
+      "collision_error_m": 4.093507152171105e-11,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0195_31_Ring",
+      "collision_error_m": 2.103878820160568e-08,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0196_31_Ring",
+      "collision_error_m": 9.518252543343902e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0197_31_Ring",
+      "collision_error_m": 7.053644859606606e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0198_31_Ring",
+      "collision_error_m": 5.193311402012374e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0199_31_Ring",
+      "collision_error_m": 5.0032461645921344e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0200_31_Ring",
+      "collision_error_m": 3.80611740648934e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0201_31_Ring",
+      "collision_error_m": 3.898008155839294e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0202_31_Ring",
+      "collision_error_m": 2.2424556586631006e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0203_31_Ring",
+      "collision_error_m": 7.227166475519409e-09,
+      "closure": true,
+      "coverage": 0.7142857142857143
+    },
+    {
+      "case": "0204_31_Ring",
+      "collision_error_m": 4.331864515531858e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0205_31_Ring",
+      "collision_error_m": 2.381574298881972e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0000_2_Small_Diameter",
+      "collision_error_m": 4.9295257819291505e-09,
+      "closure": true,
+      "coverage": 0.6923076923076923
+    },
+    {
+      "case": "0001_2_Small_Diameter",
+      "collision_error_m": 3.3439310747479523e-09,
+      "closure": true,
+      "coverage": 0.7692307692307693
+    },
+    {
+      "case": "0002_2_Small_Diameter",
+      "collision_error_m": 1.2069033761101522e-08,
+      "closure": true,
+      "coverage": 0.7692307692307693
+    },
+    {
+      "case": "0003_2_Small_Diameter",
+      "collision_error_m": 4.707885969523068e-09,
+      "closure": true,
+      "coverage": 0.7692307692307693
+    },
+    {
+      "case": "0004_2_Small_Diameter",
+      "collision_error_m": 3.6695162902201928e-09,
+      "closure": true,
+      "coverage": 0.7692307692307693
+    },
+    {
+      "case": "0005_2_Small_Diameter",
+      "collision_error_m": 4.328665585261876e-09,
+      "closure": true,
+      "coverage": 0.7692307692307693
+    },
+    {
+      "case": "0006_2_Small_Diameter",
+      "collision_error_m": 1.0843537929551561e-09,
+      "closure": true,
+      "coverage": 0.7692307692307693
+    },
+    {
+      "case": "0007_2_Small_Diameter",
+      "collision_error_m": 4.212077027877098e-09,
+      "closure": true,
+      "coverage": 0.7692307692307693
+    },
+    {
+      "case": "0008_2_Small_Diameter",
+      "collision_error_m": 4.941961502785003e-09,
+      "closure": true,
+      "coverage": 0.6923076923076923
+    },
+    {
+      "case": "0009_2_Small_Diameter",
+      "collision_error_m": 7.959693038364635e-09,
+      "closure": true,
+      "coverage": 0.7692307692307693
+    },
+    {
+      "case": "0010_2_Small_Diameter",
+      "collision_error_m": 1.88287738655743e-09,
+      "closure": true,
+      "coverage": 0.7692307692307693
+    },
+    {
+      "case": "0011_2_Small_Diameter",
+      "collision_error_m": 2.8942896690420383e-10,
+      "closure": true,
+      "coverage": 0.8461538461538461
+    },
+    {
+      "case": "0012_2_Small_Diameter",
+      "collision_error_m": 6.132143707746063e-09,
+      "closure": true,
+      "coverage": 0.9230769230769231
+    },
+    {
+      "case": "0013_2_Small_Diameter",
+      "collision_error_m": 7.307316259030916e-09,
+      "closure": true,
+      "coverage": 0.9230769230769231
+    },
+    {
+      "case": "0014_2_Small_Diameter",
+      "collision_error_m": 5.612306079941232e-09,
+      "closure": true,
+      "coverage": 0.8461538461538461
+    },
+    {
+      "case": "0015_2_Small_Diameter",
+      "collision_error_m": 3.397197758346626e-09,
+      "closure": true,
+      "coverage": 0.8461538461538461
+    },
+    {
+      "case": "0016_2_Small_Diameter",
+      "collision_error_m": 6.266418092759629e-09,
+      "closure": true,
+      "coverage": 0.9230769230769231
+    },
+    {
+      "case": "0017_3_Medium_Wrap",
+      "collision_error_m": 3.0356439393447454e-09,
+      "closure": true,
+      "coverage": 0.6428571428571429
+    },
+    {
+      "case": "0018_3_Medium_Wrap",
+      "collision_error_m": 6.355784511104939e-09,
+      "closure": true,
+      "coverage": 0.6428571428571429
+    },
+    {
+      "case": "0019_3_Medium_Wrap",
+      "collision_error_m": 2.270814833914281e-09,
+      "closure": true,
+      "coverage": 0.6428571428571429
+    },
+    {
+      "case": "0020_3_Medium_Wrap",
+      "collision_error_m": 8.510691810580812e-09,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0021_3_Medium_Wrap",
+      "collision_error_m": 3.497142627784458e-09,
+      "closure": true,
+      "coverage": 0.6428571428571429
+    },
+    {
+      "case": "0022_3_Medium_Wrap",
+      "collision_error_m": 3.6840843570251636e-10,
+      "closure": true,
+      "coverage": 0.6428571428571429
+    },
+    {
+      "case": "0023_3_Medium_Wrap",
+      "collision_error_m": 7.515256262354691e-10,
+      "closure": true,
+      "coverage": 0.7142857142857143
+    },
+    {
+      "case": "0024_3_Medium_Wrap",
+      "collision_error_m": 6.83046946564278e-09,
+      "closure": true,
+      "coverage": 0.7857142857142857
+    },
+    {
+      "case": "0025_3_Medium_Wrap",
+      "collision_error_m": 2.4937844506425777e-09,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0026_3_Medium_Wrap",
+      "collision_error_m": 4.543897193839269e-09,
+      "closure": true,
+      "coverage": 0.7857142857142857
+    },
+    {
+      "case": "0027_3_Medium_Wrap",
+      "collision_error_m": 1.396750981801781e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0028_3_Medium_Wrap",
+      "collision_error_m": 8.196830754512302e-09,
+      "closure": true,
+      "coverage": 0.9285714285714286
+    },
+    {
+      "case": "0029_3_Medium_Wrap",
+      "collision_error_m": 5.939789980181909e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0030_3_Medium_Wrap",
+      "collision_error_m": 3.406298268622543e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0031_3_Medium_Wrap",
+      "collision_error_m": 4.244013420209858e-09,
+      "closure": true,
+      "coverage": 0.9285714285714286
+    },
+    {
+      "case": "0032_3_Medium_Wrap",
+      "collision_error_m": 7.120274344088462e-10,
+      "closure": true,
+      "coverage": 0.9285714285714286
+    },
+    {
+      "case": "0033_3_Medium_Wrap",
+      "collision_error_m": 8.901207297282165e-10,
+      "closure": true,
+      "coverage": 0.9285714285714286
+    },
+    {
+      "case": "0034_4_Adducted_Thumb",
+      "collision_error_m": 2.1638717267666308e-09,
+      "closure": true,
+      "coverage": 0.4
+    },
+    {
+      "case": "0035_4_Adducted_Thumb",
+      "collision_error_m": 5.237719865030382e-10,
+      "closure": true,
+      "coverage": 0.5
+    },
+    {
+      "case": "0036_4_Adducted_Thumb",
+      "collision_error_m": 5.898519493587745e-09,
+      "closure": true,
+      "coverage": 0.6
+    },
+    {
+      "case": "0037_4_Adducted_Thumb",
+      "collision_error_m": 1.8913310470720923e-09,
+      "closure": true,
+      "coverage": 0.6
+    },
+    {
+      "case": "0038_4_Adducted_Thumb",
+      "collision_error_m": 1.4875325818558896e-08,
+      "closure": true,
+      "coverage": 0.7
+    },
+    {
+      "case": "0039_4_Adducted_Thumb",
+      "collision_error_m": 9.638098615646212e-10,
+      "closure": true,
+      "coverage": 0.7
+    },
+    {
+      "case": "0040_4_Adducted_Thumb",
+      "collision_error_m": 1.5888771030207055e-08,
+      "closure": true,
+      "coverage": 0.7
+    },
+    {
+      "case": "0041_4_Adducted_Thumb",
+      "collision_error_m": 1.0914227124066839e-09,
+      "closure": true,
+      "coverage": 0.7
+    },
+    {
+      "case": "0042_4_Adducted_Thumb",
+      "collision_error_m": 3.0721682747671814e-09,
+      "closure": true,
+      "coverage": 0.7
+    },
+    {
+      "case": "0043_4_Adducted_Thumb",
+      "collision_error_m": 2.850102577122565e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0044_4_Adducted_Thumb",
+      "collision_error_m": 5.945692471351349e-10,
+      "closure": true,
+      "coverage": 0.9
+    },
+    {
+      "case": "0045_4_Adducted_Thumb",
+      "collision_error_m": 4.345117104662122e-10,
+      "closure": true,
+      "coverage": 0.9
+    },
+    {
+      "case": "0046_4_Adducted_Thumb",
+      "collision_error_m": 9.729461038915366e-10,
+      "closure": true,
+      "coverage": 0.9
+    },
+    {
+      "case": "0047_4_Adducted_Thumb",
+      "collision_error_m": 5.800579227013825e-10,
+      "closure": true,
+      "coverage": 0.9
+    },
+    {
+      "case": "0048_4_Adducted_Thumb",
+      "collision_error_m": 1.1184923178614303e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0049_4_Adducted_Thumb",
+      "collision_error_m": 2.599428484961752e-10,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0050_4_Adducted_Thumb",
+      "collision_error_m": 1.7296884063933149e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0051_5_Light_Tool",
+      "collision_error_m": 1.9543450729270218e-09,
+      "closure": true,
+      "coverage": 0.6153846153846154
+    },
+    {
+      "case": "0052_5_Light_Tool",
+      "collision_error_m": 1.390375633778028e-09,
+      "closure": true,
+      "coverage": 0.6923076923076923
+    },
+    {
+      "case": "0053_5_Light_Tool",
+      "collision_error_m": 7.251731199038602e-10,
+      "closure": true,
+      "coverage": 0.6923076923076923
+    },
+    {
+      "case": "0054_5_Light_Tool",
+      "collision_error_m": 6.10955557954658e-10,
+      "closure": true,
+      "coverage": 0.6923076923076923
+    },
+    {
+      "case": "0055_5_Light_Tool",
+      "collision_error_m": 7.570178455450216e-10,
+      "closure": true,
+      "coverage": 0.7692307692307693
+    },
+    {
+      "case": "0056_5_Light_Tool",
+      "collision_error_m": 1.2517203322025966e-09,
+      "closure": true,
+      "coverage": 0.9230769230769231
+    },
+    {
+      "case": "0057_5_Light_Tool",
+      "collision_error_m": 6.529930465055608e-09,
+      "closure": true,
+      "coverage": 0.9230769230769231
+    },
+    {
+      "case": "0058_5_Light_Tool",
+      "collision_error_m": 4.15618381073915e-09,
+      "closure": true,
+      "coverage": 0.8461538461538461
+    },
+    {
+      "case": "0059_5_Light_Tool",
+      "collision_error_m": 1.6339337656316733e-09,
+      "closure": true,
+      "coverage": 0.8461538461538461
+    },
+    {
+      "case": "0060_5_Light_Tool",
+      "collision_error_m": 9.221192568201197e-09,
+      "closure": true,
+      "coverage": 0.8461538461538461
+    },
+    {
+      "case": "0061_5_Light_Tool",
+      "collision_error_m": 4.693928334128378e-09,
+      "closure": true,
+      "coverage": 0.8461538461538461
+    },
+    {
+      "case": "0062_5_Light_Tool",
+      "collision_error_m": 5.397678055386879e-09,
+      "closure": true,
+      "coverage": 0.9230769230769231
+    },
+    {
+      "case": "0063_5_Light_Tool",
+      "collision_error_m": 6.1752998283502725e-09,
+      "closure": true,
+      "coverage": 0.9230769230769231
+    },
+    {
+      "case": "0064_5_Light_Tool",
+      "collision_error_m": 1.2032602104798673e-08,
+      "closure": true,
+      "coverage": 0.9230769230769231
+    },
+    {
+      "case": "0065_5_Light_Tool",
+      "collision_error_m": 3.0873833804182654e-09,
+      "closure": true,
+      "coverage": 0.8461538461538461
+    },
+    {
+      "case": "0066_5_Light_Tool",
+      "collision_error_m": 6.198182472697336e-09,
+      "closure": true,
+      "coverage": 0.8461538461538461
+    },
+    {
+      "case": "0067_5_Light_Tool",
+      "collision_error_m": 1.7490172578467356e-09,
+      "closure": true,
+      "coverage": 0.8461538461538461
+    },
+    {
+      "case": "0068_7_Prismatic_3_Finger",
+      "collision_error_m": 2.682452219116699e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0069_7_Prismatic_3_Finger",
+      "collision_error_m": 3.792791055724255e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0070_7_Prismatic_3_Finger",
+      "collision_error_m": 1.1621387213233553e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0071_7_Prismatic_3_Finger",
+      "collision_error_m": 3.259549031728315e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0072_7_Prismatic_3_Finger",
+      "collision_error_m": 9.857472353571456e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0073_7_Prismatic_3_Finger",
+      "collision_error_m": 7.1196104359239065e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0074_7_Prismatic_3_Finger",
+      "collision_error_m": 5.434155694004905e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0075_7_Prismatic_3_Finger",
+      "collision_error_m": 6.459332605899745e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0076_7_Prismatic_3_Finger",
+      "collision_error_m": 4.571953281457333e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0077_7_Prismatic_3_Finger",
+      "collision_error_m": 3.7355960241357983e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0078_7_Prismatic_3_Finger",
+      "collision_error_m": 7.845141839759803e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0079_7_Prismatic_3_Finger",
+      "collision_error_m": 5.82122559595992e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0080_7_Prismatic_3_Finger",
+      "collision_error_m": 1.0663362925837118e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0081_7_Prismatic_3_Finger",
+      "collision_error_m": 8.016840004126599e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0082_7_Prismatic_3_Finger",
+      "collision_error_m": 1.8292775124306368e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0083_7_Prismatic_3_Finger",
+      "collision_error_m": 3.5456148921812064e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0084_7_Prismatic_3_Finger",
+      "collision_error_m": 8.174882319038693e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0085_8_Prismatic_2_Finger",
+      "collision_error_m": 1.186392676995004e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0086_8_Prismatic_2_Finger",
+      "collision_error_m": 1.671890640836301e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0087_8_Prismatic_2_Finger",
+      "collision_error_m": 7.761876123823022e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0088_8_Prismatic_2_Finger",
+      "collision_error_m": 6.899065366642644e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0089_8_Prismatic_2_Finger",
+      "collision_error_m": 3.121675800057326e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0090_8_Prismatic_2_Finger",
+      "collision_error_m": 1.1771158889712632e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0091_8_Prismatic_2_Finger",
+      "collision_error_m": 3.1261569096223635e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0092_8_Prismatic_2_Finger",
+      "collision_error_m": 3.5720112466979892e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0093_8_Prismatic_2_Finger",
+      "collision_error_m": 6.653627189414247e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0094_8_Prismatic_2_Finger",
+      "collision_error_m": 1.7084746037603765e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0095_8_Prismatic_2_Finger",
+      "collision_error_m": 5.699672863670666e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0096_8_Prismatic_2_Finger",
+      "collision_error_m": 3.3826685580211346e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0097_8_Prismatic_2_Finger",
+      "collision_error_m": 1.1436427516803294e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0098_8_Prismatic_2_Finger",
+      "collision_error_m": 1.986823306180871e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0099_8_Prismatic_2_Finger",
+      "collision_error_m": 8.582474024651163e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0100_8_Prismatic_2_Finger",
+      "collision_error_m": 8.960918875412088e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0101_8_Prismatic_2_Finger",
+      "collision_error_m": 8.733179109130657e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0102_10_Power_Disk",
+      "collision_error_m": 5.1962803235619526e-09,
+      "closure": true,
+      "coverage": 0.5454545454545454
+    },
+    {
+      "case": "0103_10_Power_Disk",
+      "collision_error_m": 1.970213792459874e-10,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0104_10_Power_Disk",
+      "collision_error_m": 3.8168993510539345e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0105_10_Power_Disk",
+      "collision_error_m": 9.024043452592057e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0106_10_Power_Disk",
+      "collision_error_m": 1.4189418988093741e-08,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0107_10_Power_Disk",
+      "collision_error_m": 2.867028264103011e-10,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0108_10_Power_Disk",
+      "collision_error_m": 4.117860735990825e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0109_10_Power_Disk",
+      "collision_error_m": 6.024683685094956e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0110_10_Power_Disk",
+      "collision_error_m": 1.2498155072069445e-08,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0111_10_Power_Disk",
+      "collision_error_m": 6.19337980878841e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0112_10_Power_Disk",
+      "collision_error_m": 2.634762533582774e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0113_10_Power_Disk",
+      "collision_error_m": 5.338415660482293e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0114_10_Power_Disk",
+      "collision_error_m": 1.4970176552379921e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0115_10_Power_Disk",
+      "collision_error_m": 1.300906398663676e-10,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0116_10_Power_Disk",
+      "collision_error_m": 2.578506256081803e-08,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0117_10_Power_Disk",
+      "collision_error_m": 2.873819882629261e-08,
+      "closure": true,
+      "coverage": 0.5454545454545454
+    },
+    {
+      "case": "0118_10_Power_Disk",
+      "collision_error_m": 2.136127021839032e-08,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0119_10_Power_Disk",
+      "collision_error_m": 5.5134946985550826e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0120_10_Power_Disk",
+      "collision_error_m": 5.2698050654123585e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0121_10_Power_Disk",
+      "collision_error_m": 3.4596610233757208e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0122_10_Power_Disk",
+      "collision_error_m": 5.427862504944758e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0123_10_Power_Disk",
+      "collision_error_m": 3.6177184620407588e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0124_10_Power_Disk",
+      "collision_error_m": 6.449941068221998e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0125_10_Power_Disk",
+      "collision_error_m": 1.6334293465990884e-08,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0126_10_Power_Disk",
+      "collision_error_m": 5.095255510480928e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0127_10_Power_Disk",
+      "collision_error_m": 8.488596108576635e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0128_10_Power_Disk",
+      "collision_error_m": 1.5777725250430696e-08,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0129_10_Power_Disk",
+      "collision_error_m": 7.177888574315394e-10,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0130_10_Power_Disk",
+      "collision_error_m": 1.010447398279088e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0131_10_Power_Disk",
+      "collision_error_m": 4.418087384654157e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0132_10_Power_Disk",
+      "collision_error_m": 3.932982023391318e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0133_10_Power_Disk",
+      "collision_error_m": 4.177982410990405e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0134_10_Power_Disk",
+      "collision_error_m": 2.3753985226287327e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0135_10_Power_Disk",
+      "collision_error_m": 3.2968431483079708e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0136_10_Power_Disk",
+      "collision_error_m": 1.8428292216862707e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0137_10_Power_Disk",
+      "collision_error_m": 2.1169077940239034e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0138_10_Power_Disk",
+      "collision_error_m": 1.925325081222201e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0139_10_Power_Disk",
+      "collision_error_m": 1.7908167856614532e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0140_10_Power_Disk",
+      "collision_error_m": 2.259686906341818e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0141_10_Power_Disk",
+      "collision_error_m": 4.071974387016841e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0142_10_Power_Disk",
+      "collision_error_m": 4.50479607653001e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0143_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0144_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0145_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0146_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0147_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0148_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0149_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0150_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0151_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0152_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0153_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": false,
+      "coverage": 1.0
+    },
+    {
+      "case": "0154_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0155_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0156_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0157_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0158_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0159_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0160_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0161_24_Tip_Pinch",
+      "collision_error_m": 5.140986286858277e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0162_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0163_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0164_24_Tip_Pinch",
+      "collision_error_m": 0.0,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0165_24_Tip_Pinch",
+      "collision_error_m": 2.109714252569798e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0166_24_Tip_Pinch",
+      "collision_error_m": 9.859655605306238e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0167_24_Tip_Pinch",
+      "collision_error_m": 1.5083685287394123e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0168_24_Tip_Pinch",
+      "collision_error_m": 4.090987884417712e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0169_24_Tip_Pinch",
+      "collision_error_m": 2.746945553851475e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0170_24_Tip_Pinch",
+      "collision_error_m": 1.4433193178812724e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0171_24_Tip_Pinch",
+      "collision_error_m": 9.203350094581743e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0172_24_Tip_Pinch",
+      "collision_error_m": 5.079360854169039e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0173_24_Tip_Pinch",
+      "collision_error_m": 8.527115961357197e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0174_24_Tip_Pinch",
+      "collision_error_m": 1.1639813283581893e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0175_24_Tip_Pinch",
+      "collision_error_m": 9.620783064756924e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0176_24_Tip_Pinch",
+      "collision_error_m": 3.1145235145931373e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0177_24_Tip_Pinch",
+      "collision_error_m": 5.5757524316222846e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0178_24_Tip_Pinch",
+      "collision_error_m": 1.8721041751329145e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0179_24_Tip_Pinch",
+      "collision_error_m": 1.9290700287031204e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0180_24_Tip_Pinch",
+      "collision_error_m": 7.290822329707441e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0181_24_Tip_Pinch",
+      "collision_error_m": 1.1178598422574224e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0182_24_Tip_Pinch",
+      "collision_error_m": 5.24646533888503e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0183_24_Tip_Pinch",
+      "collision_error_m": 6.160342118149628e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0184_24_Tip_Pinch",
+      "collision_error_m": 5.057268022217419e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0185_24_Tip_Pinch",
+      "collision_error_m": 1.7784144008782185e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0186_24_Tip_Pinch",
+      "collision_error_m": 3.796259646481753e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0187_24_Tip_Pinch",
+      "collision_error_m": 8.437408851669562e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0188_27_Quadpod",
+      "collision_error_m": 4.055244971556482e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0189_27_Quadpod",
+      "collision_error_m": 1.312317353114982e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0190_27_Quadpod",
+      "collision_error_m": 5.871121906377745e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0191_27_Quadpod",
+      "collision_error_m": 1.3749277594818192e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0192_27_Quadpod",
+      "collision_error_m": 5.823497833913269e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0193_27_Quadpod",
+      "collision_error_m": 1.0589290075580177e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0194_27_Quadpod",
+      "collision_error_m": 3.2801410882984158e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0195_27_Quadpod",
+      "collision_error_m": 7.36896977948854e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0196_27_Quadpod",
+      "collision_error_m": 7.528051245336885e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0197_27_Quadpod",
+      "collision_error_m": 1.3867402413779092e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0198_27_Quadpod",
+      "collision_error_m": 5.899994590101594e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0199_27_Quadpod",
+      "collision_error_m": 1.023291099977382e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0200_27_Quadpod",
+      "collision_error_m": 1.7746204490664327e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0201_27_Quadpod",
+      "collision_error_m": 2.148479729027601e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0202_27_Quadpod",
+      "collision_error_m": 1.8646309345247535e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0203_27_Quadpod",
+      "collision_error_m": 1.8179124414179808e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0204_27_Quadpod",
+      "collision_error_m": 3.763384090661346e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0205_32_Ventral",
+      "collision_error_m": 1.4195104859030146e-08,
+      "closure": true,
+      "coverage": 0.3333333333333333
+    },
+    {
+      "case": "0206_32_Ventral",
+      "collision_error_m": 2.4760732249273776e-09,
+      "closure": true,
+      "coverage": 0.5
+    },
+    {
+      "case": "0207_32_Ventral",
+      "collision_error_m": 2.0673463104175366e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0208_32_Ventral",
+      "collision_error_m": 4.168752494679989e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0209_32_Ventral",
+      "collision_error_m": 5.932132262406048e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0210_32_Ventral",
+      "collision_error_m": 2.2074908016984918e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0211_32_Ventral",
+      "collision_error_m": 4.029888182269931e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0212_32_Ventral",
+      "collision_error_m": 1.5120643608729223e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0213_32_Ventral",
+      "collision_error_m": 2.283942185984239e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0214_32_Ventral",
+      "collision_error_m": 1.6886844973577897e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0215_32_Ventral",
+      "collision_error_m": 1.446856122324508e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0216_32_Ventral",
+      "collision_error_m": 3.0953674345912674e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0217_32_Ventral",
+      "collision_error_m": 7.735637508159143e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0218_32_Ventral",
+      "collision_error_m": 2.1407358784947261e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0219_32_Ventral",
+      "collision_error_m": 1.378972483293342e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0220_32_Ventral",
+      "collision_error_m": 2.6582760110326065e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0221_32_Ventral",
+      "collision_error_m": 1.3929022865677432e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0000_9_Palmar_Pinch",
+      "collision_error_m": 1.1910573078537708e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0001_9_Palmar_Pinch",
+      "collision_error_m": 1.3425848412456243e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0002_9_Palmar_Pinch",
+      "collision_error_m": 8.21929073673705e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0003_9_Palmar_Pinch",
+      "collision_error_m": 6.428672590737174e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0004_9_Palmar_Pinch",
+      "collision_error_m": 1.2929625206538516e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0005_9_Palmar_Pinch",
+      "collision_error_m": 1.2293106911055989e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0006_9_Palmar_Pinch",
+      "collision_error_m": 7.506239395891137e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0007_9_Palmar_Pinch",
+      "collision_error_m": 7.1286866825141446e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0008_9_Palmar_Pinch",
+      "collision_error_m": 9.216622679625568e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0009_9_Palmar_Pinch",
+      "collision_error_m": 4.666473876909459e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0010_9_Palmar_Pinch",
+      "collision_error_m": 9.651333357616095e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0011_9_Palmar_Pinch",
+      "collision_error_m": 1.3567609340268266e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0012_9_Palmar_Pinch",
+      "collision_error_m": 9.593124301876532e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0013_9_Palmar_Pinch",
+      "collision_error_m": 1.25149924253584e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0014_9_Palmar_Pinch",
+      "collision_error_m": 6.937979125020907e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0015_9_Palmar_Pinch",
+      "collision_error_m": 1.123399014264781e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0016_9_Palmar_Pinch",
+      "collision_error_m": 2.3388298396511548e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0017_12_Precision_Disk",
+      "collision_error_m": 1.3338744771695596e-08,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0018_12_Precision_Disk",
+      "collision_error_m": 8.46585600038606e-09,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0019_12_Precision_Disk",
+      "collision_error_m": 6.510799045733595e-09,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0020_12_Precision_Disk",
+      "collision_error_m": 1.1137725651694588e-08,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0021_12_Precision_Disk",
+      "collision_error_m": 8.839951276193303e-09,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0022_12_Precision_Disk",
+      "collision_error_m": 1.235850419223361e-08,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0023_12_Precision_Disk",
+      "collision_error_m": 1.2506776413123699e-08,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0024_12_Precision_Disk",
+      "collision_error_m": 7.695385925710063e-10,
+      "closure": true,
+      "coverage": 0.42857142857142855
+    },
+    {
+      "case": "0025_12_Precision_Disk",
+      "collision_error_m": 2.695363719544541e-10,
+      "closure": true,
+      "coverage": 0.42857142857142855
+    },
+    {
+      "case": "0026_12_Precision_Disk",
+      "collision_error_m": 6.394817779475925e-09,
+      "closure": true,
+      "coverage": 0.42857142857142855
+    },
+    {
+      "case": "0027_12_Precision_Disk",
+      "collision_error_m": 1.426509555618738e-08,
+      "closure": true,
+      "coverage": 0.42857142857142855
+    },
+    {
+      "case": "0028_12_Precision_Disk",
+      "collision_error_m": 1.0964985810383437e-08,
+      "closure": true,
+      "coverage": 0.42857142857142855
+    },
+    {
+      "case": "0029_12_Precision_Disk",
+      "collision_error_m": 1.1497130511517462e-08,
+      "closure": true,
+      "coverage": 0.42857142857142855
+    },
+    {
+      "case": "0030_12_Precision_Disk",
+      "collision_error_m": 6.088200841039559e-09,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0031_12_Precision_Disk",
+      "collision_error_m": 1.9895445258714256e-09,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0032_12_Precision_Disk",
+      "collision_error_m": 1.0769909138119704e-08,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0033_12_Precision_Disk",
+      "collision_error_m": 7.758012415207821e-09,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0034_12_Precision_Disk",
+      "collision_error_m": 4.484525681358598e-09,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0035_12_Precision_Disk",
+      "collision_error_m": 2.013326199550372e-08,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0036_12_Precision_Disk",
+      "collision_error_m": 2.9537287351243113e-09,
+      "closure": true,
+      "coverage": 0.5714285714285714
+    },
+    {
+      "case": "0037_12_Precision_Disk",
+      "collision_error_m": 3.88899183342839e-09,
+      "closure": true,
+      "coverage": 0.42857142857142855
+    },
+    {
+      "case": "0038_13_Precision_Sphere",
+      "collision_error_m": 0.0,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0039_13_Precision_Sphere",
+      "collision_error_m": 2.9655027579075267e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0040_13_Precision_Sphere",
+      "collision_error_m": 1.4540275379004166e-08,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0041_13_Precision_Sphere",
+      "collision_error_m": 1.4674178519438058e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0042_13_Precision_Sphere",
+      "collision_error_m": 6.980284143016588e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0043_13_Precision_Sphere",
+      "collision_error_m": 9.536704660348394e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0044_13_Precision_Sphere",
+      "collision_error_m": 5.828462432632374e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0045_13_Precision_Sphere",
+      "collision_error_m": 4.8086408662448635e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0046_13_Precision_Sphere",
+      "collision_error_m": 1.3352050617649724e-08,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0047_13_Precision_Sphere",
+      "collision_error_m": 3.3751357314992965e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0048_13_Precision_Sphere",
+      "collision_error_m": 6.627770138267763e-10,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0049_13_Precision_Sphere",
+      "collision_error_m": 5.5220256603536085e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0050_13_Precision_Sphere",
+      "collision_error_m": 5.788478820941724e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0051_13_Precision_Sphere",
+      "collision_error_m": 5.355355555877999e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0052_13_Precision_Sphere",
+      "collision_error_m": 3.191745551395838e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0053_13_Precision_Sphere",
+      "collision_error_m": 9.60568388773484e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0054_13_Precision_Sphere",
+      "collision_error_m": 3.956816358179245e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0055_14_Tripod",
+      "collision_error_m": 6.666229957798253e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0056_14_Tripod",
+      "collision_error_m": 1.1356695901612937e-08,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0057_14_Tripod",
+      "collision_error_m": 6.036489523411452e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0058_14_Tripod",
+      "collision_error_m": 1.1465979905984913e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0059_14_Tripod",
+      "collision_error_m": 4.761771348320981e-11,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0060_14_Tripod",
+      "collision_error_m": 8.0354836456617e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0061_14_Tripod",
+      "collision_error_m": 9.071343424582427e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0062_14_Tripod",
+      "collision_error_m": 1.0721788288095817e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0063_14_Tripod",
+      "collision_error_m": 8.117558480437437e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0064_14_Tripod",
+      "collision_error_m": 7.047524565014299e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0065_14_Tripod",
+      "collision_error_m": 1.5603346863863037e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0066_14_Tripod",
+      "collision_error_m": 5.337223134396817e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0067_14_Tripod",
+      "collision_error_m": 1.5203121786770864e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0068_14_Tripod",
+      "collision_error_m": 1.1209803547592486e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0069_14_Tripod",
+      "collision_error_m": 1.9735301024496237e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0070_14_Tripod",
+      "collision_error_m": 1.402565802263939e-08,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0071_14_Tripod",
+      "collision_error_m": 2.451212501096249e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0072_15_Fixed_Hook",
+      "collision_error_m": 5.128340148374821e-10,
+      "closure": true,
+      "coverage": 0.6428571428571429
+    },
+    {
+      "case": "0073_15_Fixed_Hook",
+      "collision_error_m": 2.7153880851737283e-09,
+      "closure": true,
+      "coverage": 0.7142857142857143
+    },
+    {
+      "case": "0074_15_Fixed_Hook",
+      "collision_error_m": 1.5828471506586228e-09,
+      "closure": true,
+      "coverage": 0.6428571428571429
+    },
+    {
+      "case": "0075_15_Fixed_Hook",
+      "collision_error_m": 3.3552453018639156e-09,
+      "closure": true,
+      "coverage": 0.6428571428571429
+    },
+    {
+      "case": "0076_15_Fixed_Hook",
+      "collision_error_m": 4.937392693478426e-09,
+      "closure": true,
+      "coverage": 0.7142857142857143
+    },
+    {
+      "case": "0077_15_Fixed_Hook",
+      "collision_error_m": 8.256849703958125e-09,
+      "closure": true,
+      "coverage": 0.7857142857142857
+    },
+    {
+      "case": "0078_15_Fixed_Hook",
+      "collision_error_m": 1.6935541794892844e-09,
+      "closure": true,
+      "coverage": 0.7857142857142857
+    },
+    {
+      "case": "0079_15_Fixed_Hook",
+      "collision_error_m": 4.565068969977076e-09,
+      "closure": true,
+      "coverage": 0.7142857142857143
+    },
+    {
+      "case": "0080_15_Fixed_Hook",
+      "collision_error_m": 2.4253073924174195e-09,
+      "closure": true,
+      "coverage": 0.35714285714285715
+    },
+    {
+      "case": "0081_15_Fixed_Hook",
+      "collision_error_m": 7.849582608476097e-09,
+      "closure": true,
+      "coverage": 0.7857142857142857
+    },
+    {
+      "case": "0082_15_Fixed_Hook",
+      "collision_error_m": 4.659283723597307e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0083_15_Fixed_Hook",
+      "collision_error_m": 2.9901416499084066e-10,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0084_15_Fixed_Hook",
+      "collision_error_m": 1.5372629337019605e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0085_15_Fixed_Hook",
+      "collision_error_m": 4.174494000908774e-09,
+      "closure": true,
+      "coverage": 0.8571428571428571
+    },
+    {
+      "case": "0086_15_Fixed_Hook",
+      "collision_error_m": 4.381835253582794e-09,
+      "closure": true,
+      "coverage": 0.7857142857142857
+    },
+    {
+      "case": "0087_15_Fixed_Hook",
+      "collision_error_m": 4.1059476005821105e-09,
+      "closure": true,
+      "coverage": 0.7857142857142857
+    },
+    {
+      "case": "0088_15_Fixed_Hook",
+      "collision_error_m": 4.546119497343681e-09,
+      "closure": true,
+      "coverage": 0.7857142857142857
+    },
+    {
+      "case": "0089_17_Index_Finger_Extension",
+      "collision_error_m": 5.129875675722456e-09,
+      "closure": true,
+      "coverage": 0.9090909090909091
+    },
+    {
+      "case": "0090_17_Index_Finger_Extension",
+      "collision_error_m": 2.0809467374087454e-09,
+      "closure": true,
+      "coverage": 0.9090909090909091
+    },
+    {
+      "case": "0091_17_Index_Finger_Extension",
+      "collision_error_m": 1.2835116240672573e-08,
+      "closure": true,
+      "coverage": 0.9090909090909091
+    },
+    {
+      "case": "0092_17_Index_Finger_Extension",
+      "collision_error_m": 9.5585001118597e-09,
+      "closure": true,
+      "coverage": 0.9090909090909091
+    },
+    {
+      "case": "0093_17_Index_Finger_Extension",
+      "collision_error_m": 7.692631089854102e-09,
+      "closure": true,
+      "coverage": 0.9090909090909091
+    },
+    {
+      "case": "0094_17_Index_Finger_Extension",
+      "collision_error_m": 6.704055077353874e-09,
+      "closure": true,
+      "coverage": 0.9090909090909091
+    },
+    {
+      "case": "0095_17_Index_Finger_Extension",
+      "collision_error_m": 1.317810330780586e-08,
+      "closure": true,
+      "coverage": 0.9090909090909091
+    },
+    {
+      "case": "0096_17_Index_Finger_Extension",
+      "collision_error_m": 1.2680938254756163e-08,
+      "closure": true,
+      "coverage": 0.9090909090909091
+    },
+    {
+      "case": "0097_17_Index_Finger_Extension",
+      "collision_error_m": 9.50919295302638e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0098_17_Index_Finger_Extension",
+      "collision_error_m": 4.865826118763406e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0099_17_Index_Finger_Extension",
+      "collision_error_m": 5.245085958442697e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0100_17_Index_Finger_Extension",
+      "collision_error_m": 4.054894235487605e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0101_17_Index_Finger_Extension",
+      "collision_error_m": 1.3469927777343127e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0102_17_Index_Finger_Extension",
+      "collision_error_m": 6.020538581563706e-11,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0103_17_Index_Finger_Extension",
+      "collision_error_m": 6.37359783006719e-11,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0104_17_Index_Finger_Extension",
+      "collision_error_m": 3.322897601173991e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0105_17_Index_Finger_Extension",
+      "collision_error_m": 3.4729551092599342e-09,
+      "closure": true,
+      "coverage": 0.9090909090909091
+    },
+    {
+      "case": "0106_20_Writing_Tripod",
+      "collision_error_m": 3.5912484576839515e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0107_20_Writing_Tripod",
+      "collision_error_m": 3.695602260843367e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0108_20_Writing_Tripod",
+      "collision_error_m": 1.521536260314385e-08,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0109_20_Writing_Tripod",
+      "collision_error_m": 1.2947994736719343e-08,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0110_20_Writing_Tripod",
+      "collision_error_m": 8.885180387881858e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0111_20_Writing_Tripod",
+      "collision_error_m": 2.6296287760144144e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0112_20_Writing_Tripod",
+      "collision_error_m": 1.3708777973475e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0113_20_Writing_Tripod",
+      "collision_error_m": 6.557931697681596e-10,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0114_20_Writing_Tripod",
+      "collision_error_m": 5.31108161963556e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0115_20_Writing_Tripod",
+      "collision_error_m": 3.3643964918693425e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0116_20_Writing_Tripod",
+      "collision_error_m": 4.171693521876074e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0117_20_Writing_Tripod",
+      "collision_error_m": 2.758963998667624e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0118_20_Writing_Tripod",
+      "collision_error_m": 1.7485736179302658e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0119_20_Writing_Tripod",
+      "collision_error_m": 2.0044123370636935e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0120_20_Writing_Tripod",
+      "collision_error_m": 4.829938276586232e-10,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0121_20_Writing_Tripod",
+      "collision_error_m": 5.215124409142097e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0122_20_Writing_Tripod",
+      "collision_error_m": 1.7586644328326795e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0123_22_Parallel_Extension",
+      "collision_error_m": 1.060192197487736e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0124_22_Parallel_Extension",
+      "collision_error_m": 4.2944038206125384e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0125_22_Parallel_Extension",
+      "collision_error_m": 5.3149711556812335e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0126_22_Parallel_Extension",
+      "collision_error_m": 5.307255237715913e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0127_22_Parallel_Extension",
+      "collision_error_m": 5.2995393199674334e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0128_22_Parallel_Extension",
+      "collision_error_m": 5.408238724479569e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0129_22_Parallel_Extension",
+      "collision_error_m": 5.516938127907503e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0130_22_Parallel_Extension",
+      "collision_error_m": 5.625637531552277e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0131_22_Parallel_Extension",
+      "collision_error_m": 5.379656523420498e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0132_22_Parallel_Extension",
+      "collision_error_m": 5.488355927065272e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0133_22_Parallel_Extension",
+      "collision_error_m": 5.469949424614581e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0134_22_Parallel_Extension",
+      "collision_error_m": 5.3860952373488424e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0135_22_Parallel_Extension",
+      "collision_error_m": 6.966212214715162e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0136_22_Parallel_Extension",
+      "collision_error_m": 2.929634008693241e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0137_22_Parallel_Extension",
+      "collision_error_m": 9.990694750661167e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0138_22_Parallel_Extension",
+      "collision_error_m": 7.213317543101894e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0139_22_Parallel_Extension",
+      "collision_error_m": 1.2701377725184843e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0140_22_Parallel_Extension",
+      "collision_error_m": 1.4260282728967288e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0141_22_Parallel_Extension",
+      "collision_error_m": 4.1426087820511936e-10,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0142_22_Parallel_Extension",
+      "collision_error_m": 1.2288090696886689e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0143_22_Parallel_Extension",
+      "collision_error_m": 1.7014063794992818e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0144_22_Parallel_Extension",
+      "collision_error_m": 3.804396717359965e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0145_22_Parallel_Extension",
+      "collision_error_m": 1.7111097131219943e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0146_22_Parallel_Extension",
+      "collision_error_m": 1.3157010823709736e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0147_22_Parallel_Extension",
+      "collision_error_m": 2.662722793991823e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0148_22_Parallel_Extension",
+      "collision_error_m": 6.859841673000078e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0149_22_Parallel_Extension",
+      "collision_error_m": 3.5071585184620613e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0150_22_Parallel_Extension",
+      "collision_error_m": 5.9887012315330834e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0151_22_Parallel_Extension",
+      "collision_error_m": 5.256023618074868e-09,
+      "closure": true,
+      "coverage": 0.6363636363636364
+    },
+    {
+      "case": "0152_22_Parallel_Extension",
+      "collision_error_m": 9.896525666238526e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0153_22_Parallel_Extension",
+      "collision_error_m": 1.582436966792583e-08,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0154_22_Parallel_Extension",
+      "collision_error_m": 1.5735041030556784e-09,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0155_22_Parallel_Extension",
+      "collision_error_m": 2.5139195716436524e-10,
+      "closure": true,
+      "coverage": 0.8181818181818182
+    },
+    {
+      "case": "0156_22_Parallel_Extension",
+      "collision_error_m": 5.239282974481285e-10,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0157_22_Parallel_Extension",
+      "collision_error_m": 2.5674402274328267e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0158_22_Parallel_Extension",
+      "collision_error_m": 1.8364437632048536e-08,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0159_22_Parallel_Extension",
+      "collision_error_m": 5.209432761468097e-09,
+      "closure": true,
+      "coverage": 0.7272727272727273
+    },
+    {
+      "case": "0160_26_Sphere_4_Finger",
+      "collision_error_m": 6.506402090711294e-09,
+      "closure": true,
+      "coverage": 0.2
+    },
+    {
+      "case": "0161_26_Sphere_4_Finger",
+      "collision_error_m": 2.2357033006587673e-09,
+      "closure": true,
+      "coverage": 0.26666666666666666
+    },
+    {
+      "case": "0162_26_Sphere_4_Finger",
+      "collision_error_m": 1.2816127152592838e-10,
+      "closure": true,
+      "coverage": 0.3333333333333333
+    },
+    {
+      "case": "0163_26_Sphere_4_Finger",
+      "collision_error_m": 1.0306229230715863e-08,
+      "closure": true,
+      "coverage": 0.4
+    },
+    {
+      "case": "0164_26_Sphere_4_Finger",
+      "collision_error_m": 6.977852007143681e-10,
+      "closure": true,
+      "coverage": 0.6
+    },
+    {
+      "case": "0165_26_Sphere_4_Finger",
+      "collision_error_m": 7.640881681276329e-09,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0166_26_Sphere_4_Finger",
+      "collision_error_m": 5.1045076950029245e-09,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0167_26_Sphere_4_Finger",
+      "collision_error_m": 8.884767368003144e-09,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0168_26_Sphere_4_Finger",
+      "collision_error_m": 2.7199702811245285e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0169_26_Sphere_4_Finger",
+      "collision_error_m": 4.183295932314729e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0170_26_Sphere_4_Finger",
+      "collision_error_m": 2.133148114310396e-09,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0171_26_Sphere_4_Finger",
+      "collision_error_m": 1.3116137201514555e-08,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0172_26_Sphere_4_Finger",
+      "collision_error_m": 8.050612428870535e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0173_26_Sphere_4_Finger",
+      "collision_error_m": 1.0877247465582163e-08,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0174_26_Sphere_4_Finger",
+      "collision_error_m": 2.7189232905053262e-09,
+      "closure": true,
+      "coverage": 0.8
+    },
+    {
+      "case": "0175_26_Sphere_4_Finger",
+      "collision_error_m": 3.5408289143605554e-09,
+      "closure": true,
+      "coverage": 0.7333333333333333
+    },
+    {
+      "case": "0176_26_Sphere_4_Finger",
+      "collision_error_m": 3.2920183289444904e-10,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0177_26_Sphere_4_Finger",
+      "collision_error_m": 5.621104715806263e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0178_29_Stick",
+      "collision_error_m": 6.963338231979338e-09,
+      "closure": true,
+      "coverage": 0.5
+    },
+    {
+      "case": "0179_29_Stick",
+      "collision_error_m": 3.7461716842750875e-09,
+      "closure": true,
+      "coverage": 0.5
+    },
+    {
+      "case": "0180_29_Stick",
+      "collision_error_m": 4.704231132239556e-10,
+      "closure": true,
+      "coverage": 0.5833333333333334
+    },
+    {
+      "case": "0181_29_Stick",
+      "collision_error_m": 7.558637335827734e-10,
+      "closure": true,
+      "coverage": 0.5833333333333334
+    },
+    {
+      "case": "0182_29_Stick",
+      "collision_error_m": 1.7569206447760194e-09,
+      "closure": true,
+      "coverage": 0.5833333333333334
+    },
+    {
+      "case": "0183_29_Stick",
+      "collision_error_m": 8.316382442072334e-09,
+      "closure": true,
+      "coverage": 0.5833333333333334
+    },
+    {
+      "case": "0184_29_Stick",
+      "collision_error_m": 1.1329868249533928e-08,
+      "closure": true,
+      "coverage": 0.5833333333333334
+    },
+    {
+      "case": "0185_29_Stick",
+      "collision_error_m": 1.0972646763418581e-08,
+      "closure": true,
+      "coverage": 0.5833333333333334
+    },
+    {
+      "case": "0186_29_Stick",
+      "collision_error_m": 2.518276023041194e-09,
+      "closure": true,
+      "coverage": 0.5833333333333334
+    },
+    {
+      "case": "0187_29_Stick",
+      "collision_error_m": 1.4834963535381718e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0188_29_Stick",
+      "collision_error_m": 4.823383126933978e-09,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0189_29_Stick",
+      "collision_error_m": 1.2209711670960882e-08,
+      "closure": true,
+      "coverage": 0.6666666666666666
+    },
+    {
+      "case": "0190_29_Stick",
+      "collision_error_m": 2.4255287192805064e-09,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0191_29_Stick",
+      "collision_error_m": 6.004272169301411e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0192_29_Stick",
+      "collision_error_m": 3.008670091276394e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0193_29_Stick",
+      "collision_error_m": 3.1507018951291987e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0194_29_Stick",
+      "collision_error_m": 2.9094787542746636e-09,
+      "closure": true,
+      "coverage": 0.8333333333333334
+    },
+    {
+      "case": "0195_33_Inferior_Pincer",
+      "collision_error_m": 9.381272664081564e-10,
+      "closure": true,
+      "coverage": 0.25
+    },
+    {
+      "case": "0196_33_Inferior_Pincer",
+      "collision_error_m": 1.9906795216363335e-08,
+      "closure": true,
+      "coverage": 0.75
+    },
+    {
+      "case": "0197_33_Inferior_Pincer",
+      "collision_error_m": 7.478879924215087e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0198_33_Inferior_Pincer",
+      "collision_error_m": 9.229266554042684e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0199_33_Inferior_Pincer",
+      "collision_error_m": 8.41605069879306e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0200_33_Inferior_Pincer",
+      "collision_error_m": 3.9755314032094424e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0201_33_Inferior_Pincer",
+      "collision_error_m": 6.021366157418773e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0202_33_Inferior_Pincer",
+      "collision_error_m": 1.7530667282411594e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0203_33_Inferior_Pincer",
+      "collision_error_m": 7.365238588290246e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0204_33_Inferior_Pincer",
+      "collision_error_m": 1.0291662053824036e-11,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0205_33_Inferior_Pincer",
+      "collision_error_m": 5.527127540372323e-10,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0206_33_Inferior_Pincer",
+      "collision_error_m": 2.8311323168640767e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0207_33_Inferior_Pincer",
+      "collision_error_m": 1.5556126660258573e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0208_33_Inferior_Pincer",
+      "collision_error_m": 8.261864471205416e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0209_33_Inferior_Pincer",
+      "collision_error_m": 3.0557013833316937e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0210_33_Inferior_Pincer",
+      "collision_error_m": 3.407895410745959e-09,
+      "closure": true,
+      "coverage": 1.0
+    },
+    {
+      "case": "0211_33_Inferior_Pincer",
+      "collision_error_m": 8.948366781932893e-09,
+      "closure": true,
+      "coverage": 1.0
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 """Show final grasp results in viser: python visualize.py [--batch NAME]."""
 
 import argparse
+import os
 from pathlib import Path
 
 from retarget.config.run import ROOT, load
@@ -23,8 +24,17 @@ def main():
             parser.error("port must be between 1 and 65535")
         config.visualization["port"] = args.port
     batch = config.visualization.get("batch")
-    if batch and not (ROOT / "output" / batch / "manifest.json").is_file():
-        parser.error(f"Missing result manifest for batch: {batch}")
+    if batch:
+        if Path(batch).name != batch:
+            parser.error('batch must be a directory name, not a path')
+        active = ROOT / 'output' / batch
+        if not (active/'manifest.json').is_file():
+            cached = ROOT/'results'/batch
+            if (cached/'manifest.json').is_file() and not active.exists() and not active.is_symlink():
+                active.parent.mkdir(parents=True,exist_ok=True)
+                active.symlink_to(os.path.relpath(cached,active.parent),target_is_directory=True)
+            else:
+                parser.error(f"Missing result manifest for batch: {batch}")
     web(config)
 
 

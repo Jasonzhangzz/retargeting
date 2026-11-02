@@ -1,4 +1,2 @@
-# Keep published numerical evidence byte-identical across Git configurations.
-results/grasp_template_mppi_a800_20261102/** -text linguist-generated=true
-results/grasp_template_mppi_a800_20261102/**/*.obj -diff
-results/grasp_template_mppi_a800_20261102/*.csv whitespace=cr-at-eol
+# Preserve numerical caches and checksums across Git configurations.
+results/grasp_current_20261103/** -text linguist-generated=true

@@ -76,7 +76,7 @@ visualization:
 固定模板抓取可运行 `.venv-contact/bin/python run.py --config configs/grasp_template_mppi.yaml`。
 该入口直接从原始模板初始化，仅用 MPPI 优化 26 维手部 q，以 n 维 ComFree 预载求解投影闭合，
 并检查全手穿透；实现及验证见[固定模板 MPPI](docs/grasp_template_mppi.md)。
-最新密集尺寸最终结果随仓库保存在 [`results/grasp_template_mppi_a800_20261102`](results/grasp_template_mppi_a800_20261102/README.md)：31 类、640 个尺寸，投影闭合 610/640，patch 内部贴合率 ≥80% 为 420/640。保留全部最终案例及其必要依赖，不包含重试目录；未运行原生动态评测。求解与本地回放说明见[远端 MPPI 求解](docs/template_mppi_remote.md)。
+当前最终抓姿与插值缓存保存在 [`results/grasp_current_20261103`](results/grasp_current_20261103/README.md)：31 个 grid、640 个求解点、39,007 个插值姿态，约 6 MB。只保留一份公共场景和共享物体几何，手姿与尺寸为 float64，无损保留；投影闭合 612/640，插值未重新评测。运行 `.venv-contact/bin/python visualize.py --port 8089` 即可查看；无需先运行求解器。存储与校验方法见[紧凑抓姿缓存](docs/grasp_pose_cache.md)。
 
 CEM 使用 CARD 精英成本标准化后的 softmax 均值更新，精英数量向上取整，不拟合精英方差；噪声按 `sigma * final_noise ** (i / iterations)` 退火，每轮包含历史最佳与均值。MPPI 使用前 10% 候选加权、同形式退火和可配置提前停止。两者分离 population 与 worlds，并通过 Torch/Warp 共享数组分批评分。日志记录实际迭代数、采样数与额外评分数。
 

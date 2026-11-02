@@ -56,7 +56,7 @@ CATALOG = {
 
 SIZE_POLICY_VERSION = 3
 # Corrected broad disks need a new identity without invalidating other types.
-TYPE_SIZE_POLICY_VERSIONS = {10: 4, 12: 4, 18: 5, 22: 5, 24: 5, 30: 5}
+TYPE_SIZE_POLICY_VERSIONS = {10: 4, 12: 4, 18: 6, 22: 5, 24: 5, 30: 5}
 DEFAULT_SCALES = (0.5, 0.75, 1.0, 1.25, 1.5)
 
 
@@ -113,7 +113,7 @@ def size_specifications(type_id, kind=None, *, radius_scales=None,
                 scales = np.linspace(1., 2., 5)
             if type_id in (16, 22) and family == "plate":
                 samples = [(1.5, s, s, "thickness") for s in scales]
-            elif type_id == 30 and family == "disk":
+            elif type_id in (18, 30) and family == "disk":
                 samples = [(1., s, s, "thickness") for s in scales]
             else:
                 samples = [(s, 1., s, "radius") for s in scales]

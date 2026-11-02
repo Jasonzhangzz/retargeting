@@ -1,9 +1,0 @@
-{
-  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_solved_1x_scaled_ik_20261102/template_initialization/14_Tripod_sphere/source_1x.obj",
-  "scale": 1.0,
-  "recenter_offset_m": [
-    2.9704533517360687e-05,
-    -2.9906630516052246e-05,
-    0.0
-  ]
-}
