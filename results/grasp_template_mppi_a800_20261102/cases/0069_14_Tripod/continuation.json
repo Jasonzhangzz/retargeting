@@ -1,0 +1,99 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "parent_case": "0068_14_Tripod",
+  "parent_entry": {
+    "task": "grasp",
+    "name": "0068_14_Tripod",
+    "method": "mppi",
+    "objective": "template_comfree_soft_contact_v4",
+    "hand": "wuji2",
+    "template": "14_Tripod",
+    "primitive": {
+      "kind": "sphere",
+      "radius_m": 0.019687499999999997,
+      "height_m": 0.03937499999999999,
+      "radial_scale": 1.3125,
+      "axial_scale": 1.0,
+      "size_scale": 1.3125,
+      "size_axis": "radius",
+      "dimensions_m": [
+        0.03937499999999999,
+        0.03937499999999999,
+        0.03937499999999999
+      ],
+      "size_policy_version": 3,
+      "sources": {
+        "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+        "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+        "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+      },
+      "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+    },
+    "seed": 68612,
+    "model": "results/grasp_template_mppi_a800_20261102/cases/0068_14_Tripod/scene.xml",
+    "trajectory": "results/grasp_template_mppi_a800_20261102/cases/0068_14_Tripod/trajectory.npz",
+    "summary": "results/grasp_template_mppi_a800_20261102/cases/0068_14_Tripod/summary.json",
+    "dt": 1.0,
+    "phase": "refinement",
+    "task_success": true,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "continuation_parent": "0067_14_Tripod",
+    "continuation": "results/grasp_template_mppi_a800_20261102/cases/0068_14_Tripod/continuation.json"
+  },
+  "parent_primitive": {
+    "kind": "sphere",
+    "radius_m": 0.019687499999999997,
+    "height_m": 0.03937499999999999,
+    "radial_scale": 1.3125,
+    "axial_scale": 1.0,
+    "size_scale": 1.3125,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.03937499999999999,
+      0.03937499999999999,
+      0.03937499999999999
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "primitive": {
+    "kind": "sphere",
+    "radius_m": 0.020624999999999998,
+    "height_m": 0.041249999999999995,
+    "radial_scale": 1.375,
+    "axial_scale": 1.0,
+    "size_scale": 1.375,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.041249999999999995,
+      0.041249999999999995,
+      0.041249999999999995
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "parent_reference": "results/grasp_template_mppi_a800_20261102/cases/0069_14_Tripod/reference/reference.json",
+  "reference_sha256": "294314d7fedc177c8be4faa98389683d03d81006c769262d50bbbbd1372f6653",
+  "motion": {
+    "object_translation_m": 0.0,
+    "object_rotation_deg": 1.7075472925031877e-06,
+    "max_joint_change_deg": 1.0696981240304995
+  },
+  "selected_attempt": 0,
+  "limits": {
+    "translation_m": 0.0,
+    "rotation_deg": 0.0,
+    "joint_deg": 8.0
+  },
+  "seconds": 47.187192380428314
+}

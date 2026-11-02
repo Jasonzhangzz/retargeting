@@ -64,7 +64,7 @@ def sample_jobs(seeds=range(10), types=None):
     return jobs, skipped
 
 
-def make_batch(path, *, seeds=range(10), types=None, timeout=1800., workers=1):
+def make_batch(path, *, seeds=range(10), types=None, timeout=1800., workers=1, gesture_policy="whole_hand_v1"):
     if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1 or not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("workers and timeout must be finite and positive")
     seeds = tuple(seeds)
@@ -76,6 +76,12 @@ def make_batch(path, *, seeds=range(10), types=None, timeout=1800., workers=1):
         raise ValueError("The selection has no supported primitive trials")
     stack = numerical_stack(ROOT/".venv-graspadmm/bin/python")
     path.mkdir(parents=True)
+    from retarget.env.grasp.graspadmm_gesture import snapshot_type12
+    references={}
+    if gesture_policy=="whole_hand_v1" and any(j["type_id"]==12 for j in jobs):
+        ref=path/"gesture_references/type12.json"
+        snapshot_type12(ROOT/"output/graspadmm_mppi_best",ref)
+        references[str(ref)]=digest(ref)
     runtime = path / "runtime"
     runtime.mkdir()
     for name in ("retarget", "third_party"):
@@ -98,6 +104,7 @@ def make_batch(path, *, seeds=range(10), types=None, timeout=1800., workers=1):
     python = str(runtime/".venv-graspadmm/bin/python")
     plan = dict(created_at=datetime.now(timezone.utc).isoformat(), runtime=str(runtime),
                 protocol=PROTOCOL, jobs=jobs, skipped=skipped, workers=workers,
+                gesture_policy=gesture_policy,gesture_reference_hashes=references,
                 timeout_seconds=timeout, source_hashes=source_hashes, input_hashes=input_hashes,
                 python=python, numerical_stack=stack, physical_model="wuji2",
                 trial_policy=dict(epoch=1, n_final=1, input_policy="taxonomy", template_feedback=False,
@@ -128,6 +135,8 @@ def numerical_stack(python):
 def verify_snapshot(plan):
     """Reject drift in copied source or the shared hand/template assets."""
     runtime = Path(plan["runtime"])
+    for filename,expected in plan.get("gesture_reference_hashes",{}).items():
+        if digest(filename)!=expected:raise ValueError(f"Frozen gesture reference changed: {filename}")
     for relative, expected in plan.get("source_hashes", {}).items():
         path = runtime/relative
         if not path.is_file() or digest(path) != expected:
@@ -165,6 +174,10 @@ def worker(batch, job_id):
         data=str(ROOT/"data/grasp"), templates=[job["template"]],
         radius_scales=[1.], height_scales=[1.],
         options=dict(hand_model="wuji2", primary_shape_only=True, primitive_seed_policy="taxonomy",
+                     gesture_policy=plan.get("gesture_policy","legacy"),
+                     gesture_reference_root=str(batch/"gesture_references"),
+                     primitive_spec=p,
+                     primitive_reference_root=str(batch/"type9_seed_references"),
                      primitive=p["kind"], radius=p["radius_m"], height=p["height_m"])),
         solver=dict(type="graspadmm", graspadmm=dict(init_epoch=1, init_n_final=1)),
         environment=dict(device="cuda:0", dynamics="graspadmm"),
@@ -270,6 +283,11 @@ def refresh(batch):
                     failure_stage=(info.get("failure_stage", info.get("reason"))
                                    or ("evaluation_protocol" if not compatible else None)),
                     fallback=info.get("fallback", info.get("fallback_used", False)))
+                if "semantic_success" in info:
+                    entry["semantic_success"] = info["semantic_success"]
+                native = info.get("native_stages", {})
+                if "reference_orientation_error_deg" in native:
+                    entry["reference_orientation_error_deg"] = native["reference_orientation_error_deg"]
                 for key in ("model", "trajectory", "summary"):
                     if key in c:
                         source = Path(c[key])
@@ -291,12 +309,16 @@ def refresh(batch):
         successes = sum(v["task_success"] for v in values if v["state"] in TERMINAL)
         table.append(dict(type_id=key[0], template=first["template"], size_index=key[1],
             **first["primitive"], trials=len(values), finished=n, successes=successes,
+            semantic_evaluated=sum("semantic_success" in v for v in values),
+            semantic_successes=sum(bool(v.get("semantic_success")) for v in values),
             success_rate=successes/len(values), completed_success_rate=successes/n if n else None))
     counts = Counter(r["state"] for r in rows)
     complete = all(r["state"] in TERMINAL for r in rows)
     result = dict(state="completed" if complete else "stopped" if STOP.is_set() else "running", evaluation_protocol=PROTOCOL,
         planned=len(rows), finished=sum(counts[s] for s in TERMINAL), states=dict(counts),
         successes=sum(r["task_success"] for r in rows),
+        semantic_evaluated=sum("semantic_success" in r for r in rows),
+        semantic_successes=sum(bool(r.get("semantic_success")) for r in rows),
         success_rate=sum(r["task_success"] for r in rows)/len(rows) if rows else 0.,
         failure_stages=dict(Counter(r.get("failure_stage") for r in rows if r["state"] in TERMINAL and not r["task_success"])),
         skipped=plan["skipped"], by_type_size=table, jobs=rows)
@@ -304,7 +326,8 @@ def refresh(batch):
     write_json(batch/"status.json", {k: result[k] for k in ("state", "planned", "finished", "successes", "states")})
     write_json(batch/"manifest.json", dict(version=1, task="grasp", method="graspadmm", cases=cases))
     columns = ["type_id", "template", "size_index", "kind", "size_axis", "size_scale",
-               "radius_m", "height_m", "trials", "finished", "successes", "success_rate"]
+               "radius_m", "height_m", "trials", "finished", "successes", "success_rate",
+               "semantic_evaluated", "semantic_successes"]
     with (batch/"success_rates.csv").open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
         writer.writeheader(); writer.writerows(table)
@@ -395,6 +418,7 @@ def main():
     parser.add_argument("--timeout", type=float, default=1800.)
     parser.add_argument("--worker", type=Path)
     parser.add_argument("--job")
+    parser.add_argument("--gesture-policy",choices=("whole_hand_v1","legacy"),default="whole_hand_v1")
     args = parser.parse_args()
     if args.worker:
         try:
@@ -407,7 +431,7 @@ def main():
         parser.error("workers/timeout must be positive; seeds must be distinct nonnegative integers")
     batch = args.resume or ROOT/"output"/args.output
     if not args.resume:
-        make_batch(batch, seeds=args.seeds, types=args.types, timeout=args.timeout, workers=args.workers)
+        make_batch(batch, seeds=args.seeds, types=args.types, timeout=args.timeout, workers=args.workers,gesture_policy=args.gesture_policy)
     else:
         frozen_script = Path(read(batch/"plan.json")["runtime"])/"scripts"/Path(__file__).name
         if frozen_script.resolve() != Path(__file__).resolve():

@@ -1,0 +1,12 @@
+[
+  {
+    "template": "19_Distal",
+    "category": "scissors",
+    "reason": "requires an articulated or multi-object asset; not approximated by a single primitive"
+  },
+  {
+    "template": "21_Tripod_Variation",
+    "category": "paired_sticks",
+    "reason": "requires an articulated or multi-object asset; not approximated by a single primitive"
+  }
+]

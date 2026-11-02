@@ -39,14 +39,21 @@ def audit(batch):
         for filename,digest in plan['source_hashes'][cid].items():
             check(sha(filename)==digest,'source_unchanged',cid)
         baseline_dir=Path(row['source_summary']).parent
-        source=json.loads((baseline_dir/'native_candidate.json').read_text())
-        baseline=json.loads((baseline_dir/'graspadmm_evaluation/evaluation.json').read_text())
-        check(row['baseline_success']==baseline['success'],'baseline_output_matches',cid)
         before=bool(row['baseline_success']);after=bool(row['task_success'])
         transition=('retained' if after else 'lost') if before else ('recovered' if after else 'neither')
         counts[transition]+=1
         check(row['transition']==transition,'paired_transition',cid)
         check(row['validated_fallback_success']==(before or after),'fallback_is_separate',cid)
+        if not all((baseline_dir/name).is_file() for name in ('native_candidate.json','native_candidate.npz',
+                     'graspadmm_evaluation/evaluation.json','graspadmm_evaluation/candidate.npz')):
+            failed=json.loads((baseline_dir/'summary.json').read_text())
+            check(row['state']=='failed' and not before and not after,'source_failure_in_denominator',cid)
+            check(row['failure_stage']==failed.get('failure_stage','source_missing_candidate'),'source_failure_stage_preserved',cid)
+            check(not (p/'refinement.json').exists(),'no_refinement_of_missing_input',cid)
+            continue
+        source=json.loads((baseline_dir/'native_candidate.json').read_text())
+        baseline=json.loads((baseline_dir/'graspadmm_evaluation/evaluation.json').read_text())
+        check(row['baseline_success']==baseline['success'],'baseline_output_matches',cid)
         if not (p/'refinement.json').exists():
             check(not after and bool(row.get('error')),'runtime_failure_in_denominator',cid)
             continue
@@ -63,6 +70,31 @@ def audit(batch):
         expected=np.r_[q[:3],Rotation.from_euler('XYZ',q[3:6]).as_quat(scalar_first=True),q[6:]]
         check(np.array_equal(expected,native),'root_and_finger_export',cid)
         trace=np.load(p/'trajectory.npz')['qpos']
+        if source.get('gesture_reference') is not None:
+            check(detail.get('gesture_reference')==source['gesture_reference'],'same_independent_gesture_reference',cid)
+            check('reference_orientation_wxyz' not in source,'gesture_orientation_is_soft',cid)
+            check(np.isfinite(detail['final_parts'].get('gesture',np.nan)),'finite_soft_gesture_cost',cid)
+            pools=detail.get('contact_pool_diagnostics',{})
+            check(all(pools.get(name,{}).get('hard_region_mask') is False for name in source['gesture_reference']['hand_cbody']),
+                  'soft_skin_no_hard_mask',cid)
+        if source.get('contact_regions') is not None:
+            check(detail.get('contact_regions')==source['contact_regions'],'same_contact_region',cid)
+            if source['contact_regions'].get('mode')=='soft':
+                pools=detail.get('contact_pool_diagnostics',{})
+                check(all(pools.get(name,{}).get('outside_center_samples',0)>0 for name in source['contact_regions']['bodies']),
+                    'soft_guidance_keeps_outside_candidates',cid)
+                check(np.isfinite(detail['final_parts'].get('center_preference',np.nan)),
+                    'finite_soft_center_cost',cid)
+            else:
+                check(bool((detail.get('optimized_anchor_diagnostics') or {}).get('semantic_success')),
+                    'optimized_anchors_in_region',cid)
+        if source.get('reference_orientation_wxyz') is not None:
+            from retarget.env.grasp.contact_regions import orientation_error_deg
+            reference=source['reference_orientation_wxyz']
+            check(detail.get('reference_orientation_wxyz')==reference,'same_reference_orientation',cid)
+            check(orientation_error_deg(native,reference)<1e-4,'final_orientation_locked',cid)
+            check(all(orientation_error_deg(np.r_[pose[:3],Rotation.from_euler('XYZ',pose[3:6]).as_quat(scalar_first=True),pose[6:]],reference)<1e-4
+                for pose in trace),'all_trace_orientations_locked',cid)
         check(np.array_equal(trace[-1],q),'final_trace_is_output',cid)
         with np.load(p/'evaluation/candidate.npz') as raw:
             check(np.array_equal(raw['grasp_qpos'],native),'evaluated_raw_mppi_output',cid)
@@ -70,6 +102,10 @@ def audit(batch):
         check(candidate['required_cbody']==source['required_cbody'],'original_required_groups',cid)
         check(sha(candidate['mesh'])==sha(source['mesh_path']),'actual_original_geometry',cid)
         evaluation=json.loads((p/'evaluation/evaluation.json').read_text())
+        if source.get('contact_regions') is not None and evaluation['state']=='completed':
+            observed=evaluation.get('contact_region_diagnostics',{})
+            check(row.get('contact_region_diagnostics')==observed,'actual_contact_diagnostics_saved',cid)
+            check(row.get('semantic_success')==observed.get('semantic_success'),'semantic_success_reported_separately',cid)
         check(evaluation['protocol']=='graspadmm_native_v1','common_protocol',cid)
         check(evaluation['success']==after,'only_native_success',cid)
         if evaluation['state']=='completed':

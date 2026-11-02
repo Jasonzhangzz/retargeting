@@ -1,0 +1,10 @@
+{
+  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_articulation_20261102/meshes/28_Sphere_3_Finger_sphere_r0.0250000_h0.0500000.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    4.950910806655884e-05,
+    -4.9843452870845795e-05,
+    0.0
+  ],
+  "convention": "scaled source vertices minus recenter_offset_m; fixed object pose identity"
+}

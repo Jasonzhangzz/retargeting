@@ -65,9 +65,57 @@ def record(config, cases, output):
         result["cost_environment_scope"] = (
             "Pinned original GraspADMM ADMM/QP/filter/pregrasp/eval implementation; "
             "WUJI2 geometry, joint/frame, rigid pad ownership and input template adapters")
-    if config.task.get("type") == "grasp":
+    if config.task.get("type") == "grasp" and config.environment.get("template_mppi") is None:
         result["evaluation_protocol"] = "graspadmm_native_v1"
         result["evaluation_runtime"] = str(ROOT/".venv-graspadmm/bin/python")
+    if config.environment.get("template_mppi") is not None:
+        import json
+        from retarget.env.grasp.hand import asset_root
+
+        extra = []
+        checkout = Path(config.task.get("options", {}).get("dexonomy_root", data / "templates"))
+        extra.extend((checkout / "assets/hand/shadow/right.xml", checkout / "assets/hand/shadow/keypoint.yaml"))
+        extra.extend(path for path in asset_root("wuji2").rglob("*") if path.is_file())
+        for case in cases:
+            case_root = (output / case["trajectory"]).parent
+            extra.extend(case_root / name for name in ("template_contacts.json", "object_frame.json", "input_object.obj",
+                                                        "initialization.json", "initialization_candidates.npz"))
+            initialization = case_root / "initialization.json"
+            if initialization.is_file():
+                reference = json.loads(initialization.read_text()).get("reference")
+                if reference:
+                    extra.extend(path for path in Path(reference).parent.iterdir() if path.is_file())
+            contacts = case_root / "template_contacts.json"
+            if contacts.is_file():
+                source = json.loads(contacts.read_text()).get("provenance", {})
+                if source.get("annotation"):
+                    extra.append(Path(source["annotation"]))
+                for key in ("path", "template_cache_path"):
+                    if source.get("pose_conversion", {}).get(key):
+                        pose_path = Path(source["pose_conversion"][key])
+                        extra.append(pose_path)
+                        if key == "template_cache_path":
+                            extra.append(pose_path.parent / "identity.json")
+            frame = case_root / "object_frame.json"
+            if frame.is_file():
+                extra.append(Path(json.loads(frame.read_text())["source_mesh"]))
+        result["input_sha256"].update({str(path): sha256(path) for path in extra if path.is_file()})
+        from retarget.env.grasp.template_mppi import OBJECTIVE, SUCCESS_CRITERION
+        result["template_mppi"] = dict(objective=OBJECTIVE, search_dimension=26,
+            success_criterion=SUCCESS_CRITERION,
+            hand_object_allowance_m=config.environment["template_mppi"].get("objective", {}).get("hand_object_allowance_m", .002),
+            coverage_required_for_success=False,
+            hand_object_depth_required_for_success=False,
+            template_policy="original annotations; direct mapping; immutable body-local anchors",
+            initialization_policy="one object-in-wrist fit at exact 1x per template/shape, unchanged pose reused across sizes",
+            canonical_fk_backend="torch_cuda_batched_WujiContactKinematics",
+            candidate_fk_backend="mujoco_warp_cuda_batched",
+            force_variables="one shared nominal preload per template point",
+            actual_contact_required_for_projection=False,
+            physical_evaluation_enabled=False)
+        result["cost_environment_scope"] = (
+            "Static hand FK and full-hand native collisions; projected-template ComFree equilibrium "
+            "wrench probes with effective ray mass approximation; no native physical evaluation")
     if config.solver.type == "dexforge":
         from retarget.dynamics.dexforge_upstream import verify_upstream
 

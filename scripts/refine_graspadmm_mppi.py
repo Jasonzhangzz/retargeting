@@ -31,12 +31,31 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def source_ready(directory):
+    return all((Path(directory)/name).is_file() for name in (
+        'native_candidate.json','native_candidate.npz','graspadmm_evaluation/evaluation.json',
+        'graspadmm_evaluation/candidate.npz'))
+
+
 def transition(before,after):
     return ('retained' if after else 'lost') if before else ('recovered' if after else 'neither')
 
 
 def size_index(case):
     return int(re.search(r'_s(\d+)_seed',case['case_id'])[1])
+
+
+def resolve_case_paths(cases, source):
+    """Batch manifests use source-relative paths; merged archives may be absolute."""
+    result=[]
+    for case in cases:
+        row=dict(case)
+        for key in ('summary','model','trajectory'):
+            if row.get(key):
+                path=Path(row[key])
+                row[key]=str(path if path.is_absolute() else (Path(source)/path).resolve())
+        result.append(row)
+    return result
 
 
 def aggregate(rows):
@@ -51,6 +70,8 @@ def aggregate(rows):
         percentage_point_change=100*(after-before)/n if n else None,
         transitions={k:counts[k] for k in ('retained','lost','recovered','neither')},
         failure_stages=dict(Counter(x.get('failure_stage') or 'passed' for x in rows)),
+        semantic_evaluated=sum('semantic_success' in x for x in rows),
+        semantic_successes=sum(bool(x.get('semantic_success')) for x in rows),
         optimization_seconds_median=float(np.median(times)) if times else None,
         optimization_seconds_p95=float(np.percentile(times,95)) if times else None,
         optimization_seconds_sum=sum(times))
@@ -73,7 +94,8 @@ def report(output,cases,rows,wall_seconds,settings):
     write_json(output/'report.json',document)
     write_json(output/'summary.json',dict(method='graspadmm_mppi',protocol=PROTOCOL,jobs=rows))
     fields=['id','type_id','size_index','seed','baseline_success','task_success','transition','validated_fallback_success',
-        'failure_stage','initial_cost','final_cost','optimization_seconds','evaluation_seconds','wall_seconds']
+        'failure_stage','semantic_success','reference_orientation_error_deg','initial_cost','final_cost',
+        'optimization_seconds','evaluation_seconds','wall_seconds']
     with (output/'trials.csv').open('w',newline='') as f:
         writer=csv.DictWriter(f,fieldnames=fields,extrasaction='ignore');writer.writeheader();writer.writerows(rows)
     for name,data in [('by_type',typed),('by_size',grouped)]:
@@ -95,7 +117,8 @@ def report(output,cases,rows,wall_seconds,settings):
         source=source_by_id[row['id']]
         manifest.append(dict(source,method='graspadmm_mppi',name=row['id'],model=row['model'],
             trajectory=row['trajectory'],summary=str(output/'cases'/row['id']/'summary.json'),
-            dt=1.,phase='refinement',baseline_success=row['baseline_success'],source_admm=source['summary']))
+            dt=1.,phase='refinement',task_success=bool(row['task_success']),
+            baseline_success=row['baseline_success'],source_admm=source['summary']))
         evaldir=output/'cases'/row['id']/'evaluation'
         if (evaldir/'evaluation_trajectory.npz').is_file():
             manifest.append(dict(manifest[-1],name=row['id']+'_native_test',phase='native_test',
@@ -120,7 +143,7 @@ def main():
         raise ValueError('Use a separate real direct child of output/')
     config=yaml.safe_load(args.config.read_text());settings=RefinementSettings(**config['refinement'])
     torch.set_num_threads(1)
-    cases=json.loads((source/'manifest.json').read_text())['cases']
+    cases=resolve_case_paths(json.loads((source/'manifest.json').read_text())['cases'],source)
     cases=[c for c in cases if (not args.types or int(c['template'].split('_')[0]) in args.types)
         and (not args.seeds or c['seed'] in args.seeds)
         and (not args.size_indices or size_index(c) in args.size_indices)]
@@ -130,7 +153,11 @@ def main():
     codefiles=[Path(__file__),*sorted((ROOT/'retarget').rglob('*.py'))]
     inputs={}
     for c in cases:
-        p=Path(c['summary']).parent;meta=json.loads((p/'native_candidate.json').read_text())
+        p=Path(c['summary']).parent
+        if not source_ready(p):
+            inputs[c['case_id']]={str(p/'summary.json'):sha(p/'summary.json')}
+            continue
+        meta=json.loads((p/'native_candidate.json').read_text())
         files=[p/'native_candidate.npz',p/'native_candidate.json',p/'summary.json',
             p/'graspadmm_evaluation/evaluation.json',Path(meta['mesh_path'])]
         inputs[c['case_id']]={str(f):sha(f) for f in files}
@@ -157,7 +184,19 @@ def main():
             if summary_path.is_file():
                 rows.append(json.loads(summary_path.read_text()));continue
             t=time.perf_counter();dest.mkdir(parents=True,exist_ok=True)
-            p=Path(c['summary']).parent;meta=json.loads((p/'native_candidate.json').read_text())
+            p=Path(c['summary']).parent
+            if not source_ready(p):
+                failed=json.loads((p/'summary.json').read_text())
+                row=dict(id=c['case_id'],type_id=int(c['template'].split('_')[0]),size_index=size_index(c),
+                    seed=c['seed'],primitive=c['primitive'],baseline_success=False,task_success=False,
+                    state='failed',failure_stage=failed.get('failure_stage','source_missing_candidate'),
+                    error=failed.get('error'),source_summary=str(p/'summary.json'),source_hashes=inputs[c['case_id']],
+                    protocol=PROTOCOL,transition='neither',validated_fallback_success=False,wall_seconds=time.perf_counter()-t)
+                write_json(summary_path,row);rows.append(row)
+                report(output,cases,rows,prior_wall+time.perf_counter()-started,settings)
+                print(f"[{len(rows)}/{len(cases)}] {row['id']} source initialization failed",flush=True)
+                continue
+            meta=json.loads((p/'native_candidate.json').read_text())
             baseline=json.loads((p/'graspadmm_evaluation/evaluation.json').read_text())
             if baseline['protocol']!=PROTOCOL:raise ValueError('Baseline uses a different acceptance protocol')
             # Check that the evaluated original really is the saved final pose.
@@ -177,22 +216,42 @@ def main():
                     setup=time.perf_counter();objective=LocalPoseObjective(meta['mesh_path'],settings)
                     row['geometry_setup_seconds']=time.perf_counter()-setup;object_key=key
                 with torch.no_grad():
-                    q,detail=objective.refine(grasp,meta['required_cbody'],args.seed_offset+c['seed'])
+                    q,detail=objective.refine(grasp,meta['required_cbody'],args.seed_offset+c['seed'],
+                        contact_regions=meta.get('contact_regions'),
+                        reference_orientation_wxyz=meta.get('reference_orientation_wxyz'),
+                        gesture_reference=meta.get('gesture_reference'))
                 trace=detail.pop('trajectory');native=local_to_native(q)
+                if meta.get('reference_orientation_wxyz') is not None:
+                    from retarget.env.grasp.contact_regions import orientation_error_deg
+                    detail['reference_orientation_error_deg']=orientation_error_deg(native,meta['reference_orientation_wxyz'])
+                    row['reference_orientation_error_deg']=detail['reference_orientation_error_deg']
+                    detail['max_trace_orientation_error_deg']=max(
+                        orientation_error_deg(local_to_native(pose),meta['reference_orientation_wxyz']) for pose in trace)
+                detail['contact_regions']=meta.get('contact_regions')
+                detail['reference_orientation_wxyz']=meta.get('reference_orientation_wxyz')
+                if meta.get('gesture_reference') is not None:
+                    from retarget.env.grasp.graspadmm_gesture import reference_diagnostics
+                    detail['gesture_diagnostics']=reference_diagnostics(native,meta['gesture_reference'])
+                    detail['gesture_reference']=meta['gesture_reference']
                 write_json(dest/'refinement.json',detail)
                 np.savez_compressed(dest/'grasp.npz',qpos=q,grasp_qpos=native)
                 np.savez_compressed(dest/'native_candidate.npz',grasp_qpos=native)
                 write_json(dest/'native_candidate.json',dict(mesh_path=meta['mesh_path'],required_cbody=meta['required_cbody'],
-                    template=c['template'],primitive=c['primitive'],method='graspadmm_mppi',hand='wuji2',seed=c['seed']))
+                    template=c['template'],primitive=c['primitive'],method='graspadmm_mppi',hand='wuji2',seed=c['seed'],
+                    **{key:meta[key] for key in ('contact_regions','reference_orientation_wxyz','gesture_reference') if key in meta}))
                 np.savez_compressed(dest/'trajectory.npz',qpos=trace,time=np.arange(len(trace),dtype=float))
                 (dest/'scene.xml').write_text(objective.xml)
                 row.update(model=str(dest/'scene.xml'),trajectory=str(dest/'trajectory.npz'),
                     optimization_seconds=detail['optimization_seconds'],initial_cost=detail['initial_cost'],final_cost=detail['final_cost'])
                 evaluation=evaluate_native_grasp(native,meta['mesh_path'],dest/'evaluation',method='graspadmm_mppi',
+                    contact_regions=meta.get('contact_regions'),
                     required_cbody=meta['required_cbody'],selection=dict(source_admm=str(p/'native_candidate.npz'),
                         policy='MPPI geometry-cost optimum; no native test within optimization'),worker=worker)
                 row.update(state=evaluation['state'],task_success=bool(evaluation['success']),
                     failure_stage=evaluation.get('failure_stage'),evaluation_seconds=evaluation['evaluation_wall_seconds'])
+                if evaluation.get('contact_region_diagnostics') is not None:
+                    row['contact_region_diagnostics']=evaluation['contact_region_diagnostics']
+                    row['semantic_success']=evaluation['contact_region_diagnostics']['semantic_success']
             except Exception as error:
                 (dest/'error.log').write_text(traceback.format_exc());row['error']=f'{type(error).__name__}: {error}'
                 print(row['error'],flush=True)

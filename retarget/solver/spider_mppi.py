@@ -39,12 +39,17 @@ def reward_weights(rewards, temperature):
 
 
 def optimize(mean, evaluate, settings, *, knots, knot_steps, channel_noise, seed,
-             first_noise=.5, last_noise=1.,return_best=False):
+             first_noise=.5, last_noise=1.,return_best=False,guard_mean=False):
     """Return the original generic SPIDER weighted dense mean, not FA controls.
 
     ``evaluate`` receives [N,H,nu] absolute controls and restores the physical
     initial state for every population. No virtual object actuators are added.
+    Opt-in ``guard_mean`` evaluates every weighted mean before using it as the
+    next sampling center. A worse or nonfinite mean falls back to that round's
+    best actual sample, which is useful for nonconvex collision constraints.
     """
+    if not isinstance(guard_mean, bool):
+        raise ValueError("guard_mean must be boolean")
     if settings.gradient_steps:
         raise ValueError("SPIDER sampling runs without gradient refinement")
     if mean.shape != (knots*knot_steps, len(channel_noise)):
@@ -56,6 +61,7 @@ def optimize(mean, evaluate, settings, *, knots, knot_steps, channel_noise, seed
     current = mean.clone()
     best, best_cost = current.clone(), float("inf")
     history = []
+    mean_evaluated, mean_fallbacks = 0, 0
     started = time.perf_counter()
     for iteration in range(settings.iterations):
         noise = torch.randn(scale.shape, generator=rng, device=mean.device,
@@ -64,12 +70,28 @@ def optimize(mean, evaluate, settings, *, knots, knot_steps, channel_noise, seed
         costs = evaluate(candidates)
         ids, weights = reward_weights(-costs, settings.temp)
         winner = ids[0]
-        if float(costs[winner]) < best_cost:
-            best, best_cost = candidates[winner].clone(), float(costs[winner])
+        winner_cost = float(costs[winner])
+        if winner_cost < best_cost:
+            best, best_cost = candidates[winner].clone(), winner_cost
         improvement = float(costs[0]-costs[winner])
+        invalid = int((~torch.isfinite(costs)).sum())
         current = (weights[:, None, None]*candidates[ids]).sum(0)
+        mean_detail = {}
+        if guard_mean:
+            mean_cost = float(evaluate(current[None])[0])
+            mean_evaluated += 1
+            fallback = (not bool(torch.isfinite(mean.new_tensor(mean_cost)))
+                        or mean_cost > winner_cost)
+            if fallback:
+                current = candidates[winner].clone()
+                mean_fallbacks += 1
+            elif mean_cost < best_cost:
+                # A guarded mean is an actual evaluated configuration too.
+                best, best_cost = current.clone(), mean_cost
+            mean_detail = dict(mean_cost=mean_cost, mean_fallback=fallback,
+                               iteration_best_cost=winner_cost)
         history.append(dict(iteration=iteration, best_cost=best_cost,
-            improvement=improvement, invalid=int((~torch.isfinite(costs)).sum())))
+            improvement=improvement, invalid=invalid, **mean_detail))
         if len(history) >= settings.improvement_check_steps and all(
                 row["improvement"] < settings.improvement_threshold
                 for row in history[-settings.improvement_check_steps:]):
@@ -79,10 +101,14 @@ def optimize(mean, evaluate, settings, *, knots, knot_steps, channel_noise, seed
         current, final = best, best_cost
     if return_best and best_cost<final:
         current,final=best,best_cost
-    return current, dict(cost=final, seconds=time.perf_counter()-started,
+    report = dict(cost=final, seconds=time.perf_counter()-started,
         iterations=len(history), sampled=len(history)*settings.population,
-        evaluated=len(history)*settings.population+1, history=history,
+        evaluated=len(history)*settings.population+mean_evaluated+1, history=history,
         policy="best evaluated MPPI sequence including weighted mean" if return_best else "generic SPIDER dense weighted mean; finite-candidate fallback")
+    if guard_mean:
+        report.update(mean_guard=True, mean_fallbacks=mean_fallbacks,
+                      mean_guard_evaluated=mean_evaluated)
+    return current, report
 
 
 def shift_controls(controls, executed, reference_tail):

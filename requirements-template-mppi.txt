@@ -1,0 +1,17 @@
+# Install in pi0. Keep its existing CUDA-enabled Torch and numerical stack.
+torch>=2.5,<3
+numpy>=2.0,<3
+scipy>=1.14,<2
+mujoco==3.10.0
+mujoco-warp==3.10.0.3
+warp-lang==1.16.0
+viser==1.1.1
+trimesh>=4.5.3
+PyYAML>=6.0
+transforms3d>=0.4.2
+clarabel>=0.11
+imageio>=2.37,<3
+imageio-ffmpeg>=0.6,<0.7
+loguru>=0.7
+pytest>=8
+psutil>=6

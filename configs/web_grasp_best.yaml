@@ -3,7 +3,9 @@ output:
   name: viewer
 visualization:
   port: 8084
-  batch: graspadmm_mppi_best
+  batch: graspadmm_soft_center_mppi_200_pi0
+  fallback_batch: graspadmm_mppi_best
+  initial_case: t06_cylinder_s02_seed00
   task: grasp
   hand: wuji2
   primary_shape_only: true

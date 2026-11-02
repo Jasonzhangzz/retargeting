@@ -1,0 +1,269 @@
+{
+  "body_names": [
+    "right_finger2_link4",
+    "right_finger3_link4",
+    "right_finger1_link4"
+  ],
+  "local_points": [
+    [
+      -0.00191877456381917,
+      -0.0004783694166690111,
+      -0.024608178064227104
+    ],
+    [
+      0.0008157111005857587,
+      8.575688843848184e-05,
+      -0.0245664119720459
+    ],
+    [
+      -0.006975719705224037,
+      -0.0001261269353562966,
+      -0.02622273936867714
+    ]
+  ],
+  "local_normals": [
+    [
+      -0.21240279078483582,
+      0.38639941811561584,
+      -0.8975414037704468
+    ],
+    [
+      0.1391924023628235,
+      0.4160967171192169,
+      -0.8986039757728577
+    ],
+    [
+      -0.7701329588890076,
+      0.3201093077659607,
+      -0.5517475008964539
+    ]
+  ],
+  "finger_qpos": [
+    0.9148356042162623,
+    -0.8724748396267018,
+    0.5897949710863536,
+    0.45070679441511946,
+    0.7556951222083487,
+    -0.12150615346274565,
+    0.6874092760176262,
+    0.693825333347911,
+    0.864812404841329,
+    0.001218774058158538,
+    0.696240875474389,
+    0.6934070699471746,
+    1.436005472664451,
+    0.037491483362985925,
+    1.5030700200695037,
+    1.4947885254392215,
+    1.4215039508920746,
+    0.09848301618745868,
+    1.51126353277815,
+    1.5208665580067773
+  ],
+  "required_cbody": [
+    [
+      "right_finger1_link4"
+    ],
+    [
+      "right_finger2_link4"
+    ],
+    [
+      "right_finger3_link4"
+    ]
+  ],
+  "provenance": {
+    "template_name": "8_Prismatic_2_Finger",
+    "policy": "original_annotation_direct_mapping_bone_pose",
+    "annotation": "/home/zz/retarget/data/grasp/templates/assets/hand/shadow/raw_anno/8_Prismatic_2_Finger.yaml",
+    "annotation_sha256": "189faab684a819a5e95d3e68e12d92b76b417d4e751500fc634d8f82d14a561e",
+    "keypoints": "/home/zz/retarget/data/grasp/templates/assets/hand/shadow/keypoint.yaml",
+    "keypoints_sha256": "d569a6145c17884c35721aa9a48c678a0e50cfd2f7c57340b4af6ce56694a9b8",
+    "shadow_xml_sha256": "558852d62a72b388e38bbb7555e55055df5aa7cc0433447ce16e5adf974a0a07",
+    "wuji_xml_sha256": "5cc2a69e5fa0779d48f3d08e04f2a15e0f4c293112400736b825f62382b66288",
+    "query_sha256": {
+      "right_finger2_link4": "0aeebcbc99683ffbc4f894e741d84c042cbe6eb0953881a1f2274032a1862d16",
+      "right_finger3_link4": "f528b7b4fe44fca5cf8ad74252493ec5d00e1998027bed14abc1e833e61453f8",
+      "right_finger1_link4": "338802cd25e24113a5ace83f5426ecd8580d028b111add5b7851e8debd498946"
+    },
+    "mapping": [
+      {
+        "shadow_body": "rh_ffdistal",
+        "wuji_body": "right_finger2_link4",
+        "shadow_local": [
+          0.0036772737104948266,
+          -0.002699289113616039,
+          0.02996690620900358,
+          0.3506934635083019,
+          -0.6495401195715044,
+          0.6746190626120694
+        ],
+        "query_index": 725,
+        "wuji_local": [
+          -0.00191877456381917,
+          -0.0004783694166690111,
+          -0.024608178064227104
+        ],
+        "wuji_local_normal": [
+          -0.21240279078483582,
+          0.38639941811561584,
+          -0.8975414037704468
+        ],
+        "mapping_distance_mm": 3.5644932068959787
+      },
+      {
+        "shadow_body": "rh_mfdistal",
+        "wuji_body": "right_finger3_link4",
+        "shadow_local": [
+          0.001573558019314346,
+          -0.0029835494162291764,
+          0.03040050686904701,
+          0.07212264033901569,
+          -0.7111456199996625,
+          0.6993356969058737
+        ],
+        "query_index": 727,
+        "wuji_local": [
+          0.0008157111005857587,
+          8.575688843848184e-05,
+          -0.0245664119720459
+        ],
+        "wuji_local_normal": [
+          0.1391924023628235,
+          0.4160967171192169,
+          -0.8986039757728577
+        ],
+        "mapping_distance_mm": 3.982751221726608
+      },
+      {
+        "shadow_body": "rh_thdistal",
+        "wuji_body": "right_finger1_link4",
+        "shadow_local": [
+          -0.006585614638764892,
+          -0.00036975876000722684,
+          0.03202143937000358,
+          -0.5939059824914803,
+          -0.33240143463471583,
+          0.7326560073558486
+        ],
+        "query_index": 457,
+        "wuji_local": [
+          -0.006975719705224037,
+          -0.0001261269353562966,
+          -0.02622273936867714
+        ],
+        "wuji_local_normal": [
+          -0.7701329588890076,
+          0.3201093077659607,
+          -0.5517475008964539
+        ],
+        "mapping_distance_mm": 9.832344147283985
+      }
+    ],
+    "pose_conversion": {
+      "method": "checked_object_independent_bone_pose",
+      "path": "/home/zz/retarget/output/template_mapping/data.json",
+      "sha256": "6647f5faaf775cb80dde70602ed618a02ad3b216a91260c61be2dc26dba0aac6",
+      "source_hash_checks": {
+        "annotation": true,
+        "shadow_xml": true,
+        "wuji_xml": true
+      },
+      "conversion": {
+        "method": "CUDA_batched_finger_bone_direction_LM",
+        "device": "cuda:0",
+        "iterations": 96,
+        "fingers": 5,
+        "root_fixed": true,
+        "multistarts": 8,
+        "sampling_seed": 0,
+        "selected_candidates": [
+          7,
+          6,
+          3,
+          6,
+          5
+        ],
+        "finger_direction_rms": [
+          0.059824649570681294,
+          0.027387788385008945,
+          0.036220455527682494,
+          0.02663467276880786,
+          0.03757615909383245
+        ],
+        "candidate_direction_rms": [
+          [
+            0.05982464957068138,
+            0.027387788385009073,
+            0.036220455527682514,
+            0.7238671826335838,
+            0.7214478246088514
+          ],
+          [
+            0.059824649570681364,
+            0.027387788385009004,
+            0.03622045552768251,
+            0.026634672768807863,
+            0.03757615909383246
+          ],
+          [
+            0.05982464957068139,
+            0.027387788385009017,
+            0.036220455527682494,
+            0.7230083433358735,
+            0.7204375050231238
+          ],
+          [
+            0.05982464957068137,
+            0.027387788385009007,
+            0.036220455527682494,
+            0.026634672768807877,
+            0.03757615909383251
+          ],
+          [
+            0.05982464957068136,
+            0.027387788385009035,
+            0.036220455527682494,
+            0.026634672768807873,
+            0.037576159093832474
+          ],
+          [
+            0.05982464957068133,
+            0.027387788385009073,
+            0.0362204555276825,
+            0.7344780127889331,
+            0.03757615909383245
+          ],
+          [
+            0.0598246495706814,
+            0.027387788385008945,
+            0.0362204555276825,
+            0.02663467276880786,
+            0.723283667103849
+          ],
+          [
+            0.059824649570681294,
+            0.027387788385009045,
+            0.03622045552768251,
+            0.02663467276880787,
+            0.03757615909383247
+          ]
+        ],
+        "chain_direction_rms": 0.037528745069202604,
+        "chain_direction_rms_max": 0.059824649570681294,
+        "original_wuji_reference_used": false,
+        "object_or_contact_objective_used": false,
+        "seconds": 0.7305240280693397,
+        "cache_hit": false,
+        "cache_enabled": true,
+        "template_cache_key": "bac865f57a6a47fe8ffa62315dac5def999734669a0e97edc709f716c023ad56",
+        "template_cache_path": "/home/zz/retarget/output/template_mapping/template_cache/bac865f57a6a47fe8ffa62315dac5def999734669a0e97edc709f716c023ad56/finger_qpos.npy",
+        "template_conversion_seconds": 0.7459187089698389,
+        "template_cache_seconds": 0.7466254179598764
+      }
+    },
+    "original_contact_count": 3,
+    "primitive_contact_adaptations": false,
+    "region_adaptations": false,
+    "object_dependent_fitting": false
+  }
+}

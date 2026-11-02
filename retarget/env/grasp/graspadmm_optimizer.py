@@ -1,7 +1,8 @@
-"""Record the original GraspADMM operation without rewriting its iterations."""
+"""Record the pinned operation, with optional local geometry/soft-force adapters."""
 
 import copy
 import inspect
+import json
 from pathlib import Path
 import sys
 
@@ -37,11 +38,12 @@ def _array(value):
 
 
 def optimize(grasp_data, scene, directory, settings=None):
-    """Execute the pinned _single_grasp function; adapters only change geometry.
+    """Execute the pinned _single_grasp function with explicit optional guidance.
 
     Python line tracing observes complete outer iterations and return values.
     The original QP, gradient updates, dual reset, fallback and finalization
-    remain byte-for-byte in third_party/Dexonomy.
+    remain byte-for-byte in third_party/Dexonomy. A supplied whole-hand
+    reference adds soft potential forces to the optimization environment only.
     """
     source = require_upstream()
     cfg = operation_config(scene, directory, settings)
@@ -60,6 +62,14 @@ def optimize(grasp_data, scene, directory, settings=None):
 
     def recording_env(*args, **kwargs):
         env = WujiOptEnv(*args, **kwargs)
+        env.contact_regions = copy.deepcopy(grasp_data.get("contact_regions"))
+        env.gesture_reference=copy.deepcopy(grasp_data.get('gesture_reference'))
+        if grasp_data.get("gesture_reference") is not None:
+            from .graspadmm_gesture import install_soft_reference
+            install_soft_reference(env,grasp_data["gesture_reference"])
+        if grasp_data.get("reference_orientation_wxyz") is not None:
+            from .contact_regions import lock_root_orientation
+            lock_root_orientation(env, grasp_data["reference_orientation_wxyz"])
         original_step = env.step_sim
         elapsed = 0.
 
@@ -91,6 +101,7 @@ def optimize(grasp_data, scene, directory, settings=None):
             **object_cost,
             object_subproblem_cost=object_cost["grasp_metric_cost"] + object_cost["admm_penalty_cost"],
             hand_qpos=env.get_hand_qpos().copy(),
+            hand_cpn_b=_array(locals_["hand_cpn_b"]),
         ))
 
     def tracer(frame, event, arg):
@@ -133,6 +144,8 @@ def optimize(grasp_data, scene, directory, settings=None):
         core.MuJoCo_OptEnv, core.project_to_hand = original_env, original_projection
         core.GraspFilter = original_filter
     data = captured.get("grasp_data", copy.deepcopy(grasp_data))
+    if grasp_data.get("gesture_reference") is not None:
+        data["gesture_reference"]=copy.deepcopy(grasp_data["gesture_reference"])
     status = dict(
         success=bool(filters.get("grasp_filter", {}).get("success") and filters.get("pregrasp_filter", {}).get("success")),
         failure_stage=None, fallback_used=bool(captured.get("terminated", False)),
@@ -143,6 +156,34 @@ def optimize(grasp_data, scene, directory, settings=None):
     elif not filters.get("pregrasp_filter", {}).get("success"):
         status["failure_stage"] = "pregrasp_filter"
     output = Path(directory)
+    from .contact_regions import contact_region_diagnostics, orientation_error_deg
+    region = grasp_data.get("contact_regions")
+    if region is not None:
+        names = grasp_data["hand_cbody"]
+        contacts = data.get("ho_c", {})
+        actual = np.c_[np.asarray(contacts.get("pos", [])).reshape(-1, 3),
+                       np.asarray(contacts.get("normal", [])).reshape(-1, 3)]
+        diagnostics = dict(
+            initial_anchors=contact_region_diagnostics(grasp_data["grasp_qpos"][0], names,
+                                                       grasp_data["hand_cpn_w"], region),
+            actual_contacts=contact_region_diagnostics(data["grasp_qpos"][0], contacts.get("bn1", []), actual, region))
+        if trace:
+            # Reconstruct the last optimized anchors independently of the
+            # upstream finalization that replaces anchors with real contacts.
+            env = captured["sim_env"]
+            env.reset_qpos(trace[-1]["hand_qpos"])
+            anchors = env.transform_cpn_b2w(names, trace[-1]["hand_cpn_b"])
+            diagnostics["optimized_anchors"] = contact_region_diagnostics(trace[-1]["hand_qpos"], names, anchors, region)
+        (output / "contact_region_diagnostics.json").write_text(json.dumps(diagnostics, indent=2))
+        status["contact_region_diagnostics"] = diagnostics
+    reference = grasp_data.get("reference_orientation_wxyz")
+    if reference is not None:
+        status["reference_orientation_error_deg"] = orientation_error_deg(data["grasp_qpos"][0], reference)
+        status["max_trace_orientation_error_deg"] = max(
+            (orientation_error_deg(row["hand_qpos"], reference) for row in trace), default=0.)
+    if grasp_data.get("gesture_reference") is not None:
+        from .graspadmm_gesture import reference_diagnostics
+        status["gesture_diagnostics"]=reference_diagnostics(data["grasp_qpos"][0],grasp_data["gesture_reference"])
     np.save(output / "graspadmm_data.npy", data)
     if simulation:
         np.savez_compressed(output / "simulation_trace.npz",

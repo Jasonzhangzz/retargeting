@@ -1,0 +1,10 @@
+{
+  "source_mesh": "/mnt/cpfs/zbl-cpfs-new/USERS/jasonzhang/retarget_mppi/output/grasp_template_mppi_a800_20261102_gpu2/meshes/0063_5_Light_Tool.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "convention": "scaled source vertices minus recenter_offset_m; fixed object pose identity"
+}

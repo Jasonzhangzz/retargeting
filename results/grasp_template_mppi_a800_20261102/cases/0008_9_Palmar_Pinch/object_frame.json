@@ -1,0 +1,10 @@
+{
+  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_type9_opposed_20261102/meshes/9_Palmar_Pinch_cylinder_r0.0180000_h0.1200000.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "convention": "scaled source vertices minus recenter_offset_m; fixed object pose identity"
+}

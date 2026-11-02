@@ -23,3 +23,7 @@ output/
 MUJOCO_LOG.TXT
 !retarget/initialization/dexonomy/data/
 !third_party/Dexonomy/dexonomy/data/
+
+.ruff_cache/
+
+configs/generated/

@@ -1,0 +1,9 @@
+{
+  "policy": "portable dense final results; final selection only",
+  "source_audit_sha256": {
+    "results/grasp_template_mppi_a800_20261102/source_audits/audit_0.json": "b3a7a4fb103852636fad3e28bbc2bf6b8132c8c7fe3e52b1be8ed2ef76b53d32",
+    "results/grasp_template_mppi_a800_20261102/source_audits/audit_1.json": "724bbe5f542a555a21f3a22242a687c7cf9eb7a89d2bce6d6d7268b7203560f7",
+    "results/grasp_template_mppi_a800_20261102/source_audits/audit_2.json": "739f6251700b4baa2b379ec4ab5aa7c5d865eaf6ff3eae0254cea1737450402f",
+    "results/grasp_template_mppi_a800_20261102/source_audits/audit_3.json": "5174ffa827c19ff16fe4981c3d00428ea1f6d4a804d012ff5ea9952e72176c73"
+  }
+}

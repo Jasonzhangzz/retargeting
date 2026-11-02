@@ -1,0 +1,99 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "parent_case": "0201_33_Inferior_Pincer",
+  "parent_entry": {
+    "task": "grasp",
+    "name": "0201_33_Inferior_Pincer",
+    "method": "mppi",
+    "objective": "template_comfree_soft_contact_v4",
+    "hand": "wuji2",
+    "template": "33_Inferior_Pincer",
+    "primitive": {
+      "kind": "sphere",
+      "radius_m": 0.011,
+      "height_m": 0.022,
+      "radial_scale": 1.375,
+      "axial_scale": 1.0,
+      "size_scale": 1.375,
+      "size_axis": "radius",
+      "dimensions_m": [
+        0.022,
+        0.022,
+        0.022
+      ],
+      "size_policy_version": 3,
+      "sources": {
+        "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+        "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+        "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+      },
+      "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+    },
+    "seed": 202809,
+    "model": "results/grasp_template_mppi_a800_20261102/cases/0201_33_Inferior_Pincer/scene.xml",
+    "trajectory": "results/grasp_template_mppi_a800_20261102/cases/0201_33_Inferior_Pincer/trajectory.npz",
+    "summary": "results/grasp_template_mppi_a800_20261102/cases/0201_33_Inferior_Pincer/summary.json",
+    "dt": 1.0,
+    "phase": "refinement",
+    "task_success": true,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "continuation_parent": "0200_33_Inferior_Pincer",
+    "continuation": "results/grasp_template_mppi_a800_20261102/cases/0201_33_Inferior_Pincer/continuation.json"
+  },
+  "parent_primitive": {
+    "kind": "sphere",
+    "radius_m": 0.011,
+    "height_m": 0.022,
+    "radial_scale": 1.375,
+    "axial_scale": 1.0,
+    "size_scale": 1.375,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.022,
+      0.022,
+      0.022
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "primitive": {
+    "kind": "sphere",
+    "radius_m": 0.011500000000000002,
+    "height_m": 0.023000000000000003,
+    "radial_scale": 1.4375,
+    "axial_scale": 1.0,
+    "size_scale": 1.4375,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.023000000000000003,
+      0.023000000000000003,
+      0.023000000000000003
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "parent_reference": "results/grasp_template_mppi_a800_20261102/cases/0202_33_Inferior_Pincer/reference/reference.json",
+  "reference_sha256": "ba95ac3e801bdc93c6ab5d7295aaa06d4326decc61d23dd2939a7ad5ff7bade3",
+  "motion": {
+    "object_translation_m": 0.0,
+    "object_rotation_deg": 2.4148365394514667e-06,
+    "max_joint_change_deg": 7.598129536512087
+  },
+  "selected_attempt": 0,
+  "limits": {
+    "translation_m": 0.0,
+    "rotation_deg": 0.0,
+    "joint_deg": 8.0
+  },
+  "seconds": 52.298946714028716
+}

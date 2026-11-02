@@ -175,6 +175,36 @@ def project_to_hand(pts, hand_cbody, env, meshes, proxyes, geom_filter="all"):
         owner = env._model.body(env._cfg.hand_prefix + name).id
         rotation = env._data.xmat[owner].reshape(3, 3)
         origin = env._data.xpos[owner]
+        region = getattr(env, "contact_regions", None)
+        gesture = getattr(env, 'gesture_reference', None)
+        if gesture is not None and name in gesture['hand_cbody']:
+            from .contact_regions import surface_pool
+            samples,normals,_=surface_pool(name)
+            slot=gesture['hand_cbody'].index(name)
+            reference_normal=np.asarray(gesture['contact_normals_local'][slot])
+            penalty=gesture['weights'].get('skin',.2)*(1-normals@reference_normal)**2
+            p_local=(points[i]-origin)@rotation
+            score=np.sum((samples-p_local)**2,axis=1)/.002**2+penalty
+            local[i]=samples[np.argmin(score)]
+            world[i]=local[i]@rotation.T+origin
+            continue
+        if region is not None and name in region["bodies"]:
+            from .contact_regions import region_pool, surface_pool, region_preference
+            pools = getattr(env, "_wuji_region_pools", None)
+            if pools is None:
+                pools = env._wuji_region_pools = {}
+            if name not in pools:
+                pool = surface_pool(name) if region.get("mode") == "soft" else region_pool(name, region)
+                samples, normals = pool[:2]
+                penalty = region_preference(name, samples, normals, region) if region.get("mode") == "soft" else np.zeros(len(samples))
+                pools[name] = samples, penalty
+            samples, penalty = pools[name]
+            p_local = (points[i] - origin) @ rotation
+            distance = np.sum((samples - p_local) ** 2, axis=1)
+            score = distance / region["projection_scale_m"] ** 2 + penalty if region.get("mode") == "soft" else distance
+            local[i] = samples[np.argmin(score)]
+            world[i] = local[i] @ rotation.T + origin
+            continue
         if owner not in cache:
             attached = {owner}
             for child in range(owner + 1, env._model.nbody):

@@ -1,5 +1,4 @@
 """MPPI pose/frame/collision and paired-denominator regression checks."""
-from dataclasses import replace
 import numpy as np
 import pytest
 import torch
@@ -9,9 +8,9 @@ import warp as wp
 
 pytest.importorskip('mujoco_warp')
 from retarget.env.grasp.graspadmm_mppi import (
-    LocalPoseObjective,RefinementSettings,native_to_local,local_to_native,refinement_model)
+    LocalPoseObjective,RefinementSettings,native_to_local,local_to_native)
 from retarget.env.grasp.grasp_evaluation import evaluate_native_grasp,PROTOCOL
-from scripts.refine_graspadmm_mppi import aggregate,size_index
+from scripts.refine_graspadmm_mppi import aggregate,size_index,resolve_case_paths,report,source_ready
 
 
 def test_pose_rotation_roundtrip():
@@ -31,6 +30,45 @@ def test_pair_accounting_includes_runtime_failures():
     assert report['validated_fallback_success_rate']==.75
     assert report['transitions']==dict(retained=1,lost=1,recovered=1,neither=1)
     assert size_index(dict(case_id='t26_sphere_s04_seed09'))==4
+
+
+def test_partial_admm_export_is_not_refined_or_dropped_from_accounting(tmp_path):
+    assert not source_ready(tmp_path)
+    for name in ('native_candidate.json','native_candidate.npz','graspadmm_evaluation/evaluation.json'):
+        p=tmp_path/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'partial')
+    assert not source_ready(tmp_path)
+    (tmp_path/'graspadmm_evaluation/candidate.npz').write_bytes(b'complete')
+    assert source_ready(tmp_path)
+    stats=aggregate([dict(baseline_success=False,task_success=False,failure_stage='initialization_validity')])
+    assert stats['trials']==1 and stats['refined_success_rate']==0.
+
+
+def test_refinement_resolves_relative_batch_paths_and_preserves_absolute_archives(tmp_path):
+    source=tmp_path/'batch'
+    original=[dict(case_id='t06_cylinder_s00_seed00',summary='jobs/first/summary.json',
+                   model='jobs/first/scene.xml',trajectory='jobs/first/trajectory.npz'),
+              dict(case_id='t09_cylinder_s04_seed00',summary=str(tmp_path/'archive/summary.json'))]
+    resolved=resolve_case_paths(original,source)
+    assert resolved[0]['summary']==str(source/'jobs/first/summary.json')
+    assert resolved[0]['model']==str(source/'jobs/first/scene.xml')
+    assert resolved[0]['trajectory']==str(source/'jobs/first/trajectory.npz')
+    assert resolved[1]['summary']==original[1]['summary']
+    assert original[0]['summary']=='jobs/first/summary.json'
+
+
+def test_refinement_manifest_uses_refined_success_instead_of_source_verdict(tmp_path):
+    import json
+    cid='t06_cylinder_s00_seed00'
+    source=dict(case_id=cid,summary='/baseline/summary.json',task_success=True)
+    row=dict(id=cid,type_id=6,size_index=0,primitive=dict(kind='cylinder',size_axis='radius',
+             size_scale=.5,dimensions_m=[.02,.02,.18]),seed=0,
+             baseline_success=True,task_success=False,failure_stage='grasp_filter',
+             model=str(tmp_path/'scene.xml'),trajectory=str(tmp_path/'trajectory.npz'))
+    report(tmp_path,[source],[row],1.,RefinementSettings())
+    manifest=json.loads((tmp_path/'manifest.json').read_text())['cases']
+    assert len(manifest)==1
+    assert manifest[0]['task_success'] is False
+    assert manifest[0]['baseline_success'] is True
 
 
 def test_native_worker_receives_exact_candidate_and_groups(tmp_path):
@@ -104,3 +142,26 @@ def test_refinement_is_seeded_local_and_cost_monotonic(objective):
     assert np.max(abs(a[:3]-q[:3]))<=o.settings.max_pos_delta+1e-7
     assert np.max(abs(a[6:]-q[6:]))<=o.settings.max_joint_delta+1e-7
     assert not bool(wp.to_torch(o.physics.data.time).any())
+
+
+def test_independent_gesture_reference_penalizes_admm_drift_without_locking(objective):
+    from retarget.env.grasp.inputs import StaticHand
+    from retarget.env.geometry import ObjectMeshSurface
+    from retarget.env.grasp.graspadmm_gesture import make_reference
+    o=objective;q=o.cpu.qpos0.copy();q[0]=.08;q[6:]=.2
+    body=np.array([o.cpu.body('right_palm_link').id])
+    hand=StaticHand(o.cpu,ObjectMeshSurface.from_model(o.cpu,o.cpu.body('grasp_object').id),
+                    body,np.zeros((1,3)),np.array([[0.,1.,0.]]))
+    reference=make_reference(hand,q,'31_Ring',dict(role='independent_template'))
+    drift=q.copy();drift[6:]+=.08
+    o.bind(local_to_native(drift),[['right_palm_link']],gesture_reference=reference)
+    assert bool(torch.isfinite(o.skin_penalty).all()) and float(o.skin_penalty.max())>0.
+    assert bool((o.qhi[3:6]>o.qlo[3:6]).all())
+    o.qlo=o.low;o.qhi=o.high
+    with torch.no_grad():o.evaluate(torch.tensor(np.stack([q,drift]),device=o.device,dtype=torch.float32)[:,None])
+    values=o.parts['gesture'].cpu().numpy()
+    assert values[0]<1.e-5 and values[1]>values[0]+1.e-4
+    o.bind(local_to_native(drift),[['right_palm_link']])
+    assert float(o.skin_penalty.max())==0.
+    with torch.no_grad():o.evaluate(torch.tensor(drift,device=o.device,dtype=torch.float32)[None,None])
+    assert float(o.parts['gesture'][0])==0.

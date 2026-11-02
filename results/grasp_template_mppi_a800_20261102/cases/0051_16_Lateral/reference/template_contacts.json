@@ -1,0 +1,230 @@
+{
+  "body_names": [
+    "right_finger2_link3",
+    "right_finger1_link4"
+  ],
+  "local_points": [
+    [
+      0.0074869669042527676,
+      0.000261602399405092,
+      -0.016767388209700584
+    ],
+    [
+      -0.004013983998447657,
+      0.00434913532808423,
+      -0.024703452363610268
+    ]
+  ],
+  "local_normals": [
+    [
+      0.9977755546569824,
+      0.06665881723165512,
+      -0.0007654087385162711
+    ],
+    [
+      -0.3518260717391968,
+      0.6906722187995911,
+      -0.6318150758743286
+    ]
+  ],
+  "finger_qpos": [
+    0.2482923934722874,
+    0.040643225828243215,
+    0.4551676817350248,
+    0.5064312268636404,
+    0.9250203208053145,
+    0.06580922846337496,
+    1.2703647834343972,
+    1.1861022694704701,
+    1.5133315573818753,
+    -0.015218901928600691,
+    1.337756594085122,
+    1.337617402295945,
+    1.5068647085368576,
+    0.03376476728051811,
+    1.3519468486006347,
+    1.34497328913247,
+    1.4932377825599417,
+    0.09422980863490893,
+    1.3691921441121442,
+    1.3817098232919292
+  ],
+  "required_cbody": [
+    [
+      "right_finger1_link4"
+    ],
+    [
+      "right_finger2_link3"
+    ]
+  ],
+  "provenance": {
+    "template_name": "16_Lateral",
+    "policy": "original_annotation_direct_mapping_bone_pose",
+    "annotation": "/home/zz/retarget/data/grasp/templates/assets/hand/shadow/raw_anno/16_Lateral.yaml",
+    "annotation_sha256": "02dfda5228b992b6a4392bf86cad7c449fa300f47e915479ca53adbf8b591fb4",
+    "keypoints": "/home/zz/retarget/data/grasp/templates/assets/hand/shadow/keypoint.yaml",
+    "keypoints_sha256": "d569a6145c17884c35721aa9a48c678a0e50cfd2f7c57340b4af6ce56694a9b8",
+    "shadow_xml_sha256": "558852d62a72b388e38bbb7555e55055df5aa7cc0433447ce16e5adf974a0a07",
+    "wuji_xml_sha256": "5cc2a69e5fa0779d48f3d08e04f2a15e0f4c293112400736b825f62382b66288",
+    "query_sha256": {
+      "right_finger2_link3": "a86c6796395216f6f2e205222c2c846d86b35aafcc8b87ac874cbee39145fbd4",
+      "right_finger1_link4": "338802cd25e24113a5ace83f5426ecd8580d028b111add5b7851e8debd498946"
+    },
+    "mapping": [
+      {
+        "shadow_body": "rh_ffmiddle",
+        "wuji_body": "right_finger2_link3",
+        "shadow_local": [
+          0.008909698801269496,
+          -0.0011175648690966399,
+          0.011441289305384659,
+          0.9891445326125771,
+          -0.146946464957192,
+          -0.0005694227174092986
+        ],
+        "query_index": 683,
+        "wuji_local": [
+          0.0074869669042527676,
+          0.000261602399405092,
+          -0.016767388209700584
+        ],
+        "wuji_local_normal": [
+          0.9977755546569824,
+          0.06665881723165512,
+          -0.0007654087385162711
+        ],
+        "mapping_distance_mm": 1.3327554033724303
+      },
+      {
+        "shadow_body": "rh_thdistal",
+        "wuji_body": "right_finger1_link4",
+        "shadow_local": [
+          0.0023565741917751706,
+          -0.005073371905688727,
+          0.029763315266493028,
+          0.040468491404885246,
+          -0.9156205891043305,
+          0.40000095467717484
+        ],
+        "query_index": 611,
+        "wuji_local": [
+          -0.004013983998447657,
+          0.00434913532808423,
+          -0.024703452363610268
+        ],
+        "wuji_local_normal": [
+          -0.3518260717391968,
+          0.6906722187995911,
+          -0.6318150758743286
+        ],
+        "mapping_distance_mm": 9.098531260026808
+      }
+    ],
+    "pose_conversion": {
+      "method": "checked_object_independent_bone_pose",
+      "path": "/home/zz/retarget/output/template_mapping/data.json",
+      "sha256": "6647f5faaf775cb80dde70602ed618a02ad3b216a91260c61be2dc26dba0aac6",
+      "source_hash_checks": {
+        "annotation": true,
+        "shadow_xml": true,
+        "wuji_xml": true
+      },
+      "conversion": {
+        "method": "CUDA_batched_finger_bone_direction_LM",
+        "device": "cuda:0",
+        "iterations": 96,
+        "fingers": 5,
+        "root_fixed": true,
+        "multistarts": 8,
+        "sampling_seed": 0,
+        "selected_candidates": [
+          7,
+          2,
+          5,
+          1,
+          7
+        ],
+        "finger_direction_rms": [
+          0.018895685144557334,
+          0.09840445471542457,
+          0.04168188693263688,
+          0.01829647677369137,
+          0.031111088944335778
+        ],
+        "candidate_direction_rms": [
+          [
+            0.018895685144557382,
+            0.09840445471542458,
+            0.7610197581566253,
+            0.7536933736639524,
+            0.7486306037619911
+          ],
+          [
+            0.0188956851445574,
+            0.09840445471542461,
+            0.04168188693263689,
+            0.01829647677369137,
+            0.031111088944335827
+          ],
+          [
+            0.01889568514455736,
+            0.09840445471542457,
+            0.7517997514326845,
+            0.7517063044995262,
+            0.7474316144888392
+          ],
+          [
+            0.018895685144557372,
+            0.09840445471542458,
+            0.041681886932636886,
+            0.01829647677369139,
+            0.031111088944335823
+          ],
+          [
+            0.01889568514455744,
+            0.09840445471542457,
+            0.0416818869326369,
+            0.018296476773691388,
+            0.03111108894433582
+          ],
+          [
+            0.018895685144557358,
+            0.0984044547154246,
+            0.04168188693263688,
+            0.01829647677369138,
+            0.031111088944335844
+          ],
+          [
+            0.018895685144557382,
+            0.0984044547154246,
+            0.0416818869326369,
+            0.018296476773691384,
+            0.031111088944335806
+          ],
+          [
+            0.018895685144557334,
+            0.09840445471542457,
+            0.04168188693263689,
+            0.01829647677369139,
+            0.031111088944335778
+          ]
+        ],
+        "chain_direction_rms": 0.04167791850212919,
+        "chain_direction_rms_max": 0.09840445471542457,
+        "original_wuji_reference_used": false,
+        "object_or_contact_objective_used": false,
+        "seconds": 0.7364462059922516,
+        "cache_hit": false,
+        "cache_enabled": true,
+        "template_cache_key": "70c349054f85da002bdad8adc0bb64026823ef8ef64e2cf68967117f23f86d0b",
+        "template_cache_path": "/home/zz/retarget/output/template_mapping/template_cache/70c349054f85da002bdad8adc0bb64026823ef8ef64e2cf68967117f23f86d0b/finger_qpos.npy",
+        "template_conversion_seconds": 0.7532915569609031,
+        "template_cache_seconds": 0.7539883110439405
+      }
+    },
+    "original_contact_count": 2,
+    "primitive_contact_adaptations": false,
+    "region_adaptations": false,
+    "object_dependent_fitting": false
+  }
+}

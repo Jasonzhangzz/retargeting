@@ -1,0 +1,10 @@
+{
+  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_articulation_20261102/meshes/18_Extensior_Type_disk_r0.0800000_h0.0080000.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "convention": "scaled source vertices minus recenter_offset_m; fixed object pose identity"
+}

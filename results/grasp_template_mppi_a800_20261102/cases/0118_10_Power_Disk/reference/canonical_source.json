@@ -1,0 +1,193 @@
+{
+  "policy": "optimized_canonical_grasp_contacts_v1",
+  "template": "10_Power_Disk",
+  "template_signature": "c9eda2260ff0dce3b499f1ad221fa0cb0daf5e6b4a9d111f96fb60dec0649516",
+  "primitive": {
+    "kind": "disk",
+    "radius_m": 0.04,
+    "height_m": 0.015,
+    "radial_scale": 1.0,
+    "axial_scale": 1.0,
+    "size_scale": 1.0,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.08,
+      0.08,
+      0.015
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "qpos": [
+    0.07519810646772385,
+    0.04984871670603752,
+    -0.009361235424876213,
+    -2.267956256866455,
+    0.7794843912124634,
+    0.41029107570648193,
+    0.9543744325637817,
+    -0.19468221068382263,
+    0.2905616760253906,
+    0.23900042474269867,
+    0.6122313141822815,
+    0.279384583234787,
+    0.5508092045783997,
+    1.0598560571670532,
+    0.7787843942642212,
+    0.25215280055999756,
+    -0.0023264784831553698,
+    1.3608218431472778,
+    0.4360749125480652,
+    0.32320940494537354,
+    0.5205338001251221,
+    1.3336505889892578,
+    0.32158276438713074,
+    0.20259828865528107,
+    0.6524190306663513,
+    1.4938870668411255
+  ],
+  "object_points": [
+    [
+      -0.012441608123481274,
+      -0.03792796656489372,
+      -0.007499999832361937
+    ],
+    [
+      -0.00597502663731575,
+      -0.03950782120227814,
+      0.007499999832361937
+    ],
+    [
+      -0.030813472345471382,
+      -0.025400269776582718,
+      -0.005647789221256971
+    ],
+    [
+      -0.030076613649725914,
+      -0.026240497827529907,
+      0.007349674589931965
+    ],
+    [
+      -0.03982878103852272,
+      -0.002612261800095439,
+      -0.005776321515440941
+    ],
+    [
+      -0.03982900083065033,
+      0.002608940005302429,
+      0.007499999832361937
+    ],
+    [
+      -0.03705566003918648,
+      0.015011333860456944,
+      -0.007499999832361937
+    ],
+    [
+      -0.03527401015162468,
+      0.018716413527727127,
+      0.004054129123687744
+    ],
+    [
+      0.007874473929405212,
+      -0.03912999480962753,
+      -0.0066910432651638985
+    ],
+    [
+      0.03618329390883446,
+      -0.016872568055987358,
+      -0.007499999832361937
+    ],
+    [
+      0.030659683048725128,
+      0.013058790005743504,
+      0.007500000298023224
+    ]
+  ],
+  "object_outward_normals": [
+    [
+      -0.3214396834373474,
+      -0.9469300508499146,
+      -0.0
+    ],
+    [
+      -0.19508996605873108,
+      -0.9807853698730469,
+      1.9229580150437187e-09
+    ],
+    [
+      -0.7518395781517029,
+      -0.6593461036682129,
+      -0.0
+    ],
+    [
+      -0.7518395781517029,
+      -0.6593461036682129,
+      4.080029203379354e-09
+    ],
+    [
+      -0.9978589415550232,
+      -0.0654030591249466,
+      3.919297386634213e-10
+    ],
+    [
+      -0.9978589415550232,
+      0.0654030591249466,
+      -3.919297386634213e-10
+    ],
+    [
+      -0.9469300508499146,
+      0.3214396834373474,
+      0.0
+    ],
+    [
+      -0.8968727588653564,
+      0.44228872656822205,
+      -5.216299836519056e-09
+    ],
+    [
+      0.19508996605873108,
+      -0.9807853698730469,
+      0.0
+    ],
+    [
+      0.8968727588653564,
+      -0.44228872656822205,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "source_sha256": {
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0045_10_Power_Disk/000_10_Power_Disk/scene.xml": "392a39a7ac2626327da36a21f77eeab8f1df29adf38b28389ad7c7b3b21e0036",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0045_10_Power_Disk/000_10_Power_Disk/trajectory.npz": "3bab59437951eb42dad586450a6481b8226977c3fd6cc88ab7feaa7820b862f8",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0045_10_Power_Disk/000_10_Power_Disk/summary.json": "8c05316cc5de2cf4b16ea1915ffa00a0f76e111e34fd96fabe3a1d467dd484d3",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0045_10_Power_Disk/000_10_Power_Disk/template_contacts.json": "3a9a40534ce1b50ed213ab1305eeb39df831bf613dae9bf9b218376fa34fcfd2",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0045_10_Power_Disk/000_10_Power_Disk/projection_force_closure.json": "8e8c8f4b99c051f34abb6337c02410a4ff21955afe17af236b06df5e19749106",
+    "/home/zz/retarget/output/grasp_template_mppi_canonical_contacts_20261102/refined_sources/10_Power_Disk.json": "23bb127a6452aec3cf4d04f2764282e32153be8f3c26fc4cc0f0d84e232d0ec1"
+  },
+  "source_case": "0045_10_Power_Disk",
+  "source_batch": "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102",
+  "source_model": "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0045_10_Power_Disk/000_10_Power_Disk/scene.xml",
+  "source_projected_closure": true,
+  "source_coverage": 0.5454545454545454,
+  "canonical_refinement": "/home/zz/retarget/output/grasp_template_mppi_canonical_contacts_20261102/refined_sources/10_Power_Disk.json",
+  "checks": {
+    "cpu_fk": true,
+    "physical_bounds": true,
+    "self_penetration": true,
+    "surface_projection": true,
+    "force_witness": true
+  },
+  "cpu_fk_error": 2.892404109555713e-07,
+  "projection_error_m": 2.619644988790425e-09,
+  "force_residual_error": 1.1921167573101035e-07,
+  "source_template_point_coverage": 0.09090909361839294
+}

@@ -1,0 +1,181 @@
+{
+  "policy": "optimized_canonical_grasp_contacts_v1",
+  "template": "11_Power_Sphere",
+  "template_signature": "7c9b76a9eb8033297ccb3eaf917762586c4e1ea0af60f099f419061c5ce9abf9",
+  "primitive": {
+    "kind": "sphere",
+    "radius_m": 0.035,
+    "height_m": 0.07,
+    "radial_scale": 1.0,
+    "axial_scale": 1.0,
+    "size_scale": 1.0,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.07,
+      0.07,
+      0.07
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "qpos": [
+    0.047160424292087555,
+    0.010210435837507248,
+    0.06894277781248093,
+    -0.9669578075408936,
+    1.1669408082962036,
+    -0.48992887139320374,
+    0.9053964614868164,
+    -0.6866215467453003,
+    0.10735128819942474,
+    0.8587047457695007,
+    1.1211600303649902,
+    -0.06653910875320435,
+    0.5166018009185791,
+    0.6912524104118347,
+    1.063109040260315,
+    0.0035284964833408594,
+    0.4378776550292969,
+    0.630500316619873,
+    0.9806612133979797,
+    0.17638421058654785,
+    0.5357356071472168,
+    0.6462055444717407,
+    1.0811116695404053,
+    0.20942646265029907,
+    0.6242188215255737,
+    1.0247547626495361
+  ],
+  "object_points": [
+    [
+      -0.0055465553887188435,
+      -0.020190296694636345,
+      -0.027785250917077065
+    ],
+    [
+      -0.016633715480566025,
+      -0.028801897540688515,
+      -0.00962759368121624
+    ],
+    [
+      -0.020825155079364777,
+      -0.010571315884590149,
+      -0.025553707033395767
+    ],
+    [
+      -0.030729683116078377,
+      -0.01595834270119667,
+      -0.003207940375432372
+    ],
+    [
+      -0.020898910239338875,
+      0.01669696904718876,
+      -0.022064054384827614
+    ],
+    [
+      -0.03247709944844246,
+      0.012246541678905487,
+      -0.0015112569089978933
+    ],
+    [
+      -0.005667681805789471,
+      0.0318438746035099,
+      -0.013032057322561741
+    ],
+    [
+      -0.02035398781299591,
+      0.028087420389056206,
+      -0.0031404888723045588
+    ],
+    [
+      0.006952269468456507,
+      -0.025349358096718788,
+      -0.02236729860305786
+    ],
+    [
+      0.02371848002076149,
+      -0.02494579181075096,
+      0.0002633353869896382
+    ]
+  ],
+  "object_outward_normals": [
+    [
+      -0.03542516753077507,
+      -0.6442983150482178,
+      -0.7639533281326294
+    ],
+    [
+      -0.5181266665458679,
+      -0.8365557193756104,
+      -0.17809925973415375
+    ],
+    [
+      -0.5693077445030212,
+      -0.3688664436340332,
+      -0.7347285747528076
+    ],
+    [
+      -0.8779042959213257,
+      -0.42731931805610657,
+      -0.21606075763702393
+    ],
+    [
+      -0.5765586495399475,
+      0.5199720859527588,
+      -0.6302453279495239
+    ],
+    [
+      -0.9675366878509521,
+      0.24574114382266998,
+      -0.05902623012661934
+    ],
+    [
+      -0.28137263655662537,
+      0.8701881766319275,
+      -0.40447744727134705
+    ],
+    [
+      -0.6808003187179565,
+      0.723756730556488,
+      -0.11263705790042877
+    ],
+    [
+      0.19856157898902893,
+      -0.7716426253318787,
+      -0.6042689085006714
+    ],
+    [
+      0.7141262888908386,
+      -0.6968852281570435,
+      0.06614173203706741
+    ]
+  ],
+  "source_sha256": {
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0056_11_Power_Sphere/000_11_Power_Sphere/scene.xml": "fe40f5a680d01ea8466cb2ae343b98837a910b374243344dba1f6eb8fe9f5ac7",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0056_11_Power_Sphere/000_11_Power_Sphere/trajectory.npz": "6a05a3164fe9395c50a1a93f7666e4084acbfe292b50a71ddef575a6f23d154b",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0056_11_Power_Sphere/000_11_Power_Sphere/summary.json": "5a60c07f6524306388a892b5550e91b226ad7f31b9a1834d74edea7d3244b329",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0056_11_Power_Sphere/000_11_Power_Sphere/template_contacts.json": "70f873508e07394f0d50283fa4b76a3c980ace77098671c476e7cdbeed790eba",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0056_11_Power_Sphere/000_11_Power_Sphere/projection_force_closure.json": "72101a7e6a7009944575566f80b98504a76a3b0ff24f450fb2303806ae08046e"
+  },
+  "source_case": "0056_11_Power_Sphere",
+  "source_batch": "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102",
+  "source_model": "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0056_11_Power_Sphere/000_11_Power_Sphere/scene.xml",
+  "source_projected_closure": true,
+  "source_coverage": 1.0,
+  "canonical_refinement": null,
+  "checks": {
+    "cpu_fk": true,
+    "physical_bounds": true,
+    "self_penetration": true,
+    "surface_projection": true,
+    "force_witness": true
+  },
+  "cpu_fk_error": 2.599359296695525e-07,
+  "projection_error_m": 1.7106710669697763e-09,
+  "force_residual_error": 1.1026403904825616e-07
+}

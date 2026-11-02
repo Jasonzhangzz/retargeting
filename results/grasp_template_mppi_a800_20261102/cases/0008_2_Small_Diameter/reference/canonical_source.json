@@ -1,0 +1,231 @@
+{
+  "policy": "optimized_canonical_grasp_contacts_v1",
+  "template": "2_Small_Diameter",
+  "template_signature": "5dd4ae1098daef42a17fcf95f3681a3175fce02084aee6c359378678d800ee44",
+  "primitive": {
+    "kind": "cylinder",
+    "radius_m": 0.012,
+    "height_m": 0.18,
+    "radial_scale": 1.0,
+    "axial_scale": 1.0,
+    "size_scale": 1.0,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.024,
+      0.024,
+      0.18
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "qpos": [
+    0.019296659156680107,
+    0.05919100344181061,
+    -0.05537545308470726,
+    -1.5886180400848389,
+    -0.029966333881020546,
+    1.7031317949295044,
+    0.9474778175354004,
+    -0.5870352387428284,
+    0.4048870801925659,
+    0.9851291179656982,
+    1.1768712997436523,
+    0.007617271039634943,
+    1.857258915901184,
+    0.8312476873397827,
+    1.5633214712142944,
+    0.0795690268278122,
+    1.4727178812026978,
+    1.3653748035430908,
+    1.2263303995132446,
+    0.1568085104227066,
+    1.6614792346954346,
+    1.3111894130706787,
+    0.7400124073028564,
+    0.3708203136920929,
+    1.6011552810668945,
+    1.199671983718872
+  ],
+  "object_points": [
+    [
+      -0.01173320971429348,
+      0.0023914470802992582,
+      -0.06822597235441208
+    ],
+    [
+      -0.0084852809086442,
+      -0.0084852809086442,
+      -0.06991250067949295
+    ],
+    [
+      -0.005761248059570789,
+      -0.010510043241083622,
+      -0.0701901763677597
+    ],
+    [
+      -0.008168072439730167,
+      0.008763465099036694,
+      -0.050910644233226776
+    ],
+    [
+      -0.01182522438466549,
+      -0.0019288535695523024,
+      -0.04880606010556221
+    ],
+    [
+      -0.005171666387468576,
+      -0.010800793766975403,
+      -0.05208409205079079
+    ],
+    [
+      -0.010035512037575245,
+      0.006533978506922722,
+      -0.03480711579322815
+    ],
+    [
+      -0.010597369633615017,
+      -0.005584169179201126,
+      -0.029850458726286888
+    ],
+    [
+      -0.0038709095679223537,
+      -0.011331399902701378,
+      -0.031689099967479706
+    ],
+    [
+      -0.011988703161478043,
+      0.00017234771803487092,
+      -0.014441698789596558
+    ],
+    [
+      -0.006254464387893677,
+      -0.010222276672720909,
+      -0.0054930150508880615
+    ],
+    [
+      0.0011116416426375508,
+      -0.011927139945328236,
+      -0.009074468165636063
+    ],
+    [
+      0.009417477995157242,
+      -0.007422315422445536,
+      -0.08146718889474869
+    ],
+    [
+      0.010524420067667961,
+      -0.005732096266001463,
+      -0.05731191113591194
+    ],
+    [
+      0.011378657072782516,
+      -0.003731694770976901,
+      -0.035819098353385925
+    ]
+  ],
+  "object_outward_normals": [
+    [
+      -0.9807853102684021,
+      0.1950901597738266,
+      0.0
+    ],
+    [
+      -0.6593462228775024,
+      -0.7518394589424133,
+      -2.1631741536909388e-11
+    ],
+    [
+      -0.4422887861728668,
+      -0.8968726396560669,
+      -0.0
+    ],
+    [
+      -0.6593462228775024,
+      0.7518394589424133,
+      0.0
+    ],
+    [
+      -0.9807853102684021,
+      -0.1950901597738266,
+      -0.0
+    ],
+    [
+      -0.4422887861728668,
+      -0.8968726396560669,
+      -0.0
+    ],
+    [
+      -0.8314697742462158,
+      0.5555700659751892,
+      8.343254559450841e-11
+    ],
+    [
+      -0.8968726396560669,
+      -0.4422887861728668,
+      -0.0
+    ],
+    [
+      -0.32143980264663696,
+      -0.9469300508499146,
+      -0.0
+    ],
+    [
+      -0.9978588819503784,
+      0.0654030591249466,
+      -1.9908014473046798e-11
+    ],
+    [
+      -0.5555700659751892,
+      -0.8314697742462158,
+      -8.343254559450841e-11
+    ],
+    [
+      0.0654030591249466,
+      -0.9978588819503784,
+      0.0
+    ],
+    [
+      0.7518394589424133,
+      -0.6593462228775024,
+      0.0
+    ],
+    [
+      0.8968726396560669,
+      -0.4422887861728668,
+      0.0
+    ],
+    [
+      0.9469300508499146,
+      -0.32143980264663696,
+      0.0
+    ]
+  ],
+  "source_sha256": {
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0007_2_Small_Diameter/000_2_Small_Diameter/scene.xml": "56084de05d1066e37dbf9ee3f3eeecc36fc2e6f2ad53af9670bf39019cd2ee5d",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0007_2_Small_Diameter/000_2_Small_Diameter/trajectory.npz": "e15fb3ef34a342542ee43ea78871a018205d34cc92f67e2585cdd92e02a179aa",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0007_2_Small_Diameter/000_2_Small_Diameter/summary.json": "c814fb32d5d44dfba37ff14b1d27faef410e9be5ddb20098d9ff81fef164b8e7",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0007_2_Small_Diameter/000_2_Small_Diameter/template_contacts.json": "e5c9febd40d91b1ed28d68077b71eb706069ab81aaeadb05a76746eeb94f4518",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0007_2_Small_Diameter/000_2_Small_Diameter/projection_force_closure.json": "3b2bdbd1464a1a9af48034cf793e8f9cd0ac45f2bbb62db2eabbf5caa4316fc7"
+  },
+  "source_case": "0007_2_Small_Diameter",
+  "source_batch": "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102",
+  "source_model": "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0007_2_Small_Diameter/000_2_Small_Diameter/scene.xml",
+  "source_projected_closure": true,
+  "source_coverage": 0.6923076923076923,
+  "canonical_refinement": null,
+  "checks": {
+    "cpu_fk": true,
+    "physical_bounds": true,
+    "self_penetration": true,
+    "surface_projection": true,
+    "force_witness": true
+  },
+  "cpu_fk_error": 2.828721435421677e-07,
+  "projection_error_m": 6.872194576375581e-10,
+  "force_residual_error": 2.1657691223753162e-07
+}

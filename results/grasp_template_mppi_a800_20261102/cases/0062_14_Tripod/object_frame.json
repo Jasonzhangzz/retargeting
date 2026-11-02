@@ -1,0 +1,10 @@
+{
+  "source_mesh": "/mnt/cpfs/zbl-cpfs-new/USERS/jasonzhang/retarget_mppi/output/grasp_template_mppi_a800_20261102_gpu3/meshes/0062_14_Tripod.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    2.784840762615204e-05,
+    -2.8037000447511673e-05,
+    0.0
+  ],
+  "convention": "scaled source vertices minus recenter_offset_m; fixed object pose identity"
+}

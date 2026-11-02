@@ -1,0 +1,10 @@
+{
+  "source_mesh": "/mnt/cpfs/zbl-cpfs-new/USERS/jasonzhang/retarget_mppi/output/grasp_template_mppi_a800_20261102_gpu3/meshes/0047_13_Precision_Sphere.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    4.208274185657501e-05,
+    -4.236679524183273e-05,
+    0.0
+  ],
+  "convention": "scaled source vertices minus recenter_offset_m; fixed object pose identity"
+}

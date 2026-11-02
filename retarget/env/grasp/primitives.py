@@ -36,11 +36,11 @@ CATALOG = {
     15: [("cylinder", 0.015, 0.20)],
     16: [("plate", 0.025, 0.003)],
     17: [("cylinder", 0.025, 0.20)],
-    18: [("plate", 0.040, 0.008)],
+    18: [("disk", 0.080, 0.008)],
     19: [("scissors", None, None)],
     20: [("cylinder", 0.004, 0.12)],
     21: [("paired_sticks", None, None)],
-    22: [("plate", 0.035, 0.008)],
+    22: [("plate", 0.050, 0.008)],
     23: [("cylinder", 0.005, 0.08), ("plate", 0.020, 0.003)],
     24: [("cylinder", 0.006, 0.05)],
     25: [("cylinder", 0.007, 0.06), ("sphere", 0.012, 0.024)],
@@ -48,13 +48,15 @@ CATALOG = {
     27: [("sphere", 0.020, 0.040)],
     28: [("sphere", 0.025, 0.050)],
     29: [("cylinder", 0.007, 0.20)],
-    30: [("disk", 0.030, 0.008)],
+    30: [("disk", 0.050, 0.008)],
     31: [("cylinder", 0.025, 0.10)],
     32: [("cylinder", 0.008, 0.20)],
     33: [("sphere", 0.008, 0.016), ("plate", 0.015, 0.003)],
 }
 
-SIZE_POLICY_VERSION = 2
+SIZE_POLICY_VERSION = 3
+# Corrected broad disks need a new identity without invalidating other types.
+TYPE_SIZE_POLICY_VERSIONS = {10: 4, 12: 4, 18: 5, 22: 5, 24: 5, 30: 5}
 DEFAULT_SCALES = (0.5, 0.75, 1.0, 1.25, 1.5)
 
 
@@ -92,11 +94,19 @@ def size_specifications(type_id, kind=None, *, radius_scales=None,
                 base_h = cylinder_length
             scales = DEFAULT_SCALES
             if type_id == 10:
-                scales = np.linspace(1., 1.5, 11)
+                scales = np.linspace(.8, 1.3, 11)
             elif type_id in (11, 28):
                 scales = np.linspace(1., 1.5, 5)
+            elif type_id == 18:
+                scales = np.linspace(1., 2., 9)
+            elif type_id in (22,30):
+                scales = (.03125,.0625,.09375,.125,.25,.5,.75,1.,1.25,1.5)
+            elif type_id == 24:
+                # Tip pinch: extend the diameter down to 0.05 mm while keeping
+                # the original 6/9/12/15/18 mm sweep and exact 12 mm reference.
+                scales = (1/240, 1/120, 1/48, 1/24, 1/12, 1/6, 1/3, .5, .75, 1., 1.25, 1.5)
             elif type_id == 12:
-                scales = np.linspace(.5, 1., 5)
+                scales = np.linspace(.75, 1., 6)
             elif type_id == 26:
                 scales = np.linspace(.75, 1.5, 5)
             elif type_id == 33 and family == "sphere":
@@ -118,7 +128,7 @@ def size_specifications(type_id, kind=None, *, radius_scales=None,
                 size_scale=float(scale), size_axis=axis,
                 dimensions_m=([float(2*r), float(1.4*r), float(h)]
                     if family in ("plate", "cuboid") else [float(2*r), float(2*r), float(h)]),
-                size_policy_version=SIZE_POLICY_VERSION, sources=SOURCES,
+                size_policy_version=TYPE_SIZE_POLICY_VERSIONS.get(type_id, SIZE_POLICY_VERSION), sources=SOURCES,
                 dimensions_status="explicit_benchmark_setting_not_Dexonomy_annotation"))
     return rows
 
@@ -142,6 +152,34 @@ def catalog(checkout):
         )
         for name in names
     ]
+
+
+def canonical_specification(type_id, kind, args):
+    """Exact 1x reference, independent of whether the experiment samples 1x.
+
+    In the thickness sweeps, 1x retains the policy's fixed plate width. Explicit
+    grids instead use their unscaled radius/height overrides as the reference.
+    """
+    rows = size_specifications(type_id, kind,
+        radius_scales=[1.], height_scales=[1.], radius=args.radius, height=args.height,
+        explicit=args.primitive_grid_explicit)
+    if not rows:
+        raise ValueError(f"No supported canonical object for type {type_id}: {kind}")
+    reference = dict(rows[0])
+    scale = reference["size_scale"]
+    axis = reference["size_axis"]
+    reference["size_scale"] = 1.
+    if axis == "thickness":
+        reference["height_m"] /= scale
+        reference["axial_scale"] /= scale
+    else:
+        reference["radius_m"] /= scale
+        reference["radial_scale"] /= scale
+        if kind == "sphere":
+            reference["height_m"] = 2 * reference["radius_m"]
+    r, h = reference["radius_m"], reference["height_m"]
+    reference["dimensions_m"] = [2*r, (1.4 if kind in ("plate", "cuboid") else 2)*r, h]
+    return reference
 
 
 def primitive_geometry(kind, radius, height):

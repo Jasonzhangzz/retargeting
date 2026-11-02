@@ -458,7 +458,7 @@ def evaluate_grasp(model_path, qpos, destination, *, method="unknown", selection
 
 
 def evaluate_native_grasp(grasp_qpos, mesh_path, destination, *, method="graspadmm",
-                          required_cbody=None, selection=None, timeout=600., worker=None):
+                          required_cbody=None, selection=None, timeout=600., worker=None, contact_regions=None):
     """Evaluate an already normalized free-root candidate from GraspADMM."""
     import shutil
     destination=Path(destination).resolve();destination.mkdir(parents=True,exist_ok=True)
@@ -472,7 +472,8 @@ def evaluate_native_grasp(grasp_qpos, mesh_path, destination, *, method="graspad
     write_json(destination/"candidate.json",dict(version=1,protocol=PROTOCOL,method=method,hand="wuji2",
         required_cbody=required,candidate_sha256=digest,mesh=str(mesh),
         candidate=str(destination/"candidate.npz"),source_selection=selection or {},
-        original_controls_reused=False,pose_frame="final hand relative to final object; xyz+wxyz+20 official WUJI hinges"))
+        original_controls_reused=False,pose_frame="final hand relative to final object; xyz+wxyz+20 official WUJI hinges",
+        **({"diagnostic_contact_regions":contact_regions} if contact_regions is not None else {})))
     if worker is not None:
         report=worker.evaluate(destination,timeout=timeout)
     elif method=="graspadmm" and pinned_native_environment():
@@ -529,6 +530,12 @@ def native_evaluate(candidate_directory):
                   generation_config=source.OmegaConf.to_container(source.grasp_config,resolve=False),
                   eval_config=source.OmegaConf.to_container(source.eval_config,resolve=False),
                   state="completed", success=False, task_success=False)
+    if metadata.get("diagnostic_contact_regions") is not None:
+        from .contact_regions import contact_region_diagnostics
+        contacts=data["ho_c"]
+        values=np.c_[np.asarray(contacts["pos"]).reshape(-1,3),np.asarray(contacts["normal"]).reshape(-1,3)]
+        report["contact_region_diagnostics"]=contact_region_diagnostics(
+            data["grasp_qpos"][0],contacts["bn1"],values,metadata["diagnostic_contact_regions"])
     if not status.get("success", False):
         report["failure_stage"] = status.get("failure_stage", "grasp_or_pregrasp_filter")
         write_json(directory/"evaluation.json", report)

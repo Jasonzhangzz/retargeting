@@ -1,0 +1,99 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "parent_case": "0052_13_Precision_Sphere",
+  "parent_entry": {
+    "task": "grasp",
+    "name": "0052_13_Precision_Sphere",
+    "method": "mppi",
+    "objective": "template_comfree_soft_contact_v4",
+    "hand": "wuji2",
+    "template": "13_Precision_Sphere",
+    "primitive": {
+      "kind": "sphere",
+      "radius_m": 0.0275,
+      "height_m": 0.055,
+      "radial_scale": 1.375,
+      "axial_scale": 1.0,
+      "size_scale": 1.375,
+      "size_axis": "radius",
+      "dimensions_m": [
+        0.055,
+        0.055,
+        0.055
+      ],
+      "size_policy_version": 3,
+      "sources": {
+        "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+        "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+        "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+      },
+      "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+    },
+    "seed": 52468,
+    "model": "results/grasp_template_mppi_a800_20261102/cases/0052_13_Precision_Sphere/scene.xml",
+    "trajectory": "results/grasp_template_mppi_a800_20261102/cases/0052_13_Precision_Sphere/trajectory.npz",
+    "summary": "results/grasp_template_mppi_a800_20261102/cases/0052_13_Precision_Sphere/summary.json",
+    "dt": 1.0,
+    "phase": "refinement",
+    "task_success": true,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "continuation_parent": "0051_13_Precision_Sphere",
+    "continuation": "results/grasp_template_mppi_a800_20261102/cases/0052_13_Precision_Sphere/continuation.json"
+  },
+  "parent_primitive": {
+    "kind": "sphere",
+    "radius_m": 0.0275,
+    "height_m": 0.055,
+    "radial_scale": 1.375,
+    "axial_scale": 1.0,
+    "size_scale": 1.375,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.055,
+      0.055,
+      0.055
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "primitive": {
+    "kind": "sphere",
+    "radius_m": 0.028749999999999998,
+    "height_m": 0.057499999999999996,
+    "radial_scale": 1.4375,
+    "axial_scale": 1.0,
+    "size_scale": 1.4375,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.057499999999999996,
+      0.057499999999999996,
+      0.057499999999999996
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "parent_reference": "results/grasp_template_mppi_a800_20261102/cases/0053_13_Precision_Sphere/reference/reference.json",
+  "reference_sha256": "f38d3c368804cceb0ee2661b7a9e4fcbddd9e8692bbba595422bf52b1f32802c",
+  "motion": {
+    "object_translation_m": 0.0,
+    "object_rotation_deg": 0.0,
+    "max_joint_change_deg": 1.6509933261754821
+  },
+  "selected_attempt": 0,
+  "limits": {
+    "translation_m": 0.0,
+    "rotation_deg": 0.0,
+    "joint_deg": 8.0
+  },
+  "seconds": 60.03612681757659
+}

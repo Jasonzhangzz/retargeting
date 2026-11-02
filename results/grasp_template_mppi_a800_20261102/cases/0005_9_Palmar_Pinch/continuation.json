@@ -1,0 +1,99 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "parent_case": "0006_9_Palmar_Pinch",
+  "parent_entry": {
+    "task": "grasp",
+    "name": "0006_9_Palmar_Pinch",
+    "method": "mppi",
+    "objective": "template_comfree_soft_contact_v4",
+    "hand": "wuji2",
+    "template": "9_Palmar_Pinch",
+    "primitive": {
+      "kind": "cylinder",
+      "radius_m": 0.01575,
+      "height_m": 0.12,
+      "radial_scale": 0.875,
+      "axial_scale": 1.0,
+      "size_scale": 0.875,
+      "size_axis": "radius",
+      "dimensions_m": [
+        0.0315,
+        0.0315,
+        0.12
+      ],
+      "size_policy_version": 3,
+      "sources": {
+        "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+        "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+        "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+      },
+      "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+    },
+    "seed": 6054,
+    "model": "results/grasp_template_mppi_a800_20261102/cases/0006_9_Palmar_Pinch/scene.xml",
+    "trajectory": "results/grasp_template_mppi_a800_20261102/cases/0006_9_Palmar_Pinch/trajectory.npz",
+    "summary": "results/grasp_template_mppi_a800_20261102/cases/0006_9_Palmar_Pinch/summary.json",
+    "dt": 1.0,
+    "phase": "refinement",
+    "task_success": true,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "continuation_parent": "0007_9_Palmar_Pinch",
+    "continuation": "results/grasp_template_mppi_a800_20261102/cases/0006_9_Palmar_Pinch/continuation.json"
+  },
+  "parent_primitive": {
+    "kind": "cylinder",
+    "radius_m": 0.01575,
+    "height_m": 0.12,
+    "radial_scale": 0.875,
+    "axial_scale": 1.0,
+    "size_scale": 0.875,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.0315,
+      0.0315,
+      0.12
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "primitive": {
+    "kind": "cylinder",
+    "radius_m": 0.014624999999999999,
+    "height_m": 0.12,
+    "radial_scale": 0.8125,
+    "axial_scale": 1.0,
+    "size_scale": 0.8125,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.029249999999999998,
+      0.029249999999999998,
+      0.12
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "parent_reference": "results/grasp_template_mppi_a800_20261102/cases/0005_9_Palmar_Pinch/reference/reference.json",
+  "reference_sha256": "cc58aa4af86db01a8b8ef8c67f1bdd04b9ed66806a9b6501a58666ad918e9975",
+  "motion": {
+    "object_translation_m": 0.0,
+    "object_rotation_deg": 1.2074182697257333e-06,
+    "max_joint_change_deg": 7.887987396961796
+  },
+  "selected_attempt": 0,
+  "limits": {
+    "translation_m": 0.0,
+    "rotation_deg": 0.0,
+    "joint_deg": 8.0
+  },
+  "seconds": 21.975766567513347
+}

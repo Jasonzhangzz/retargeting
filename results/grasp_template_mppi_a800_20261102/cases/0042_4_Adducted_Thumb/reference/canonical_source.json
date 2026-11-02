@@ -1,0 +1,191 @@
+{
+  "policy": "optimized_canonical_grasp_contacts_v1",
+  "template": "4_Adducted_Thumb",
+  "template_signature": "cb6d22e6a5cd7d6ec70e420904fcadba913f449c7bd41899497b7eb276fe6396",
+  "primitive": {
+    "kind": "cylinder",
+    "radius_m": 0.016,
+    "height_m": 0.18,
+    "radial_scale": 1.0,
+    "axial_scale": 1.0,
+    "size_scale": 1.0,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.032,
+      0.032,
+      0.18
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "qpos": [
+    0.032327841967344284,
+    0.052736591547727585,
+    0.0157508235424757,
+    -0.9873777031898499,
+    0.08489624410867691,
+    1.4383519887924194,
+    0.44366657733917236,
+    -0.03778254613280296,
+    0.19868573546409607,
+    0.16493159532546997,
+    0.3752586543560028,
+    -0.17789995670318604,
+    0.7107272148132324,
+    1.4881343841552734,
+    0.826976478099823,
+    -0.2883225083351135,
+    1.0252994298934937,
+    1.5697647333145142,
+    0.8572603464126587,
+    -0.33017292618751526,
+    1.3142750263214111,
+    1.5473427772521973,
+    0.9017897844314575,
+    -0.27441203594207764,
+    1.3654018640518188,
+    1.5193647146224976
+  ],
+  "object_points": [
+    [
+      -0.013856406323611736,
+      -0.00800000037997961,
+      -0.08318962156772614
+    ],
+    [
+      0.014731847681105137,
+      -0.006224781274795532,
+      -0.07008335739374161
+    ],
+    [
+      -0.01599309593439102,
+      -0.00010532955639064312,
+      -0.049782682210206985
+    ],
+    [
+      0.009401388466358185,
+      -0.012920028530061245,
+      -0.04882672801613808
+    ],
+    [
+      -0.015904026105999947,
+      -0.0014643095200881362,
+      -0.027335992082953453
+    ],
+    [
+      0.0051335603930056095,
+      -0.015117920003831387,
+      -0.02650827169418335
+    ],
+    [
+      -0.015863118693232536,
+      -0.002088419161736965,
+      -0.006204380188137293
+    ],
+    [
+      0.00017444143304601312,
+      -0.01598856784403324,
+      -0.005019035656005144
+    ],
+    [
+      0.015964291989803314,
+      -0.000544804148375988,
+      0.023729247972369194
+    ],
+    [
+      -0.0057600149884819984,
+      0.014905267395079136,
+      -0.08790475130081177
+    ],
+    [
+      0.01591719128191471,
+      0.0012634454760700464,
+      -0.020074035972356796
+    ]
+  ],
+  "object_outward_normals": [
+    [
+      -0.8968726396560669,
+      -0.442288875579834,
+      7.094934362239513e-11
+    ],
+    [
+      0.8968726396560669,
+      -0.442288875579834,
+      -7.094934362239513e-11
+    ],
+    [
+      -0.9978589415550232,
+      -0.0654030591249466,
+      3.720665095463538e-11
+    ],
+    [
+      0.5555700659751892,
+      -0.8314697742462158,
+      2.9312216542898284e-10
+    ],
+    [
+      -0.9978589415550232,
+      -0.0654030591249466,
+      0.0
+    ],
+    [
+      0.32143911719322205,
+      -0.9469302296638489,
+      0.0
+    ],
+    [
+      -0.9807851910591125,
+      -0.1950908899307251,
+      0.0
+    ],
+    [
+      0.065403051674366,
+      -0.9978588819503784,
+      0.0
+    ],
+    [
+      0.9978589415550232,
+      -0.0654030591249466,
+      -3.720665095463538e-11
+    ],
+    [
+      -0.32143911719322205,
+      0.9469302296638489,
+      0.0
+    ],
+    [
+      0.9978589415550232,
+      0.0654030591249466,
+      0.0
+    ]
+  ],
+  "source_sha256": {
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0017_4_Adducted_Thumb/000_4_Adducted_Thumb/scene.xml": "a3ddd2b5667f911fbe1716e4a9b495287e319bcd47ad277b4fd9c77def550e1a",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0017_4_Adducted_Thumb/000_4_Adducted_Thumb/trajectory.npz": "ffb95fa485e94765a6cc9b7b609439e01bf690fe0743ecfb986b2997d55f680b",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0017_4_Adducted_Thumb/000_4_Adducted_Thumb/summary.json": "7b888354e350ee975764e0b6216567785dac173ab92269c721e0c54d34b867b6",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0017_4_Adducted_Thumb/000_4_Adducted_Thumb/template_contacts.json": "629f78831aead1c6b1319d3bfe597b1262eea5b3cc3c9f3dace2918574431cd4",
+    "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0017_4_Adducted_Thumb/000_4_Adducted_Thumb/projection_force_closure.json": "7f66b1de0c8e56412749b6342e5b24a04278941cbb62553602db84bf6bdb8f25"
+  },
+  "source_case": "0017_4_Adducted_Thumb",
+  "source_batch": "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102",
+  "source_model": "/home/zz/retarget/output/grasp_template_mppi_scaled_ik_all_except24_20261102/cases/0017_4_Adducted_Thumb/000_4_Adducted_Thumb/scene.xml",
+  "source_projected_closure": true,
+  "source_coverage": 0.5,
+  "canonical_refinement": null,
+  "checks": {
+    "cpu_fk": true,
+    "physical_bounds": true,
+    "self_penetration": true,
+    "surface_projection": true,
+    "force_witness": true
+  },
+  "cpu_fk_error": 2.0269294220831569e-07,
+  "projection_error_m": 1.16711676563534e-09,
+  "force_residual_error": 3.726634488637748e-07
+}

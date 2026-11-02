@@ -1,0 +1,9 @@
+{
+  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_articulation_20261102/template_initialization/28_Sphere_3_Finger_sphere/source_1x.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    4.950910806655884e-05,
+    -4.9843452870845795e-05,
+    0.0
+  ]
+}

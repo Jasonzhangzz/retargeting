@@ -44,12 +44,87 @@ def filter_rows(rows, method="全部", task="全部", hand="全部", template="�
     ]
 
 
-def load_case(batch, case):
+def load_case(batch, case, *, final_only=False):
     path = Path(case["model"])
     path = path if path.is_absolute() else batch / path
     model = mujoco.MjModel.from_xml_path(str(path))
     with np.load(batch / case["trajectory"], allow_pickle=False) as values:
-        return model, values["qpos"].copy()
+        qs = values["qpos"].copy()
+    if final_only:
+        if qs.ndim != 2 or not len(qs) or qs.shape[1] != model.nq or not np.isfinite(qs[-1]).all():
+            raise ValueError("No finite final pose matching the saved model")
+        qs = qs[-1:].copy()
+    return model, qs
+
+
+def final_result_rows(rows):
+    """Keep one optimized result per case, excluding process/evaluation replays."""
+    selected = {}
+    priority = {"selected_pose": 3, "refinement": 2, "hold": 1}
+    for row in rows:
+        phase = row.get("phase", "")
+        if phase in ("acquisition", "native_test", "pregrasp", "preview", "failure"):
+            continue
+        if row.get("has_hand_pose") is False or row.get("stage") in ("CA失败预览", "失败信息"):
+            continue
+        key = (str(row["batch"]), row.get("case_id", row["name"]), row.get("method"))
+        previous = selected.get(key)
+        if previous is None or priority.get(phase, 0) > priority.get(previous.get("phase"), 0):
+            selected[key] = dict(row, stage="最终结果", initial_index=-1)
+    return list(selected.values())
+
+
+def final_summary(summary):
+    diagnostics = summary.get("geometry_diagnostics", {})
+    lines = ["**最终抓取结果**"]
+    if "coverage" in diagnostics:
+        if diagnostics.get("coverage_definition", '').startswith("anatomical_patch_interior_"):
+            lines.append(f"patch 内部贴合率：{diagnostics['coverage']:.1%}"
+                         f"（{diagnostics['covered_patch_count']}/{diagnostics['required_patch_count']}）")
+            centered = diagnostics.get('contact_region_policy') == 'fixed_prismatic_pad_center_v1'
+            label = '固定指腹锚点贴合率' if centered else '原模板点贴合率'
+            lines.append(f"{label}：{diagnostics['template_point_coverage']:.1%}")
+            if centered:
+                lines.append('接触区域：指腹中段（末节长度 30%–70%）')
+            if diagnostics.get('object_surface_regions'):
+                if 'required_side_finger_count' in diagnostics:
+                    lines.append(f"手指侧面贴合：{diagnostics['covered_side_finger_count']}/"
+                                 f"{diagnostics['required_side_finger_count']}（每指至少一个指定接触）")
+                else:
+                    lines.append('指定接触区域仅计圆柱侧面贴合。')
+        else:
+            lines.append(f"模板点贴合率：{diagnostics['coverage']:.1%}")
+    if "projected_closure" in diagnostics:
+        lines.append("投影摩擦锥闭合：" + ("通过" if diagnostics["projected_closure"] else "未证实"))
+    if diagnostics.get('articulation_policy'):
+        error=diagnostics.get('max_finger_order_violation_m',0.)
+        lines.append('手指顺序约束：' + ('通过' if error <= 1.e-5 else '未通过'))
+    if "torsional_friction_m" in diagnostics:
+        coefficient = diagnostics["torsional_friction_m"]
+        lines.append(f"扭转摩擦：开启（ComFree 投影平衡，系数 {coefficient:g} m）" if coefficient > 0 else "扭转摩擦：关闭")
+    if summary.get("success_criterion") in ("projected_soft_contact_closure_v1", "projected_soft_contact_closure_v2"):
+        lines.append("软接触闭合验收：" + ("通过" if summary.get("task_success") else "未通过"))
+        if "max_hand_object_penetration_m" in diagnostics:
+            label = "软阈值" if summary["success_criterion"].endswith("v2") else "允许"
+            lines.append(f"手物压入：{diagnostics['max_hand_object_penetration_m'] * 1000:.3f} mm"
+                         f" / {label} {diagnostics['hand_object_allowance_m'] * 1000:.3f} mm")
+        if "max_hand_hand_penetration_m" in diagnostics:
+            lines.append(f"手部自穿透：{diagnostics['max_hand_hand_penetration_m'] * 1000:.3f} mm")
+    elif summary.get("success_criterion") == "projected_template_geometry_v1":
+        lines.append("几何验收：" + ("通过" if summary.get("task_success") else "未通过"))
+    elif summary.get("native_evaluated") or "task_success" in summary:
+        lines.append("原生物理评测：" + ("通过" if summary.get("task_success") else "未通过")
+                     if summary.get("native_evaluated", True) else "原生物理评测：未运行")
+    if summary.get("optimization_seconds") is not None:
+        lines.append(f"优化耗时：{summary['optimization_seconds']:.2f} s")
+    return "\n\n".join(lines)
+
+
+def load_patch_coverage(row, template_file):
+    """Metric-only batches may store sidecars beside a separate summary."""
+    explicit = row.get("patch_coverage")
+    path = row["batch"] / explicit if explicit else template_file.with_name("patch_contact_coverage.json")
+    return json.loads(path.read_text()) if explicit or path.is_file() else None
 
 
 def primary_primitive_rows(rows):
@@ -70,6 +145,13 @@ def preferred_batch_rows(rows, primary, fallback=None):
     """Replace a historic case as soon as its recomputation is recorded, even if failed."""
     selected = {}
     primary_ids={r.get('case_id',r['name']) for r in rows if r['batch'].name==primary}
+    # A changed size grid replaces a whole type, even for a partial preview.
+    # Otherwise historical type12 s04=1x can be mixed with new s04=1.5x.
+    policies={}
+    for row in rows:
+        if row['batch'].name==primary:
+            key=(row.get('task'),row.get('hand'),row.get('template'))
+            policies.setdefault(key,set()).add(row.get('primitive',{}).get('size_policy_version',2))
     for batch in (fallback, primary):
         if batch is None:
             continue
@@ -77,6 +159,8 @@ def preferred_batch_rows(rows, primary, fallback=None):
             if row["batch"].name == batch:
                 case_id=row.get('case_id',row['name'])
                 if batch==fallback and case_id in primary_ids:continue
+                key=(row.get('task'),row.get('hand'),row.get('template'))
+                if batch==fallback and key in policies and row.get('primitive',{}).get('size_policy_version',2) not in policies[key]:continue
                 selected[(case_id,row.get('phase'))] = row
     return list(selected.values())
 
@@ -241,27 +325,30 @@ def web(config):
     import trimesh
     from scipy.spatial.transform import Rotation
 
+    final_only = config.visualization.get("final_only", False)
     server = viser.ViserServer(port=int(config.visualization.get("port", 8081)))
     server.scene.world_axes.visible = False
 
     @server.on_client_connect
     def connect(client):
         client.scene.set_up_direction("+z")
-        method = client.gui.add_dropdown("方法", ("全部", "cem", "mppi", "scsp", "dexforge", "contactaware", "graspadmm", "graspadmm_mppi"))
+        method = client.gui.add_dropdown("方法", ("全部", "cem", "mppi", "scsp", "dexforge", "contactaware", "graspadmm", "graspadmm_mppi"), visible=not final_only)
         task = client.gui.add_dropdown("任务", ("全部", "grasp", "dex", "humanoid"),
-            initial_value=config.visualization.get("task", "全部"))
+            initial_value=config.visualization.get("task", "全部"), visible=not final_only)
         hand = client.gui.add_dropdown("手型", ("全部", "wuji1", "wuji2"),
-            initial_value=config.visualization.get("hand", "全部"))
+            initial_value=config.visualization.get("hand", "全部"), visible=not final_only)
         grasp = client.gui.add_dropdown("抓型", ("全部",))
-        stage = client.gui.add_dropdown("阶段", ("全部", "接触建立", "静止保持", "MPPI轨迹", "CA失败预览", "失败信息", "GraspADMM评测"))
-        size = client.gui.add_dropdown("尺寸倍率", ("全部",), initial_value="全部")
+        stage = client.gui.add_dropdown("阶段", ("全部", "接触建立", "静止保持", "MPPI轨迹", "CA失败预览", "失败信息", "GraspADMM评测"), visible=not final_only)
+        size = client.gui.add_slider("尺寸倍率", min=.5, max=1.5, step=.25,
+            initial_value=1., hint="拖动选择已保存的尺寸倍率；不插值或重新求解。")
+        all_sizes = client.gui.add_checkbox("全部尺寸", initial_value=False)
         size_info = client.gui.add_markdown("")
         selection = client.gui.add_dropdown("结果", ("无结果",))
         refresh = client.gui.add_button("刷新 output")
         front = client.gui.add_button("正对手掌")
-        play = client.gui.add_button("播放 rollout", disabled=True)
-        show_palm=client.gui.add_checkbox('显示广义掌面候选',initial_value=False)
-        show_contacts=client.gui.add_checkbox('显示接触点',initial_value=True)
+        play = client.gui.add_button("播放 rollout", disabled=True, visible=not final_only)
+        show_palm=client.gui.add_checkbox('显示广义掌面候选',initial_value=False, visible=not final_only)
+        show_contacts=client.gui.add_checkbox('显示接触 patch 与投影' if final_only else '显示接触点',initial_value=True)
         playback_status = client.gui.add_markdown("")
         details = client.gui.add_markdown("选择结果查看状态、cost 与耗时。")
         state = dict(rows={}, handles=[], model=None, qs=None, data=None, busy=False, initialized=False,
@@ -334,16 +421,19 @@ def web(config):
                 state.update(handles=[], path=None, model=None, qs=None, loaded=None, playing=False)
                 play.disabled = True
                 playback_status.content = "当前筛选条件下没有保存的结果。"
-                details.content = "请选择其他抓型、尺寸或阶段。"
+                details.content = "请选择其他抓型或尺寸。" if final_only else "请选择其他抓型、尺寸或阶段。"
                 return
             try:
                 key = (row["label"], (row["batch"]/row["trajectory"]).stat().st_mtime_ns)
                 if state["loaded"] == key:
                     return
-                model, qs = load_case(row["batch"], row)
+                model, qs = load_case(row["batch"], row, final_only=final_only)
                 with np.load(row["batch"]/row["trajectory"], allow_pickle=False) as values:
                     times = values["time"].copy() if "time" in values else np.arange(len(qs))*row.get("dt", 1/30)
                     contacts={key:values[key].copy() if key in values else None for key in ('contact_points','contact_normal_force','contact_counts')}
+                if final_only:
+                    times = np.array([0.])
+                    contacts = {key: value[-1:] if value is not None else None for key, value in contacts.items()}
                 playback_index(times, 0.)
                 for _,handle,_ in state['points']:handle.remove()
                 if state['actual_contact_handle'] is not None:state['actual_contact_handle'].remove()
@@ -395,6 +485,50 @@ def web(config):
                         color=tuple((model.geom_rgba[g, :3] * 255).astype(int)),
                     )
                     state["handles"].append((g, handle))
+                template_file = row["batch"] / Path(row["trajectory"]).parent / "template_contacts.json"
+                patch_coverage = load_patch_coverage(row, template_file) if final_only else None
+                if patch_coverage is not None:
+                    projections = []
+                    for i, patch in enumerate(patch_coverage["patches"]):
+                        body = hand_body_id(model, patch["body"])
+                        if body < 0:
+                            raise ValueError(f"Missing contact patch body: {patch['body']}")
+                        if patch["local_points"]:
+                            handle = client.scene.add_point_cloud(f'/guidance/patch/{i}',
+                                points=np.asarray(patch["local_points"], dtype=np.float32),
+                                colors=(80,200,120) if patch["fitted"] else (240,150,40),
+                                point_size=.0012, visible=show_contacts.value)
+                            state['points'].append((body, handle, 'contact'))
+                        witness = patch.get("witness")
+                        if witness is not None and witness["fitted"]:
+                            handle = client.scene.add_point_cloud(f'/guidance/patch_contact/{i}',
+                                points=np.asarray([witness["local_point"]], dtype=np.float32),
+                                colors=(30,255,80), point_size=.003, visible=show_contacts.value)
+                            state['points'].append((body, handle, 'contact'))
+                            projections.append(witness["projected_point"])
+                    if projections:
+                        handle = client.scene.add_point_cloud('/guidance/patch_projections',
+                            points=np.asarray(projections, dtype=np.float32), colors=(40,160,255),
+                            point_size=.002, visible=show_contacts.value)
+                        state['points'].append((0, handle, 'contact'))
+                elif final_only and template_file.is_file():
+                    template = json.loads(template_file.read_text())
+                    names = np.asarray(template["body_names"])
+                    local = np.asarray(template["local_points"], dtype=np.float32)
+                    for name in dict.fromkeys(names):
+                        body = hand_body_id(model, str(name))
+                        if body >= 0:
+                            handle = client.scene.add_point_cloud(f'/guidance/template/{body}',
+                                points=local[names == name], colors=(255,120,30), point_size=.003,
+                                visible=show_contacts.value)
+                            state['points'].append((body, handle, 'contact'))
+                    projection_file = template_file.with_name("projection_force_closure.json")
+                    if projection_file.is_file():
+                        projection = json.loads(projection_file.read_text())
+                        handle = client.scene.add_point_cloud('/guidance/projections',
+                            points=np.asarray(projection["projected_points"], dtype=np.float32),
+                            colors=(40,160,255), point_size=.002, visible=show_contacts.value)
+                        state['points'].append((0, handle, 'contact'))
                 if row.get('seed_source'):
                     with np.load(Path(row['seed_source'])/'spider_seed.npz',allow_pickle=False) as seed:
                         bodies=seed['palm_bodies'];local=seed['palm_local']
@@ -423,10 +557,21 @@ def web(config):
                 if row.get('time_kind')=='optimization_iteration':
                     playback_status.content=f'固定物体的接触建立：{len(qs)} 个优化记录；橙色为原生几何接触点。'
                     play.label='播放接触建立'
+                if final_only:
+                    playback_status.content = ("绿色：已贴合 patch；亮绿大点：内部接触；橙色：未贴合 patch；蓝色：接触的物面投影。手部边界/尖锐棱边内缩 1 mm。"
+                        if patch_coverage is not None else "橙色：手部模板接触；蓝色：物面投影。" if template_file.is_file() else "最终优化姿态。")
                 axis = p.get("size_axis", "radius") if p else "radius"
                 axis_label = {"thickness": "厚度", "height": "长度", "radius": "半径"}.get(axis, axis)
                 scale_value = size_scale(row)
-                size_info.content = (f"**{p['kind']} · {axis_label} {scale_value if scale_value is not None else 1.:g}×** · 半径 {p['radius_m']*1000:.2f} mm · 长度/厚度 {p['height_m']*1000:.2f} mm" if p else "")
+                if p:
+                    radius_mm = p['radius_m']*1000
+                    radius_text = f'{radius_mm:.3f}' if radius_mm < 1. else f'{radius_mm:.2f}'
+                    dimensions = (f"板面 {p['dimensions_m'][0]*1000:g}×{p['dimensions_m'][1]*1000:g} mm · 厚度 {p['height_m']*1000:.2f} mm"
+                        if p['kind'] in ('plate', 'cuboid') and p.get('dimensions_m') else
+                        f"半径 {radius_text} mm · 长度/厚度 {p['height_m']*1000:.2f} mm")
+                    size_info.content = f"**{p['kind']} · {axis_label} {scale_value if scale_value is not None else 1.:g}×** · {dimensions}"
+                else:
+                    size_info.content = ''
                 if config.visualization.get("fallback_batch"):
                     size_info.content += ("\n\n当前约束重算结果" if row["batch"].name == config.visualization.get("batch")
                                           else "\n\n历史结果（等待该尺寸重算）")
@@ -442,7 +587,7 @@ def web(config):
                 else:
                     focus_hand()
                 summary = row["batch"] / row["summary"]
-                details.content = "**"+row.get("stage", "结果")+"**\n\n```json\n" + summary.read_text() + "\n```"
+                details.content = final_summary(json.loads(summary.read_text())) if final_only else "**"+row.get("stage", "结果")+"**\n\n```json\n" + summary.read_text() + "\n```"
             except Exception as exc:
                 details.content = f"加载失败：{exc}"
 
@@ -456,6 +601,10 @@ def web(config):
                 rows = preferred_batch_rows(rows, selected_batch, config.visualization.get("fallback_batch"))
             if config.visualization.get("primary_shape_only", True):
                 rows = primary_primitive_rows(rows)
+            if final_only:
+                rows = final_result_rows(rows)
+                if selected_batch:
+                    rows = [dict(row, label=row["name"]) for row in rows]
             types = sorted(
                 {r.get("template", r["name"]) for r in rows if r["task"] == "grasp"},
                 key=lambda name: (int(name.partition("_")[0]) if name.partition("_")[0].isdigit() else 10000, name)
@@ -463,26 +612,27 @@ def web(config):
             state["busy"] = True
             if grasp.options != ("全部", *types):
                 grasp.options = ("全部", *types)
-            preferred = next((r for r in rows if r.get("case_id") == config.visualization.get("initial_case") and r.get('phase')!='acquisition'), None)
-            if preferred is None:preferred=next((r for r in rows if r.get('case_id')==config.visualization.get('initial_case')),None)
+            preferred = next((r for r in rows if r.get("case_id", r["name"]) == config.visualization.get("initial_case") and r.get('phase')!='acquisition'), None)
+            if preferred is None:preferred=next((r for r in rows if r.get('case_id', r['name'])==config.visualization.get('initial_case')),None)
             if not state["initialized"] and preferred is not None:
                 grasp.value = preferred.get("template", preferred["name"])
             rows = filter_rows(rows, method.value, task.value, hand.value, grasp.value)
             scales = sorted({size_scale(r) for r in rows if size_scale(r) is not None})
             state["scales"] = scales
-            size.disabled = len(scales) < 2
-            choices = ("全部", *(f"{s:g}×" for s in scales))
             previous_size = size.value
-            if size.options != choices:
-                size.options = choices
-            if not state["initialized"] and preferred is not None and size_scale(preferred) is not None:
-                size.value = f"{size_scale(preferred):g}×"
-            elif previous_size in choices:
-                size.value = previous_size
-            else:
-                size.value = "全部"
+            size.disabled = len(scales) < 2 or all_sizes.value
+            if final_only:
+                size.visible = len(scales) > 1
+                all_sizes.visible = len(scales) > 1
+            if scales:
+                size.min = scales[0]
+                size.max = scales[-1] if len(scales) > 1 else scales[0]+1.
+                size.step = min(np.diff(scales)) if len(scales) > 1 else .25
+                if not state["initialized"] and preferred is not None and size_scale(preferred) is not None:
+                    previous_size = size_scale(preferred)
+                size.value = nearest_size(scales, previous_size)
             rows = filter_rows(rows, stage=stage.value,
-                size=size.value)
+                size="全部" if all_sizes.value or not scales else f"{size.value:g}×")
             state["rows"] = {r["label"]: r for r in rows}
             previous = selection.value
             selection.options = tuple(state["rows"]) or ("无结果",)
@@ -490,8 +640,8 @@ def web(config):
                 selection.value = previous
             elif not state["initialized"]:
                 preferred = config.visualization.get("initial_case")
-                choice = next((label for label, row in state["rows"].items() if row.get("case_id") == preferred and row.get('phase')!='acquisition'), None)
-                if choice is None:choice=next((label for label,row in state['rows'].items() if row.get('case_id')==preferred),None)
+                choice = next((label for label, row in state["rows"].items() if row.get("case_id", row["name"]) == preferred and row.get('phase')!='acquisition'), None)
+                if choice is None:choice=next((label for label,row in state['rows'].items() if row.get('case_id', row['name'])==preferred),None)
                 if choice:
                     selection.value = choice
                 state["initialized"] = True
@@ -527,6 +677,7 @@ def web(config):
         for control in (method, task, hand, grasp, stage):
             control.on_update(update)
         size.on_update(size_changed)
+        all_sizes.on_update(size_changed)
         refresh.on_click(update)
         front.on_click(focus_hand)
         selection.on_update(show)

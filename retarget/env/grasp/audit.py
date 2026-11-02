@@ -15,6 +15,11 @@ def query_surface(
     i = wp.tid()
     p = points[i]
     hit = wp.mesh_query_point(mesh, p, 1.0e6)
+    if not hit.result:
+        projected[i] = wp.vec3(wp.nan)
+        normals[i] = wp.vec3(wp.nan)
+        distance[i] = wp.nan
+        return
     q = wp.mesh_eval_position(mesh, hit.face, hit.u, hit.v)
     # Warp's mesh_get_point takes a face-vertex index, not a vertex ID.
     a = wp.mesh_get_point(mesh, 3 * hit.face)
@@ -53,6 +58,6 @@ class GraspAudit:
             inputs=[self.mesh.id, source],
             outputs=[output, normals, distance],
             device=self.device,
-            stream=wp.stream_from_torch(points.device),
+            stream=wp.stream_from_torch(points.device) if points.is_cuda else None,
         )
         return wp.to_torch(output), wp.to_torch(normals), wp.to_torch(distance)

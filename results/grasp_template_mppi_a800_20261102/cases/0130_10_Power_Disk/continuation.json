@@ -1,0 +1,99 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "parent_case": "0129_10_Power_Disk",
+  "parent_entry": {
+    "task": "grasp",
+    "name": "0129_10_Power_Disk",
+    "method": "mppi",
+    "objective": "template_comfree_soft_contact_v4",
+    "hand": "wuji2",
+    "template": "10_Power_Disk",
+    "primitive": {
+      "kind": "disk",
+      "radius_m": 0.045500000000000006,
+      "height_m": 0.015,
+      "radial_scale": 1.1375000000000002,
+      "axial_scale": 1.0,
+      "size_scale": 1.1375000000000002,
+      "size_axis": "radius",
+      "dimensions_m": [
+        0.09100000000000001,
+        0.09100000000000001,
+        0.015
+      ],
+      "size_policy_version": 4,
+      "sources": {
+        "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+        "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+        "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+      },
+      "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+    },
+    "seed": 130161,
+    "model": "results/grasp_template_mppi_a800_20261102/cases/0129_10_Power_Disk/scene.xml",
+    "trajectory": "results/grasp_template_mppi_a800_20261102/cases/0129_10_Power_Disk/trajectory.npz",
+    "summary": "results/grasp_template_mppi_a800_20261102/cases/0129_10_Power_Disk/summary.json",
+    "dt": 1.0,
+    "phase": "refinement",
+    "task_success": true,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "continuation_parent": "0128_10_Power_Disk",
+    "continuation": "results/grasp_template_mppi_a800_20261102/cases/0129_10_Power_Disk/continuation.json"
+  },
+  "parent_primitive": {
+    "kind": "disk",
+    "radius_m": 0.045500000000000006,
+    "height_m": 0.015,
+    "radial_scale": 1.1375000000000002,
+    "axial_scale": 1.0,
+    "size_scale": 1.1375000000000002,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.09100000000000001,
+      0.09100000000000001,
+      0.015
+    ],
+    "size_policy_version": 4,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "primitive": {
+    "kind": "disk",
+    "radius_m": 0.046000000000000006,
+    "height_m": 0.015,
+    "radial_scale": 1.1500000000000001,
+    "axial_scale": 1.0,
+    "size_scale": 1.1500000000000001,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.09200000000000001,
+      0.09200000000000001,
+      0.015
+    ],
+    "size_policy_version": 4,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "parent_reference": "results/grasp_template_mppi_a800_20261102/cases/0130_10_Power_Disk/reference/reference.json",
+  "reference_sha256": "d890c2f800252f8088039ead029a4c62261387a1989581edbea7fc91003bd8b1",
+  "motion": {
+    "object_translation_m": 0.0022699117768150965,
+    "object_rotation_deg": 2.0558877112645875,
+    "max_joint_change_deg": 7.865147244377273
+  },
+  "selected_attempt": 2,
+  "limits": {
+    "translation_m": 0.003,
+    "rotation_deg": 3.0,
+    "joint_deg": 16.0
+  },
+  "seconds": 32.868819719180465
+}

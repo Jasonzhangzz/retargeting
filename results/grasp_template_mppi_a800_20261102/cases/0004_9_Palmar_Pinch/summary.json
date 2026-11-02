@@ -1,0 +1,1310 @@
+{
+  "method": "mppi",
+  "objective": "template_comfree_soft_contact_v4",
+  "template": "9_Palmar_Pinch",
+  "hand": "wuji2",
+  "primitive": {
+    "kind": "cylinder",
+    "radius_m": 0.013499999999999998,
+    "height_m": 0.12,
+    "radial_scale": 0.75,
+    "axial_scale": 1.0,
+    "size_scale": 0.75,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.026999999999999996,
+      0.026999999999999996,
+      0.12
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "seed": 4036,
+  "state": "completed",
+  "solver_completed": true,
+  "task_success": true,
+  "native_evaluated": false,
+  "input_policy": "template_1x_object_in_wrist_v1",
+  "admm_reference_used": false,
+  "success_criterion": "projected_soft_contact_closure_v2",
+  "geometry_diagnostics": {
+    "objective": "template_comfree_soft_contact_v4",
+    "cost": 0.6911849975585938,
+    "cost_parts": {
+      "distance": 0.0,
+      "normal": 0.2095341980457306,
+      "required_group": 0.1995563805103302,
+      "force_contact": 0.2535629868507385,
+      "closure": 0.0016748295165598392,
+      "penetration": 0.0,
+      "soft_penetration": 0.21980883181095123,
+      "pose": 0.3515734374523163,
+      "antipodal": 0.002055729739367962,
+      "articulation": 0.0,
+      "continuity": 0.0028200026135891676
+    },
+    "search_dimension": 26,
+    "preload_dimension": 2,
+    "contact_count": 2,
+    "fk_backend": "mujoco_warp_cuda_batched",
+    "side_contact_slots": [
+      0,
+      1
+    ],
+    "side_contact_policy": "all_specified_slots",
+    "effective_antipodal_weight": 1.0,
+    "grasp_posture_bounds": {},
+    "articulation_policy": {
+      "policy": "grasp_articulation_and_lateral_order_v2",
+      "active_fingers": [
+        1,
+        2
+      ],
+      "idle_fingers": [
+        3,
+        4,
+        5
+      ],
+      "idle_policy": "broad folded/open band; no fixed angles",
+      "order_margin_m": 0.004,
+      "order_scope": "adjacent index/middle/ring/pinky PIP, DIP and tips in palm frame",
+      "reference_1x_pose_used": false,
+      "template_thumb_extension_envelope_used": true
+    },
+    "max_finger_order_violation_m": 0.0,
+    "optimization_joint_lower_limits": [
+      -2.0,
+      -2.0,
+      -2.0,
+      -6.2831854820251465,
+      -6.2831854820251465,
+      -6.2831854820251465,
+      -1.1869990825653076,
+      -1.4839990139007568,
+      -0.4610340893268585,
+      -0.19742241501808167,
+      -0.0872664600610733,
+      -0.6979990005493164,
+      0.0,
+      0.0,
+      -0.0872664600610733,
+      -0.1745329201221466,
+      0.0,
+      0.0,
+      -0.0872664600610733,
+      -0.1745329201221466,
+      0.0,
+      0.0,
+      -0.0872664600610733,
+      -0.1745329201221466,
+      0.0,
+      0.0
+    ],
+    "optimization_joint_upper_limits": [
+      2.0,
+      2.0,
+      2.0,
+      6.2831854820251465,
+      6.2831854820251465,
+      6.2831854820251465,
+      1.2909990549087524,
+      0.6979990005493164,
+      1.569999098777771,
+      1.569999098777771,
+      1.569999098777771,
+      0.6979990005493164,
+      1.7453292608261108,
+      1.569999098777771,
+      1.569999098777771,
+      0.1745329201221466,
+      1.7453292608261108,
+      1.569999098777771,
+      1.569999098777771,
+      0.1745329201221466,
+      1.7453292608261108,
+      1.569999098777771,
+      1.569999098777771,
+      0.1745329201221466,
+      1.7453292608261108,
+      1.569999098777771
+    ],
+    "hand_object_within_soft_allowance": true,
+    "hand_hand_penetration_accepted": true,
+    "soft_contact_success": true,
+    "geometry_success": true,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "coverage": 1.0,
+    "contact_model": "ComFree compliant projected soft-finger response with softly penalized hand-object compression",
+    "hand_object_allowance_m": 0.002,
+    "hand_hand_penetration_tolerance_m": 1e-05,
+    "max_hand_object_excess_m": 0.0,
+    "coverage_required_for_success": false,
+    "hand_object_depth_required_for_success": false,
+    "selected_slots": [
+      0,
+      1
+    ],
+    "fitted": [
+      true,
+      true
+    ],
+    "required_groups_fitted": [
+      true,
+      true
+    ],
+    "fitted_force_fraction": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.9999999403953552,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "hand_points": [
+      [
+        0.01292731799185276,
+        -0.0016345875337719917,
+        -0.004588404670357704
+      ],
+      [
+        -0.012678146362304688,
+        1.5828758478164673e-05,
+        -0.004623803310096264
+      ]
+    ],
+    "hand_normals": [
+      [
+        -0.9602794647216797,
+        0.2432042360305786,
+        0.1368032991886139
+      ],
+      [
+        0.9813356995582581,
+        0.1045106053352356,
+        0.1614251732826233
+      ]
+    ],
+    "projected_points": [
+      [
+        0.013390873558819294,
+        -0.0016649548197165132,
+        -0.004588005132973194
+      ],
+      [
+        -0.013495451770722866,
+        6.93981783115305e-05,
+        -0.004623805172741413
+      ]
+    ],
+    "object_normals": [
+      [
+        0.9978588819503784,
+        -0.06540358066558838,
+        0.0
+      ],
+      [
+        -0.9978588819503784,
+        0.06540358066558838,
+        -2.963229661645528e-11
+      ]
+    ],
+    "signed_distance_m": [
+      -0.0004645493463613093,
+      -0.0008190590888261795
+    ],
+    "normal_error_deg": [
+      13.061040878295898,
+      13.492816925048828
+    ],
+    "max_hand_object_penetration_m": 0.0009376754751428962,
+    "max_hand_hand_penetration_m": 0.0,
+    "nominal_preloads_n": [
+      0.0,
+      0.0
+    ],
+    "response_row_forces_n": [
+      [
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      [
+        [
+          0.16631804406642914,
+          0.172990620136261,
+          0.11407746374607086,
+          0.3964356780052185,
+          0.2589254379272461,
+          0.2738032937049866
+        ],
+        [
+          0.10233338922262192,
+          0.0,
+          0.28235822916030884,
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      [
+        [
+          0.0,
+          0.8364708423614502,
+          0.020806020125746727,
+          0.0,
+          0.0,
+          0.09028413146734238
+        ],
+        [
+          0.8266271948814392,
+          0.0,
+          0.013000629842281342,
+          0.03380665183067322,
+          0.13953010737895966,
+          0.0
+        ]
+      ],
+      [
+        [
+          0.0,
+          0.0014717443846166134,
+          0.8352270126342773,
+          0.0,
+          0.018410012125968933,
+          0.0
+        ],
+        [
+          0.00031648154254071414,
+          0.001788225956261158,
+          0.8314395546913147,
+          0.0,
+          0.0,
+          0.021564491093158722
+        ]
+      ],
+      [
+        [
+          0.0,
+          0.0030674762092530727,
+          0.0,
+          0.24487705528736115,
+          1.5343117713928223,
+          0.0
+        ],
+        [
+          0.0,
+          0.0030674762092530727,
+          0.24487705528736115,
+          0.0,
+          0.0,
+          1.5343117713928223
+        ]
+      ],
+      [
+        [
+          0.002239094115793705,
+          0.008948083035647869,
+          0.0,
+          3.787663459777832,
+          0.0,
+          0.09918706864118576
+        ],
+        [
+          0.0024524908512830734,
+          0.009161479771137238,
+          3.787663459777832,
+          0.0,
+          0.09876027703285217,
+          0.0
+        ]
+      ],
+      [
+        [
+          0.0,
+          3.8110156059265137,
+          0.008458706550300121,
+          0.0,
+          0.002043001353740692,
+          0.0
+        ],
+        [
+          0.0,
+          3.8110156059265137,
+          0.0,
+          0.008458706550300121,
+          0.0,
+          0.0
+        ]
+      ],
+      [
+        [
+          0.0,
+          0.0,
+          0.28512996435165405,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.10741139948368073,
+          0.21261262893676758,
+          0.09254354238510132,
+          0.3785918951034546,
+          0.2377634346485138,
+          0.2526410222053528
+        ]
+      ],
+      [
+        [
+          0.8331074714660645,
+          0.0,
+          0.01097917091101408,
+          0.027457445859909058,
+          0.13507132232189178,
+          0.0
+        ],
+        [
+          0.0,
+          0.8299906253814697,
+          0.016478274017572403,
+          0.0,
+          0.0,
+          0.09474292397499084
+        ]
+      ],
+      [
+        [
+          0.0002514591906219721,
+          0.0017230914672836661,
+          0.0,
+          0.831439733505249,
+          0.0,
+          0.02162938565015793
+        ],
+        [
+          0.0,
+          0.001471632276661694,
+          0.0,
+          0.8352268934249878,
+          0.018345119431614876,
+          0.0
+        ]
+      ],
+      [
+        [
+          0.0,
+          0.0030811165925115347,
+          0.2527886629104614,
+          0.0,
+          0.0,
+          1.5343118906021118
+        ],
+        [
+          0.0,
+          0.0030811165925115347,
+          0.0,
+          0.2527886629104614,
+          1.5343118906021118,
+          0.0
+        ]
+      ],
+      [
+        [
+          0.0,
+          0.006730714812874794,
+          3.8049564361572266,
+          0.0,
+          0.09897366911172867,
+          0.0
+        ],
+        [
+          0.0,
+          0.006730714812874794,
+          0.0,
+          3.8049564361572266,
+          0.0,
+          0.09897366911172867
+        ]
+      ],
+      [
+        [
+          3.7978367805480957,
+          0.0,
+          0.013739876449108124,
+          0.005241431761533022,
+          0.00930246151983738,
+          0.011346017010509968
+        ],
+        [
+          3.7978367805480957,
+          0.0,
+          0.005424192175269127,
+          0.013922637328505516,
+          0.011162684299051762,
+          0.00912027433514595
+        ]
+      ]
+    ],
+    "response_normal_forces_n": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        1.3825504779815674,
+        0.38469162583351135
+      ],
+      [
+        0.9475609660148621,
+        1.0129644870758057
+      ],
+      [
+        0.8551087975502014,
+        0.8551087379455566
+      ],
+      [
+        1.7822563648223877,
+        1.7822563648223877
+      ],
+      [
+        3.8980376720428467,
+        3.898037910461426
+      ],
+      [
+        3.8215172290802,
+        3.819474220275879
+      ],
+      [
+        0.28512996435165405,
+        1.2815639972686768
+      ],
+      [
+        1.006615400314331,
+        0.9412118196487427
+      ],
+      [
+        0.8550436496734619,
+        0.8550436496734619
+      ],
+      [
+        1.7901816368103027,
+        1.7901816368103027
+      ],
+      [
+        3.910660982131958,
+        3.910660982131958
+      ],
+      [
+        3.8374664783477783,
+        3.8374667167663574
+      ]
+    ],
+    "max_response_normal_force_n": 3.910660982131958,
+    "response_contact_forces_n": [
+      [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      [
+        [
+          -1.3798521757125854,
+          0.08642877638339996,
+          0.1694149374961853
+        ],
+        [
+          0.37985217571258545,
+          -0.08642878383398056,
+          -0.1694149374961853
+        ]
+      ],
+      [
+        [
+          -0.9783570766448975,
+          -0.4388340711593628,
+          -0.012483612634241581
+        ],
+        [
+          0.9783570766448975,
+          -0.5611659288406372,
+          0.012483613565564156
+        ]
+      ],
+      [
+        [
+          -0.8533356189727783,
+          0.055046018213033676,
+          -0.5011362433433533
+        ],
+        [
+          0.8533356189727783,
+          -0.055046018213033676,
+          -0.49886375665664673
+        ]
+      ],
+      [
+        [
+          -1.7785606384277344,
+          0.1147293969988823,
+          0.14692623913288116
+        ],
+        [
+          1.7785606384277344,
+          -0.1147293969988823,
+          -0.14692623913288116
+        ]
+      ],
+      [
+        [
+          -3.8899548053741455,
+          0.2509288489818573,
+          2.2725982666015625
+        ],
+        [
+          3.8899548053741455,
+          -0.2509288489818573,
+          -2.2725982666015625
+        ]
+      ],
+      [
+        [
+          -3.9628875255584717,
+          -2.0317728519439697,
+          -0.005075224209576845
+        ],
+        [
+          3.960848808288574,
+          2.0319063663482666,
+          0.005075224209576845
+        ]
+      ],
+      [
+        [
+          -0.2845194637775421,
+          0.01864852011203766,
+          -0.17107798159122467
+        ],
+        [
+          1.2829482555389404,
+          -0.020833279937505722,
+          0.17162902653217316
+        ]
+      ],
+      [
+        [
+          -0.971767246723175,
+          0.5646304488182068,
+          0.009886965155601501
+        ],
+        [
+          0.9717671871185303,
+          0.4353695213794708,
+          -0.009886965155601501
+        ]
+      ],
+      [
+        [
+          -0.8532706499099731,
+          0.055041827261447906,
+          0.4988638460636139
+        ],
+        [
+          0.8532706499099731,
+          -0.055041827261447906,
+          0.5011361837387085
+        ]
+      ],
+      [
+        [
+          -1.786469578742981,
+          0.11523958295583725,
+          -0.15167319774627686
+        ],
+        [
+          1.786469578742981,
+          -0.11523958295583725,
+          0.15167319774627686
+        ]
+      ],
+      [
+        [
+          -3.9025518894195557,
+          0.2517414391040802,
+          -2.2829740047454834
+        ],
+        [
+          3.9025518894195557,
+          -0.2517414391040802,
+          2.2829740047454834
+        ]
+      ],
+      [
+        [
+          -3.6802148818969727,
+          2.5248072147369385,
+          -0.005099066533148289
+        ],
+        [
+          3.6802146434783936,
+          -2.5248072147369385,
+          0.005099067464470863
+        ]
+      ]
+    ],
+    "response_intrinsic_torques_nm": [
+      [
+        [
+          -0.0,
+          0.0,
+          -0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      ],
+      [
+        [
+          0.0002969199849758297,
+          -1.9461300325929187e-05,
+          0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      ],
+      [
+        [
+          0.0018018163973465562,
+          -0.00011809810530394316,
+          0.0
+        ],
+        [
+          0.0027846272569149733,
+          -0.0001825153740355745,
+          8.269195061767071e-14
+        ]
+      ],
+      [
+        [
+          -0.00036741187795996666,
+          2.408161344646942e-05,
+          -0.0
+        ],
+        [
+          -0.00043036637362092733,
+          2.8207898139953613e-05,
+          -1.2780107647072242e-14
+        ]
+      ],
+      [
+        [
+          -0.030620532110333443,
+          0.0020069896709173918,
+          -0.0
+        ],
+        [
+          -0.030620532110333443,
+          0.0020069896709173918,
+          -9.093036111400277e-13
+        ]
+      ],
+      [
+        [
+          0.0019794937688857317,
+          -0.00012974378478247672,
+          0.0
+        ],
+        [
+          0.001970976358279586,
+          -0.00012918551510665566,
+          5.852987501131848e-14
+        ]
+      ],
+      [
+        [
+          -4.077253834111616e-05,
+          2.672391929081641e-06,
+          -0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          0.0
+        ]
+      ],
+      [
+        [
+          -0.0,
+          0.0,
+          -0.0
+        ],
+        [
+          -0.00029691465897485614,
+          1.9460949260974303e-05,
+          -8.817141183565646e-15
+        ]
+      ],
+      [
+        [
+          -0.002695642411708832,
+          0.00017668295186012983,
+          -0.0
+        ],
+        [
+          -0.0018908013589680195,
+          0.00012393052747938782,
+          -5.6149007698121783e-14
+        ]
+      ],
+      [
+        [
+          0.0004316614649724215,
+          -2.8292784918448888e-05,
+          0.0
+        ],
+        [
+          0.0003661168157123029,
+          -2.399673030595295e-05,
+          1.08721600041513e-14
+        ]
+      ],
+      [
+        [
+          0.030620533972978592,
+          -0.0020069896709173918,
+          0.0
+        ],
+        [
+          0.030620533972978592,
+          -0.0020069896709173918,
+          9.093036653501363e-13
+        ]
+      ],
+      [
+        [
+          -0.0019752350635826588,
+          0.00012946463539265096,
+          -0.0
+        ],
+        [
+          -0.0019752350635826588,
+          0.00012946463539265096,
+          -5.865634041847534e-14
+        ]
+      ],
+      [
+        [
+          4.078359779668972e-05,
+          -2.673116796358954e-06,
+          0.0
+        ],
+        [
+          4.0760736737865955e-05,
+          -2.6716184038377833e-06,
+          1.2104258576150378e-15
+        ]
+      ]
+    ],
+    "response_torsional_torques_nm": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.0002975570678245276,
+        0.0
+      ],
+      [
+        -0.0018056825501844287,
+        0.002790602156892419
+      ],
+      [
+        0.0003682002134155482,
+        -0.00043128980905748904
+      ],
+      [
+        0.030686235055327415,
+        -0.030686235055327415
+      ],
+      [
+        -0.0019837412983179092,
+        0.0019752054940909147
+      ],
+      [
+        4.0860020817490295e-05,
+        0.0
+      ],
+      [
+        0.0,
+        -0.0002975517709273845
+      ],
+      [
+        0.002701426390558481,
+        -0.0018948584329336882
+      ],
+      [
+        -0.0004325876652728766,
+        0.0003669023863039911
+      ],
+      [
+        -0.030686236917972565,
+        0.030686236917972565
+      ],
+      [
+        0.00197947327978909,
+        -0.00197947327978909
+      ],
+      [
+        -4.08711057389155e-05,
+        4.084819374838844e-05
+      ]
+    ],
+    "max_response_torsional_torque_nm": 0.030686236917972565,
+    "torsional_friction_m": 0.02,
+    "intrinsic_torque_convention": "free contact moment only; excludes moment arm cross contact force",
+    "scenario_residuals": [
+      [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        1.415467604237719e-10,
+        1.365362128913361e-10,
+        1.3731561721019858e-10,
+        4.725609487055138e-11,
+        7.778644395273204e-10,
+        -6.25674123622133e-10
+      ],
+      [
+        8.632214387738202e-11,
+        -5.6467942301241525e-12,
+        1.474116488597854e-11,
+        -8.324721662879286e-13,
+        -9.68112135596444e-12,
+        -1.3643371155058759e-11
+      ],
+      [
+        -5.183469620325884e-14,
+        1.1256529562631012e-12,
+        1.0394029969519185e-16,
+        4.614046639336497e-14,
+        6.989624265658911e-13,
+        3.18361678165735e-12
+      ],
+      [
+        2.340517645145479e-13,
+        -9.337811556972553e-13,
+        5.296047346330102e-13,
+        8.866960061633118e-16,
+        -2.718496551796395e-15,
+        1.7755783822404059e-12
+      ],
+      [
+        -6.161362110616853e-13,
+        2.0518476240988237e-12,
+        -1.0545226801148e-12,
+        -7.28856265706096e-15,
+        -1.0244771170449512e-14,
+        8.84730830263969e-12
+      ],
+      [
+        -0.002038627164438367,
+        0.0001336196146439761,
+        3.885694283695118e-12,
+        0.0006729364395141602,
+        0.00010863153875106946,
+        -2.6096566216438077e-05
+      ],
+      [
+        -0.0015711779706180096,
+        -0.002184759359806776,
+        0.0005510367336682975,
+        -0.00017783069051802158,
+        -2.7738096832763404e-06,
+        -0.0005182402674108744
+      ],
+      [
+        9.429506273291323e-17,
+        -3.7955658863028505e-17,
+        5.828346442502216e-18,
+        3.358022414720271e-19,
+        2.6549589295918452e-17,
+        4.045382206791623e-18
+      ],
+      [
+        -6.00653695618375e-14,
+        5.898288042878452e-13,
+        3.166900812177567e-16,
+        9.505629383664907e-14,
+        1.4459217243661948e-12,
+        1.2192980999858882e-12
+      ],
+      [
+        -8.185595213802688e-13,
+        2.8961687648793033e-12,
+        1.5448171171092429e-12,
+        -6.785401369469382e-15,
+        -2.659633479434615e-14,
+        5.923135246166389e-12
+      ],
+      [
+        -3.330551980040841e-12,
+        1.1781874087457567e-11,
+        6.286342540268164e-12,
+        1.2961387097344765e-14,
+        -1.1074255119696008e-13,
+        2.410237634475898e-11
+      ],
+      [
+        -3.737170243779057e-16,
+        1.4019974199411912e-16,
+        -1.4761252436223553e-16,
+        3.1100353214380986e-17,
+        2.355830567757969e-17,
+        -1.7759935681449968e-16
+      ]
+    ],
+    "scenario_rms": [
+      0.0,
+      1.0277682038761782e-09,
+      8.933789819032256e-11,
+      3.449039664982223e-12,
+      2.0880363410524794e-12,
+      9.163882326579387e-12,
+      0.0021538755390793085,
+      0.002801003400236368,
+      1.0529728618136264e-16,
+      1.9844191394280397e-12,
+      6.821186410849167e-12,
+      2.7755363979364844e-11,
+      4.62788944468359e-16
+    ],
+    "closure_converged": true,
+    "projected_closure": true,
+    "certified_margin": 0.4054473042488098,
+    "valid": true,
+    "gn_objective_history": [
+      0.002962280297651887,
+      0.0016748295165598392,
+      0.0016748295165598392,
+      0.0016748295165598392,
+      0.0016748295165598392,
+      0.0016748295165598392,
+      0.0016748295165598392,
+      0.0016748295165598392,
+      0.0016748295165598392
+    ],
+    "closure_model": {
+      "model": "fixed_projection_soft_finger_comfree_static_equilibrium_v3",
+      "response_version": 3,
+      "contact_model": "coupled sliding and torsional friction pyramid",
+      "ray_count_per_contact": 6,
+      "ray_order": [
+        "+tangent_1",
+        "-tangent_1",
+        "+tangent_2",
+        "-tangent_2",
+        "+normal_spin",
+        "-normal_spin"
+      ],
+      "torsional_coefficient_units": "m; maximum intrinsic normal torque in Nm is coefficient times normal force in N",
+      "torsional_budget": "sliding and intrinsic torsion share the nonnegative-ray normal-force budget",
+      "equilibrium_state_selection": "smallest finite raw wrench residual among semismooth Newton iterates including initial state; force witness always audited",
+      "row_force_statistic": "static equilibrium response",
+      "scenario_rms_statistic": "static equilibrium wrench norm",
+      "force_effort_normalization": "mean over contacts of squared normal force / test_force_n squared",
+      "row_mass": "effective_ray_mass_approximation",
+      "optimized_variables": "one nominal normal preload per fixed template contact",
+      "scenarios": "zero external wrench, then positive and negative six-dimensional axes",
+      "force_bound": "nominal preload only; actual normal force is not bounded by it",
+      "center": [
+        6.439340522867338e-20,
+        1.2878681045734676e-19,
+        -1.0946878888874477e-18
+      ],
+      "radius_m": 0.06149999878197783,
+      "object_mass_kg": 0.1,
+      "object_inertia_kg_m2": [
+        [
+          0.00012454325150987214,
+          8.293021273888282e-40,
+          -7.84794626224457e-22
+        ],
+        [
+          8.293021273888282e-40,
+          0.00012454325150987214,
+          -2.817211478754461e-22
+        ],
+        [
+          -7.84794626224457e-22,
+          -2.817211478754461e-22,
+          9.08651374858023e-06
+        ]
+      ],
+      "scenario_names": [
+        "zero",
+        "+force_x",
+        "+force_y",
+        "+force_z",
+        "+torque_x",
+        "+torque_y",
+        "+torque_z",
+        "-force_x",
+        "-force_y",
+        "-force_z",
+        "-torque_x",
+        "-torque_y",
+        "-torque_z"
+      ],
+      "wrench_residual_units": "force / test_force_n; torque / (radius_m * test_force_n)",
+      "equilibrium_backend": "cuda_kernel",
+      "response_mode": "equilibrium",
+      "friction": 0.6,
+      "torsional_friction_m": 0.02,
+      "max_preload_n": 20.0,
+      "initial_preload_n": 2.0,
+      "test_force_n": 1.0,
+      "gn_iterations": 8,
+      "initial_damping": 0.01,
+      "timestep": 0.01,
+      "horizon": 64,
+      "tail_steps": 16,
+      "stiffness": 0.2,
+      "damping": 0.001,
+      "impedance": 0.9,
+      "certificate_tolerance": 0.05,
+      "velocity_regularization": 0.0001,
+      "displacement_regularization": 0.0001,
+      "preload_regularization": 1e-05,
+      "gn_tolerance": 1e-05,
+      "invalid_cost": 1000000.0,
+      "cuda_graph": false,
+      "equilibrium_iterations": 16,
+      "equilibrium_line_search_steps": 8,
+      "equilibrium_damping": 1e-10,
+      "equilibrium_tolerance": 1e-06,
+      "force_effort_weight": 0.0001
+    },
+    "settings": {
+      "stages": 2,
+      "final_stage_noise": 0.25,
+      "pos_noise": 0.005,
+      "rot_noise": 0.05,
+      "joint_noise": 0.1,
+      "max_pos_delta": 0.1,
+      "max_rot_delta": 1.0,
+      "contact_fraction": 0.8,
+      "contact_scale_m": 0.002,
+      "contact_tolerance_m": 0.002,
+      "normal_tolerance_deg": 30.0,
+      "outlier_weight": 0.05,
+      "distance_weight": 1.0,
+      "normal_weight": 1.0,
+      "required_group_weight": 1.0,
+      "force_contact_weight": 1.0,
+      "antipodal_weight": 0.0,
+      "type9_antipodal_weight": 1.0,
+      "type24_antipodal_weight": 1.0,
+      "antipodal_scale_m": 0.001,
+      "closure_weight": 1.0,
+      "pose_weight": 0.0,
+      "prismatic_reverse_limit_deg": 0.0,
+      "finger_order_margin_m": 0.004,
+      "finger_order_scale_m": 0.005,
+      "finger_order_weight": 1000.0,
+      "pip_flexion_cap_deg": 100.0,
+      "joint_prior_scale_rad": 0.5,
+      "penetration_scale_m": 0.001,
+      "penetration_weight": 10000.0,
+      "hand_object_allowance_m": 0.002,
+      "soft_penetration_weight": 0.1,
+      "collision_clearance_m": 0.0,
+      "collision_margin_m": 0.0,
+      "penetration_tolerance_m": 1e-05,
+      "nconmax": 256,
+      "guard_mean": true,
+      "closure": {
+        "equilibrium_backend": "cuda_kernel",
+        "response_mode": "equilibrium",
+        "friction": 0.6,
+        "torsional_friction_m": 0.02,
+        "max_preload_n": 20.0,
+        "initial_preload_n": 2.0,
+        "test_force_n": null,
+        "gn_iterations": 2,
+        "initial_damping": 0.01,
+        "timestep": 0.01,
+        "horizon": 64,
+        "tail_steps": 16,
+        "stiffness": 0.2,
+        "damping": 0.001,
+        "impedance": 0.9,
+        "certificate_tolerance": 0.05,
+        "velocity_regularization": 0.0001,
+        "displacement_regularization": 0.0001,
+        "preload_regularization": 1e-05,
+        "gn_tolerance": 1e-05,
+        "invalid_cost": 1000000.0,
+        "cuda_graph": true,
+        "equilibrium_iterations": 16,
+        "equilibrium_line_search_steps": 8,
+        "equilibrium_damping": 1e-10,
+        "equilibrium_tolerance": 1e-06,
+        "force_effort_weight": 0.0001
+      }
+    },
+    "actual_contact_required_for_projection": false,
+    "actual_object_integrated": false,
+    "acceptance": "Projected friction closure and separate self-penetration limit; hand-object compression softly penalized; coverage diagnostic only; no native physical evaluation",
+    "adjacent_motion": {
+      "object_translation_m": 0.0,
+      "object_rotation_deg": 1.2074182697257333e-06,
+      "max_joint_change_deg": 7.856825939534082
+    },
+    "adjacent_motion_limits": {
+      "translation_m": 0.0,
+      "rotation_deg": 0.0,
+      "joint_deg": 8.0
+    },
+    "adjacent_motion_valid": true,
+    "preload_polish": {
+      "performed": true,
+      "q_changed": false,
+      "optimization_gn_iterations": 2,
+      "final_gn_iterations": 8,
+      "seconds": 0.13761824183166027,
+      "certificate_preserved": false,
+      "fast_result_retained": false,
+      "before_projected_closure": true,
+      "after_projected_closure": true,
+      "before_cost": 0.6911849975585938,
+      "after_cost": 0.6911849975585938
+    },
+    "template_point_coverage": 1.0,
+    "template_point_geometry_success": true,
+    "coverage_definition": "anatomical_patch_interior_v2",
+    "required_patch_count": 2,
+    "covered_patch_count": 2,
+    "object_surface_regions": {
+      "right_finger2_link4": "cylinder_side",
+      "right_finger1_link4": "cylinder_side"
+    },
+    "required_side_finger_count": 2,
+    "covered_side_finger_count": 2,
+    "patch_coverage_file": "patch_contact_coverage.json"
+  },
+  "initialization_seconds": 5.512257162481546,
+  "initial_cost": 6.493762016296387,
+  "final_cost": 0.6911849975585938,
+  "optimization_seconds": 8.84293623175472,
+  "objective_settings": {
+    "stages": 2,
+    "final_stage_noise": 0.25,
+    "pos_noise": 0.005,
+    "rot_noise": 0.05,
+    "joint_noise": 0.1,
+    "max_pos_delta": 0.1,
+    "max_rot_delta": 1.0,
+    "contact_fraction": 0.8,
+    "contact_scale_m": 0.002,
+    "contact_tolerance_m": 0.002,
+    "normal_tolerance_deg": 30.0,
+    "outlier_weight": 0.05,
+    "distance_weight": 1.0,
+    "normal_weight": 1.0,
+    "required_group_weight": 1.0,
+    "force_contact_weight": 1.0,
+    "antipodal_weight": 0.0,
+    "type9_antipodal_weight": 1.0,
+    "type24_antipodal_weight": 1.0,
+    "antipodal_scale_m": 0.001,
+    "closure_weight": 1.0,
+    "pose_weight": 0.0,
+    "prismatic_reverse_limit_deg": 0.0,
+    "finger_order_margin_m": 0.004,
+    "finger_order_scale_m": 0.005,
+    "finger_order_weight": 1000.0,
+    "pip_flexion_cap_deg": 100.0,
+    "joint_prior_scale_rad": 0.5,
+    "penetration_scale_m": 0.001,
+    "penetration_weight": 10000.0,
+    "hand_object_allowance_m": 0.002,
+    "soft_penetration_weight": 0.1,
+    "collision_clearance_m": 0.0,
+    "collision_margin_m": 0.0,
+    "penetration_tolerance_m": 1e-05,
+    "nconmax": 256,
+    "guard_mean": true,
+    "closure": {
+      "equilibrium_backend": "cuda_kernel",
+      "response_mode": "equilibrium",
+      "friction": 0.6,
+      "torsional_friction_m": 0.02,
+      "max_preload_n": 20.0,
+      "initial_preload_n": 2.0,
+      "test_force_n": null,
+      "gn_iterations": 2,
+      "initial_damping": 0.01,
+      "timestep": 0.01,
+      "horizon": 64,
+      "tail_steps": 16,
+      "stiffness": 0.2,
+      "damping": 0.001,
+      "impedance": 0.9,
+      "certificate_tolerance": 0.05,
+      "velocity_regularization": 0.0001,
+      "displacement_regularization": 0.0001,
+      "preload_regularization": 1e-05,
+      "gn_tolerance": 1e-05,
+      "invalid_cost": 1000000.0,
+      "cuda_graph": true,
+      "equilibrium_iterations": 16,
+      "equilibrium_line_search_steps": 8,
+      "equilibrium_damping": 1e-10,
+      "equilibrium_tolerance": 1e-06,
+      "force_effort_weight": 0.0001
+    }
+  },
+  "failure_stage": null,
+  "wall_seconds": 15.35911775752902
+}

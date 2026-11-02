@@ -30,8 +30,8 @@ class WujiContactKinematics:
 
     def __init__(self, model, bodies, device):
         self.device = torch.device(device)
-        if self.device.type != "cuda":
-            raise ValueError("Template fitting requires CUDA")
+        if self.device.type not in ("cuda", "cpu"):
+            raise ValueError("Wuji kinematics requires a CPU or CUDA Torch device")
         self.dtype = torch.float64
         ids = np.array(
             [

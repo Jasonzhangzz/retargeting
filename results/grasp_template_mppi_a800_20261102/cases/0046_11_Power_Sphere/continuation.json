@@ -1,0 +1,99 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "parent_case": "0045_11_Power_Sphere",
+  "parent_entry": {
+    "task": "grasp",
+    "name": "0045_11_Power_Sphere",
+    "method": "mppi",
+    "objective": "template_comfree_soft_contact_v4",
+    "hand": "wuji2",
+    "template": "11_Power_Sphere",
+    "primitive": {
+      "kind": "sphere",
+      "radius_m": 0.047031250000000004,
+      "height_m": 0.09406250000000001,
+      "radial_scale": 1.34375,
+      "axial_scale": 1.0,
+      "size_scale": 1.34375,
+      "size_axis": "radius",
+      "dimensions_m": [
+        0.09406250000000001,
+        0.09406250000000001,
+        0.09406250000000001
+      ],
+      "size_policy_version": 3,
+      "sources": {
+        "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+        "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+        "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+      },
+      "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+    },
+    "seed": 45405,
+    "model": "results/grasp_template_mppi_a800_20261102/cases/0045_11_Power_Sphere/scene.xml",
+    "trajectory": "results/grasp_template_mppi_a800_20261102/cases/0045_11_Power_Sphere/trajectory.npz",
+    "summary": "results/grasp_template_mppi_a800_20261102/cases/0045_11_Power_Sphere/summary.json",
+    "dt": 1.0,
+    "phase": "refinement",
+    "task_success": true,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "continuation_parent": "0044_11_Power_Sphere",
+    "continuation": "results/grasp_template_mppi_a800_20261102/cases/0045_11_Power_Sphere/continuation.json"
+  },
+  "parent_primitive": {
+    "kind": "sphere",
+    "radius_m": 0.047031250000000004,
+    "height_m": 0.09406250000000001,
+    "radial_scale": 1.34375,
+    "axial_scale": 1.0,
+    "size_scale": 1.34375,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.09406250000000001,
+      0.09406250000000001,
+      0.09406250000000001
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "primitive": {
+    "kind": "sphere",
+    "radius_m": 0.048125,
+    "height_m": 0.09625,
+    "radial_scale": 1.375,
+    "axial_scale": 1.0,
+    "size_scale": 1.375,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.09625,
+      0.09625,
+      0.09625
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "parent_reference": "results/grasp_template_mppi_a800_20261102/cases/0046_11_Power_Sphere/reference/reference.json",
+  "reference_sha256": "a6e056a4967d36dc73024f1c9efff3f9ec5e76a9c879008dbf3e21787b474174",
+  "motion": {
+    "object_translation_m": 0.0,
+    "object_rotation_deg": 0.0,
+    "max_joint_change_deg": 5.345265063316959
+  },
+  "selected_attempt": 0,
+  "limits": {
+    "translation_m": 0.0,
+    "rotation_deg": 0.0,
+    "joint_deg": 8.0
+  },
+  "seconds": 52.630537944845855
+}

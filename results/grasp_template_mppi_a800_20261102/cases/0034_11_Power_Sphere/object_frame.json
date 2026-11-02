@@ -1,0 +1,10 @@
+{
+  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_solved_1x_scaled_ik_20261102/meshes/11_Power_Sphere_sphere_r0.0350000_h0.0700000.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    6.930701674791317e-05,
+    -6.977502437627292e-05,
+    4.660660746225176e-10
+  ],
+  "convention": "scaled source vertices minus recenter_offset_m; fixed object pose identity"
+}

@@ -26,6 +26,71 @@ def test_manifest_scanning_and_filters(tmp_path):
     assert not filter_rows(rows, task="humanoid")
 
 
+def test_final_results_exclude_process_and_native_replays(tmp_path):
+    from retarget.viewer.runtime import final_result_rows
+    common = dict(batch=tmp_path, task="grasp", case_id="same", method="mppi")
+    rows = [dict(common, name=phase, phase=phase)
+            for phase in ("acquisition", "hold", "refinement", "native_test")]
+    result = final_result_rows(rows)
+    assert len(result) == 1 and result[0]["phase"] == "refinement"
+    assert result[0]["initial_index"] == -1
+    assert result[0]["stage"] == "最终结果"
+    assert rows[2].get("stage") is None
+
+
+def test_final_view_loads_only_the_optimized_pose(tmp_path):
+    from retarget.viewer.runtime import load_case
+    (tmp_path / "scene.xml").write_text('<mujoco><worldbody><body><joint type="slide"/>'
+        '<geom size=".01"/></body></worldbody></mujoco>')
+    np.savez(tmp_path / "trajectory.npz", qpos=[[0.], [.1], [.2]])
+    case = dict(model="scene.xml", trajectory="trajectory.npz")
+    model, final = load_case(tmp_path, case, final_only=True)
+    assert model.nq == 1
+    np.testing.assert_array_equal(final, [[.2]])
+    assert load_case(tmp_path, case)[1].shape == (3, 1)
+
+
+def test_final_summary_keeps_projected_and_native_results_distinct():
+    from retarget.viewer.runtime import final_summary
+    result = final_summary(dict(geometry_diagnostics=dict(coverage=.8, projected_closure=True),
+        native_evaluated=True, task_success=False, optimization_seconds=5.))
+    assert "80.0%" in result and "投影摩擦锥闭合：通过" in result
+    assert "原生物理评测：未通过" in result and "5.00 s" in result
+
+
+def test_template_only_summary_uses_geometric_criterion():
+    from retarget.viewer.runtime import final_summary
+    result = final_summary(dict(success_criterion="projected_template_geometry_v1",
+        task_success=True, native_evaluated=False))
+    assert "几何验收：通过" in result
+    assert "原生物理评测" not in result
+
+
+@pytest.mark.parametrize('version', ['v1', 'v2'])
+def test_patch_summary_distinguishes_new_metric_from_original_points(version):
+    from retarget.viewer.runtime import final_summary
+    result = final_summary(dict(geometry_diagnostics=dict(coverage=1.,
+        coverage_definition='anatomical_patch_interior_'+version, covered_patch_count=2,
+        required_patch_count=2, template_point_coverage=.5, torsional_friction_m=.02)))
+    assert 'patch 内部贴合率：100.0%（2/2）' in result
+    assert '原模板点贴合率：50.0%' in result
+    assert '扭转摩擦：开启（ComFree 投影平衡，系数 0.02 m）' in result
+
+
+def test_patch_viewer_reads_metric_sidecar_without_moving_source_artifacts(tmp_path):
+    from retarget.viewer.runtime import load_patch_coverage
+    original = tmp_path/'source'/'template_contacts.json'
+    original.parent.mkdir()
+    original.write_text('{}')
+    assert load_patch_coverage(dict(batch=tmp_path), original) is None
+    sidecar = tmp_path/'metric'/'patch_contact_coverage.json'
+    sidecar.parent.mkdir()
+    sidecar.write_text(json.dumps(dict(coverage=.5, patches=[])))
+    value = load_patch_coverage(dict(batch=tmp_path, patch_coverage=str(sidecar)), original)
+    assert value['coverage'] == .5
+    assert original.read_text() == '{}'
+
+
 def test_batch_stage_and_size_filters_keep_ca_previews_distinct(tmp_path):
     folder = tmp_path/"five_sizes"
     folder.mkdir()

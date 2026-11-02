@@ -1,0 +1,14 @@
+mode: web
+task:
+  type: grasp
+  options:
+    hand_model: wuji2
+output:
+  name: gesture_review_viewer
+visualization:
+  port: 8088
+  batch: grasp_gesture_review_seed0_v3
+  primary_shape_only: true
+  initial_case: t12_disk_s00_seed00
+  task: grasp
+  hand: wuji2

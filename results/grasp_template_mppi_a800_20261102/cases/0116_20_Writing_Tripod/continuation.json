@@ -1,0 +1,99 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "parent_case": "0115_20_Writing_Tripod",
+  "parent_entry": {
+    "task": "grasp",
+    "name": "0115_20_Writing_Tripod",
+    "method": "mppi",
+    "objective": "template_comfree_soft_contact_v4",
+    "hand": "wuji2",
+    "template": "20_Writing_Tripod",
+    "primitive": {
+      "kind": "cylinder",
+      "radius_m": 0.00425,
+      "height_m": 0.12,
+      "radial_scale": 1.0625,
+      "axial_scale": 1.0,
+      "size_scale": 1.0625,
+      "size_axis": "radius",
+      "dimensions_m": [
+        0.0085,
+        0.0085,
+        0.12
+      ],
+      "size_policy_version": 3,
+      "sources": {
+        "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+        "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+        "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+      },
+      "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+    },
+    "seed": 116035,
+    "model": "results/grasp_template_mppi_a800_20261102/cases/0115_20_Writing_Tripod/scene.xml",
+    "trajectory": "results/grasp_template_mppi_a800_20261102/cases/0115_20_Writing_Tripod/trajectory.npz",
+    "summary": "results/grasp_template_mppi_a800_20261102/cases/0115_20_Writing_Tripod/summary.json",
+    "dt": 1.0,
+    "phase": "refinement",
+    "task_success": true,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "continuation_parent": "0114_20_Writing_Tripod",
+    "continuation": "results/grasp_template_mppi_a800_20261102/cases/0115_20_Writing_Tripod/continuation.json"
+  },
+  "parent_primitive": {
+    "kind": "cylinder",
+    "radius_m": 0.00425,
+    "height_m": 0.12,
+    "radial_scale": 1.0625,
+    "axial_scale": 1.0,
+    "size_scale": 1.0625,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.0085,
+      0.0085,
+      0.12
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "primitive": {
+    "kind": "cylinder",
+    "radius_m": 0.0045000000000000005,
+    "height_m": 0.12,
+    "radial_scale": 1.125,
+    "axial_scale": 1.0,
+    "size_scale": 1.125,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.009000000000000001,
+      0.009000000000000001,
+      0.12
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "parent_reference": "results/grasp_template_mppi_a800_20261102/cases/0116_20_Writing_Tripod/reference/reference.json",
+  "reference_sha256": "0fb47a1aa25f3e4a63c75bd5e59ea02f59f666d9df2ed180295632bbee0a3cfb",
+  "motion": {
+    "object_translation_m": 0.000304511516830777,
+    "object_rotation_deg": 0.32825226684585906,
+    "max_joint_change_deg": 0.5893360423453802
+  },
+  "selected_attempt": 2,
+  "limits": {
+    "translation_m": 0.003,
+    "rotation_deg": 3.0,
+    "joint_deg": 16.0
+  },
+  "seconds": 113.29127983003855
+}

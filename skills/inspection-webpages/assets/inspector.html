@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>可视化核对</title>
+<style>
+:root{--bg:#f0f2ed;--ink:#152a30;--muted:#566b6e;--line:#c9d1cb;--accent:#006e65;--warn:#ab4a19}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px 'Noto Sans CJK SC','Microsoft YaHei',sans-serif}header{padding:24px 30px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:end}.eyebrow{font:12px monospace;letter-spacing:.13em;color:var(--accent)}h1{font:30px Georgia,'Noto Serif CJK SC',serif;margin:8px 0}p{margin:6px 0;line-height:1.6;color:var(--muted)}.controls{padding:16px 30px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}select,button{background:#fff;color:var(--ink);border:1px solid var(--line);padding:9px 11px;border-radius:4px;font:inherit}button{cursor:pointer}button:hover{border-color:var(--accent)}label{display:inline-flex;gap:7px;align-items:center}.stage{display:grid;grid-template-columns:1fr 1fr;margin:0 24px;gap:12px}.panel{background:#fff;border:1px solid var(--line);position:relative;border-radius:5px;overflow:hidden}.panel h2{margin:16px 18px 0;font-size:16px;display:flex;justify-content:space-between}.panel small{color:var(--muted);font-weight:400}.plot{height:540px}.note,.metrics,.details{margin:14px 30px}.note{padding:12px 16px;border-left:3px solid var(--accent);background:#e3ebe4;line-height:1.7}.metrics{display:flex;gap:30px;flex-wrap:wrap}.metric b{font:25px Georgia,serif;display:block}.metric span{color:var(--muted);font-size:12px}.details{background:white;border:1px solid var(--line);border-radius:5px;padding:16px;overflow:auto}table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}td,th{padding:10px;text-align:left;border-bottom:1px solid #e6ebe6}th{color:var(--muted);font-weight:500}tr{cursor:pointer}tr:hover,tr.selected{background:#e6f1eb}.warning{color:var(--warn)}.mono{font-family:monospace}footer{padding:12px 30px 30px;color:var(--muted);font-size:12px;line-height:1.7}a{color:var(--accent)}.legend{display:flex;gap:16px;font-size:12px;margin:0 30px 12px}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}@media(max-width:850px){.stage{grid-template-columns:1fr}.plot{height:420px}header{display:block}}
+
+[hidden]{display:none!important}.stage{grid-template-columns:repeat(auto-fit,minmax(min(100%,450px),1fr))}.controls button:focus-visible,.controls select:focus-visible,tr:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.error{color:var(--warn);padding:16px 30px}footer{white-space:pre-line}.details{max-height:500px}.metric b{overflow-wrap:anywhere}.legend{flex-wrap:wrap}header h1{overflow-wrap:anywhere}@media(max-width:850px){.stage{grid-template-columns:1fr}}
+</style>
+<script>/*__PLOTLY__*/</script></head>
+<body>
+<header><div><div class="eyebrow" id="eyebrow"></div><h1 id="title"></h1><p id="subtitle"></p></div><div class="mono" id="coverage" aria-live="polite"></div></header>
+<div class="controls">
+<button id="prev" aria-label="上一个案例">←</button><select id="case" aria-label="选择案例"></select><button id="next" aria-label="下一个案例">→</button>
+<select id="variant" aria-label="选择数据阶段"></select>
+<label id="normals-control"><input type="checkbox" id="normals" checked>法向</label>
+<label id="bones-control"><input type="checkbox" id="bones">骨架</label>
+<label id="surface-control"><input type="checkbox" id="surface" checked>表面</label>
+<label id="transparent-control"><input type="checkbox" id="transparent">透明表面</label>
+<label id="sync-control"><input type="checkbox" id="sync" checked>同步视角</label>
+<button id="front">正面</button><button id="side">侧面</button><button id="back">背面</button>
+</div>
+<div class="legend" id="legend"></div><main><div class="stage" id="stage"></div>
+<div class="note" id="note" aria-live="polite"></div><div class="metrics" id="metrics"></div>
+<section class="details" id="details"><b>逐项明细</b><p>选择一行可高亮各视图中的对应对象；再次选择取消。</p><table><thead id="thead"></thead><tbody id="rows"></tbody></table></section>
+</main><div class="error" id="error" role="alert" hidden></div><footer id="footer"></footer>
+<script>
+'use strict';
+const DATA=/*__DATA__*/null;
+const $=id=>document.getElementById(id), clone=v=>structuredClone(v);
+let current=0, variant=0, selected=null, busy=false, queue=Promise.resolve();
+let camera=clone(DATA.camera||{eye:{x:0,y:2.05,z:.25},up:{x:0,y:0,z:1},center:{x:0,y:0,z:0}});
+const cameras=DATA.views.map(()=>clone(camera));
+const panels=[],linked=new Set();
+const is3d=t=>['scatter3d','mesh3d','cone','streamtube','volume','isosurface'].includes(t.type);
+function node(tag,text,className){const e=document.createElement(tag);if(text!==undefined)e.textContent=String(text);if(className)e.className=className;return e}
+function value(){return DATA.cases[current].variants[variant]}
+function fail(error){$('error').hidden=false;$('error').textContent='页面显示失败：'+error.message;console.error(error)}
+function schedule(){queue=queue.then(render).catch(fail);return queue}
+function setupVariants(preferred){const all=DATA.cases[current].variants;variant=Math.max(0,all.findIndex(v=>v.id===preferred));$('variant').replaceChildren(...all.map((v,i)=>{const o=node('option',v.label||v.id);o.value=String(i);return o}));$('variant').selectedIndex=variant;$('variant').hidden=all.length<2}
+function bounds(figures){const low=[Infinity,Infinity,Infinity],high=[-Infinity,-Infinity,-Infinity];let found=false;
+ for(const f of figures)for(const t of f.data){if(!is3d(t))continue;for(let k=0;k<3;k++)for(const x of t[['x','y','z'][k]]||[]){if(typeof x==='number'&&Number.isFinite(x)){low[k]=Math.min(low[k],x);high[k]=Math.max(high[k],x);found=true}}}
+ if(!found)return null;for(let k=0;k<3;k++)if(!Number.isFinite(low[k])){low[k]=0;high[k]=0}const span=Math.max(high[0]-low[0],high[1]-low[1],high[2]-low[2],.001)*1.15;return low.map((v,k)=>[(v+high[k]-span)/2,(v+high[k]+span)/2])}
+function traces(figure){return figure.data.map(original=>{const t=clone(original),role=t.meta?.role;
+ if(['surface','normals','bones'].includes(role)&&!$(role).checked)t.visible=false;
+ if(role==='surface'&&$('transparent').checked)t.opacity=.28;
+ if(selected!==null&&Array.isArray(t.customdata)&&(t.mode||'').includes('markers')){const base=t.marker||{};const at=(v,i,fallback)=>Array.isArray(v)?v[i]:(v??fallback);t.marker={...base,size:t.customdata.map((id,i)=>String(id)===selected?10:at(base.size,i,6)),color:t.customdata.map((id,i)=>String(id)===selected?at(base.color,i,'#0077c8'):'#bbc7c3')};}
+ return t})}
+function metadata(){const c=DATA.cases[current],v=value();$('coverage').textContent=`${current+1} / ${DATA.cases.length} CASES`;$('note').textContent=v.note||'';$('note').hidden=!v.note;
+ $('metrics').replaceChildren(...(v.metrics||[]).map(m=>{const e=node('div',undefined,'metric');e.append(node('b',String(m.value)+(m.unit?' '+m.unit:'')),node('span',m.label));return e}));
+ $('details').hidden=!(DATA.columns?.length&&v.rows?.length);const rows=(v.rows||[]).map(r=>{const tr=node('tr');tr.tabIndex=0;tr.className=String(r.id)===selected?'selected':'';tr.setAttribute('aria-selected',String(String(r.id)===selected));for(const col of DATA.columns||[])tr.append(node('td',r[col.key]===undefined?'—':Array.isArray(r[col.key])?r[col.key].join(', '):r[col.key]));const pick=()=>{selected=selected===String(r.id)?null:String(r.id);schedule()};tr.onclick=pick;tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick()}};return tr});$('rows').replaceChildren(...rows)}
+async function render(){const v=value(),range=bounds(v.figures),roles=new Set(v.figures.flatMap(f=>f.data.map(t=>t.meta?.role))),sceneCount=v.figures.filter(f=>f.data.some(is3d)).length;
+ for(const role of ['surface','normals','bones'])$(role+'-control').hidden=!roles.has(role);$('transparent-control').hidden=!roles.has('surface');$('sync-control').hidden=sceneCount<2;for(const id of ['front','side','back'])$(id).hidden=!sceneCount;
+ busy=true;try{await Promise.all(v.figures.map(async(f,i)=>{const layout=clone(f.layout||{});layout.margin={l:35,r:15,t:15,b:35,...layout.margin};layout.paper_bgcolor='#fff';layout.plot_bgcolor='#fff';layout.font={color:'#152a30',...layout.font};layout.uirevision='inspection';
+ if(f.data.some(is3d)){const scene=layout.scene||{};for(let k=0;k<3;k++){const axis=['xaxis','yaxis','zaxis'][k];scene[axis]={...scene[axis],range:range?.[k],showbackground:false,gridcolor:'#e7ede7',zeroline:false,tickfont:{size:9},nticks:4}}scene.aspectmode='cube';scene.camera=clone(cameras[i]);layout.scene=scene;layout.margin={l:0,r:0,t:5,b:0}}
+ await Plotly.react(panels[i],traces(f),layout,{responsive:true,displaylogo:false});if(!linked.has(i)){panels[i].on('plotly_relayout',async event=>{if(busy||!event['scene.camera'])return;camera=clone(event['scene.camera']);cameras[i]=clone(camera);if(!$('sync').checked)return;busy=true;try{await Promise.all(panels.map((p,j)=>{if(j===i||!value().figures[j].data.some(is3d))return; cameras[j]=clone(camera);return Plotly.relayout(p,{'scene.camera':clone(camera)})}))}finally{busy=false}});linked.add(i)}}))}finally{busy=false}metadata()}
+function changeCase(index){const preferred=value().id;current=(index+DATA.cases.length)%DATA.cases.length;selected=null;$('case').selectedIndex=current;setupVariants(preferred);return schedule()}
+for(const [key,color] of Object.entries(DATA.theme||{}))if(['bg','ink','muted','line','accent','warn'].includes(key)&&/^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(color))document.documentElement.style.setProperty('--'+key,color);
+document.title=DATA.title;$('title').textContent=DATA.title;$('eyebrow').textContent=DATA.eyebrow||'RESULTS / INSPECTOR';$('subtitle').textContent=DATA.subtitle||'';
+$('legend').replaceChildren(...(DATA.legend||[]).map(item=>{const e=node('span');const dot=node('i',undefined,'dot');dot.style.backgroundColor=item.color;e.append(dot,node('span',item.label));return e}));
+DATA.views.forEach((view,i)=>{const section=node('section',undefined,'panel'),heading=node('h2',`${String(i+1).padStart(2,'0')} / ${view.label}`),plot=node('div',undefined,'plot');if(view.description)heading.append(node('small',view.description));section.append(heading,plot);$('stage').append(section);panels.push(plot)});
+const head=node('tr');for(const col of DATA.columns||[])head.append(node('th',col.label));$('thead').append(head);
+$('case').replaceChildren(...DATA.cases.map((c,i)=>{const o=node('option',c.label||c.id);o.value=String(i);return o}));for(const id of ['prev','case','next'])$(id).hidden=DATA.cases.length<2;
+$('case').onchange=()=>changeCase($('case').selectedIndex);$('prev').onclick=()=>changeCase(current-1);$('next').onclick=()=>changeCase(current+1);$('variant').onchange=()=>{variant=$('variant').selectedIndex;selected=null;schedule()};
+for(const id of ['surface','normals','bones','transparent'])$(id).onchange=schedule;
+$('sync').onchange=()=>{if($('sync').checked){for(let i=0;i<cameras.length;i++)cameras[i]=clone(camera);schedule()}};
+for(const [id,eye] of [['front',{x:0,y:2.05,z:.15}],['side',{x:2.05,y:0,z:.15}],['back',{x:0,y:-2.05,z:.15}]])$(id).onclick=()=>{camera={eye,up:{x:0,y:0,z:1},center:{x:0,y:0,z:0}};for(let i=0;i<cameras.length;i++)cameras[i]=clone(camera);schedule()};
+$('footer').textContent=[DATA.footer,...(DATA.sources||[])].filter(Boolean).join('\n');setupVariants();schedule();
+</script>
+</body></html>

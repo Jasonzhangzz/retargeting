@@ -1,5 +1,9 @@
 本仓库通过一个 YAML 接口运行 grasp、dex 和 humanoid，支持 GPU CEM、MPPI、旧 SCSP，以及搬箱与 WUJI2 抓取的 DexForge Force-Aware 优化。
 
+[七类抓型逐阶段验收](docs/grasp_gesture_review.md)：type 9/10/12/22/23/30/31 使用独立整手软参考与真实几何初始化，type 12 尺寸改为 1–1.5。先运行 seed 0 的 41 例供手势确认；正式 viewer 和十个 seed 的批跑不随开发验证自动更新。
+
+[Type 6–9 历史软偏好实测](docs/grasp_soft_center_results.md)：6–8 使用 distal 掌侧中心软偏好，旧 type 9 采用 1.5× 初始抓姿加 90° 固定朝向。该朝向的手势正确性已被用户否定，新策略重新审阅方向；历史 200 例及正式 viewer 暂时保留。
+
 新增 [WUJI2 GraspADMM 与公共评测](docs/graspadmm.md)：`solver.type: graspadmm` 直接使用固定版本的原版 ADMM、QP、MuJoCo、filter 和 pregrasp 流程。运行 `bash scripts/setup_graspadmm.sh` 后使用 `.venv-graspadmm/bin/python run.py --config configs/graspadmm.yaml`。新 grasp 结果统一以原版六方向外力测试决定 `task_success`，旧载荷/接触指标保留为诊断。共享 primitive 尺寸策略覆盖 31 个抓型、161 个尺寸组合；十种子批测和历史重评命令见文档，完成情况以各输出目录的 `status.json` 为准。
 
 [完整实测](docs/graspadmm_results.md) 已完成：524/1610（32.55%），type 9 的侧面初值修正后全50例重测并完整替换；515例历史结果已独立重评。同输入、同50×10预算下，原版核心与迁移记录包装为1.1619/1.3473秒，约1.16倍，最终抓姿逐位一致。
@@ -53,7 +57,7 @@ visualization:
 
 输入路径相对于 YAML 所在目录解析，示例配置位于 configs，因此使用 `../data/...`。抓取 `task.options` 中显式指定的资源路径也相对于 YAML 解析；内置默认资源相对于 `task.data`。在 CEM 与 MPPI 间切换只需修改 `solver.type`；省略 temperature/final_noise 时，CEM 默认 0.1/0.2，MPPI 默认 1.0/0.1。跑步示例显式采用上游 temperature=0.6。
 
-输出固定为仓库内 `output/<name>`。配置和输入校验通过后会替换同名目录，其他结果目录保留；名称禁止包含路径或跳转，同名符号链接也会拒绝。结果包含解析后的 config.yaml、status.json、manifest.json、summary.json、轨迹、逐轮日志和来源记录。抓取批量任务使用 case 子目录。失败初始化或无硬约束可行候选会保留失败诊断，不能作为成功抓取导出。
+输出固定为仓库内 `output/<name>`。配置和输入校验通过后会替换同名目录，其他结果目录保留；固定模板 MPPI 入口拒绝覆盖同名结果，需使用新的 output.name。名称禁止包含路径或跳转，同名符号链接也会拒绝。结果包含解析后的 config.yaml、status.json、manifest.json、summary.json、轨迹、逐轮日志和来源记录。抓取批量任务使用 case 子目录。失败初始化或无硬约束可行候选会保留失败诊断，不能作为成功抓取导出。
 
 目录职责：
 
@@ -68,6 +72,11 @@ visualization:
 | `data/dexycb` | 两批共十条原始打包序列、原始资产/标定和 prepared 示例 |
 | `data/humanoid` | move_largebox、sprint 与共享 G1 场景资产 |
 | `data/grasp` | 抓取模板、两代手资产、冻结手腕参考 |
+
+固定模板抓取可运行 `.venv-contact/bin/python run.py --config configs/grasp_template_mppi.yaml`。
+该入口直接从原始模板初始化，仅用 MPPI 优化 26 维手部 q，以 n 维 ComFree 预载求解投影闭合，
+并检查全手穿透；实现及验证见[固定模板 MPPI](docs/grasp_template_mppi.md)。
+最新密集尺寸最终结果随仓库保存在 [`results/grasp_template_mppi_a800_20261102`](results/grasp_template_mppi_a800_20261102/README.md)：31 类、640 个尺寸，投影闭合 610/640，patch 内部贴合率 ≥80% 为 420/640。保留全部最终案例及其必要依赖，不包含重试目录；未运行原生动态评测。求解与本地回放说明见[远端 MPPI 求解](docs/template_mppi_remote.md)。
 
 CEM 使用 CARD 精英成本标准化后的 softmax 均值更新，精英数量向上取整，不拟合精英方差；噪声按 `sigma * final_noise ** (i / iterations)` 退火，每轮包含历史最佳与均值。MPPI 使用前 10% 候选加权、同形式退火和可配置提前停止。两者分离 population 与 worlds，并通过 Torch/Warp 共享数组分批评分。日志记录实际迭代数、采样数与额外评分数。
 

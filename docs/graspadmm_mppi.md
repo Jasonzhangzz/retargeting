@@ -1,5 +1,55 @@
 # ADMM 后接 MPPI 的配对实验
 
+## 七类手势审阅策略
+
+最新开发策略见[七类逐阶段验收](grasp_gesture_review.md)。新增可选 `gesture_reference`，共享独立于本次 ADMM 输出的整手形状、接触面及软朝向参考；没有该字段时维持旧代价。新 type 9 不固定旋转通道，旧 `reference_orientation_wxyz` 仅为历史策略兼容。
+初始化失败或 ADMM 导出不完整的样本仍进入 MPPI 报告分母，明确跳过优化，不从旧结果补齐。
+手势确认前不将审阅批次接入正式 viewer，也不启动 410 例批跑。
+
+## Type 6–9 修正批次
+
+已完成 pi0 CUDA 环境的 200 例软偏好重算，数值、限制和 viewer 接入说明见
+[实测报告](grasp_soft_center_results.md)。原生物理通过为 ADMM 13/200、MPPI 直接
+输出 12/200；单列验证后回退策略为 17/200。
+
+下面的历史数值尚未包含新的接触区域/朝向约束。新接口读取 ADMM
+`native_candidate.json` 中可选的 `contact_regions`、`reference_orientation_wxyz`：
+6–8 的必要接触和对应 wrench 候选覆盖整个暴露的 distal，用有限软代价鼓励
+掌侧中心接触，允许几何收益更好的区域外接触；9 的旋转
+通道固定在 1.5× 初始抓姿经掌面内 +90° 旋转后的朝向。没有这些字段时保留旧行为。
+
+ADMM 保存 `contact_region_diagnostics.json` 和逐轮局部锚点；MPPI 在
+`refinement.json` 保存优化锚点诊断、参考朝向及轨迹误差；公共原生评测在
+`evaluation.json` 独立记录实际接触区域。`semantic_success` 单独统计，不替代
+`graspadmm_native_v1` 的物理成功判据。
+软偏好不要求每个优化锚点或实际接触都处于 0.3–0.7 诊断区；审计检查候选保留
+区域外点、软代价有限，并单独报告实际中心接触比例。
+
+本机通过 `pi0` 派生的两个项目虚拟环境运行，保留其 Torch 2.10.0+cu128 以支持
+RTX 5060 Ti。原生 ADMM/评测使用 MuJoCo 3.3.3、Warp 1.8.0；MPPI 使用
+MuJoCo 3.10.0、MJWarp 3.10.0.3、Warp 1.16.0；未改动 `pi0` 本身。
+GPU 需要在允许设备访问的执行环境运行；沙箱内 `cuda.is_available()` 为 false
+不能据此判断宿主机无 CUDA。实际版本和 GPU 信息随批次保存；本次性能不与历史
+RTX 4090/Torch 2.5.1 批次作直接速度比较。
+
+在依赖齐全的 CUDA 环境先运行 20 例 smoke，再运行 200 例完整修正批次：
+
+```bash
+.venv-graspadmm/bin/python scripts/run_graspadmm_batch.py --types 6 7 8 9 --seeds 0 --output graspadmm_region_pose_smoke
+.venv-contact/bin/python scripts/refine_graspadmm_mppi.py --source output/graspadmm_region_pose_smoke --output output/graspadmm_region_pose_mppi_smoke
+.venv-contact/bin/python scripts/audit_graspadmm_mppi.py --batch output/graspadmm_region_pose_mppi_smoke
+
+.venv-graspadmm/bin/python scripts/run_graspadmm_batch.py --types 6 7 8 9 --output graspadmm_region_pose_200
+.venv-contact/bin/python scripts/refine_graspadmm_mppi.py --source output/graspadmm_region_pose_200 --output output/graspadmm_region_pose_mppi_200
+.venv-contact/bin/python scripts/audit_graspadmm_mppi.py --batch output/graspadmm_region_pose_mppi_200
+```
+
+每个 type 9 随机 seed 只有一次原生 1.5× 初始化，不复用优化后的抓姿，不按结果
+重试。smoke 和完整批次使用独立目录。审计通过且检查实际接触诊断后，将 viewer 的
+`visualization.batch` 指向新批次即可回放；未完成重算前继续展示已有结果。
+
+## 历史完整批次
+
 1610 例已全部实际完成，均使用原版过滤、squeeze/pregrasp 和六方向外力测试。
 
 | 方案 | 成功数 | 成功率 |

@@ -1,0 +1,99 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "parent_case": "0079_7_Prismatic_3_Finger",
+  "parent_entry": {
+    "task": "grasp",
+    "name": "0079_7_Prismatic_3_Finger",
+    "method": "mppi",
+    "objective": "template_comfree_soft_contact_v4",
+    "hand": "wuji2",
+    "template": "7_Prismatic_3_Finger",
+    "primitive": {
+      "kind": "cylinder",
+      "radius_m": 0.014249999999999999,
+      "height_m": 0.12,
+      "radial_scale": 1.1875,
+      "axial_scale": 1.0,
+      "size_scale": 1.1875,
+      "size_axis": "radius",
+      "dimensions_m": [
+        0.028499999999999998,
+        0.028499999999999998,
+        0.12
+      ],
+      "size_policy_version": 3,
+      "sources": {
+        "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+        "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+        "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+      },
+      "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+    },
+    "seed": 79711,
+    "model": "results/grasp_template_mppi_a800_20261102/cases/0079_7_Prismatic_3_Finger/scene.xml",
+    "trajectory": "results/grasp_template_mppi_a800_20261102/cases/0079_7_Prismatic_3_Finger/trajectory.npz",
+    "summary": "results/grasp_template_mppi_a800_20261102/cases/0079_7_Prismatic_3_Finger/summary.json",
+    "dt": 1.0,
+    "phase": "refinement",
+    "task_success": true,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "continuation_parent": "0078_7_Prismatic_3_Finger",
+    "continuation": "results/grasp_template_mppi_a800_20261102/cases/0079_7_Prismatic_3_Finger/continuation.json"
+  },
+  "parent_primitive": {
+    "kind": "cylinder",
+    "radius_m": 0.014249999999999999,
+    "height_m": 0.12,
+    "radial_scale": 1.1875,
+    "axial_scale": 1.0,
+    "size_scale": 1.1875,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.028499999999999998,
+      0.028499999999999998,
+      0.12
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "primitive": {
+    "kind": "cylinder",
+    "radius_m": 0.015,
+    "height_m": 0.12,
+    "radial_scale": 1.25,
+    "axial_scale": 1.0,
+    "size_scale": 1.25,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.03,
+      0.03,
+      0.12
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "parent_reference": "results/grasp_template_mppi_a800_20261102/cases/0080_7_Prismatic_3_Finger/reference/reference.json",
+  "reference_sha256": "96bc91cfeba69db3b0b5ce64272c227f9b6f49fefeddff8772b72c33faf88a85",
+  "motion": {
+    "object_translation_m": 0.0,
+    "object_rotation_deg": 0.0,
+    "max_joint_change_deg": 2.1840486097599574
+  },
+  "selected_attempt": 0,
+  "limits": {
+    "translation_m": 0.0,
+    "rotation_deg": 0.0,
+    "joint_deg": 8.0
+  },
+  "seconds": 51.51898698695004
+}

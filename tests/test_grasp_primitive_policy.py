@@ -10,16 +10,17 @@ from retarget.config.run import ROOT
 from retarget.env.grasp.primitives import CATALOG, jobs, size_specifications
 
 
-def test_default_primary_inventory_has_161_unique_physical_instances():
+def test_default_primary_inventory_has_183_unique_physical_instances():
     inventory = [p for t, families in CATALOG.items()
                  for p in size_specifications(t, families[0][0])]
-    assert len(inventory) == 161
+    assert len(inventory) == 183
     assert len(size_specifications(10, "disk")) == 11
     assert not size_specifications(19) and not size_specifications(21)
-    np.testing.assert_allclose([p["size_scale"] for p in size_specifications(10)], np.linspace(1, 1.5, 11))
+    np.testing.assert_allclose([p["size_scale"] for p in size_specifications(10)], np.linspace(.8, 1.3, 11))
+    assert all(p['size_policy_version'] == 4 for p in size_specifications(10))
 
 
-@pytest.mark.parametrize("number,lower,upper", [(10,1,1.5),(11,1,1.5),(12,.5,1),
+@pytest.mark.parametrize("number,lower,upper", [(10,.8,1.3),(11,1,1.5),(12,.75,1),(18,1,2),
     (26,.75,1.5),(28,1,1.5),(33,1,2)])
 def test_requested_radial_ranges(number, lower, upper):
     rows = size_specifications(number, CATALOG[number][0][0])
@@ -29,10 +30,11 @@ def test_requested_radial_ranges(number, lower, upper):
         assert all(p["height_m"] == 2*p["radius_m"] for p in rows)
 
 
-@pytest.mark.parametrize("number,width,depth,base_height", [(16,.075,.0525,.003),(22,.105,.0735,.008)])
+@pytest.mark.parametrize("number,width,depth,base_height", [(16,.075,.0525,.003),(22,.150,.105,.008)])
 def test_lateral_and_extension_keep_old_large_width_and_only_change_thickness(number, width, depth, base_height):
     rows = size_specifications(number)
-    for p, scale in zip(rows, [.5,.75,1,1.25,1.5]):
+    for p in rows:
+        scale=p["size_scale"]
         np.testing.assert_allclose(p["dimensions_m"], [width,depth,base_height*scale])
         assert p["size_axis"] == "thickness" and p["size_scale"] == scale
         assert p["radial_scale"] == 1.5 and p["axial_scale"] == scale
@@ -40,8 +42,32 @@ def test_lateral_and_extension_keep_old_large_width_and_only_change_thickness(nu
 
 def test_flat_palmar_disk_changes_thickness_at_constant_radius():
     rows = size_specifications(30)
-    np.testing.assert_allclose([p["height_m"] for p in rows], [.004,.006,.008,.010,.012])
-    assert all(p["radius_m"] == .03 and p["size_axis"] == "thickness" for p in rows)
+    np.testing.assert_allclose([p["height_m"] for p in rows], [.00025,.0005,.00075,.001,.002,.004,.006,.008,.010,.012])
+    assert all(p["radius_m"] == .05 and p["size_axis"] == "thickness" for p in rows)
+    assert all(p["size_policy_version"] == 5 for p in rows)
+
+
+def test_tip_pinch_extends_diameter_below_one_mm_without_changing_reference():
+    from retarget.env.grasp.primitives import canonical_specification
+    rows = size_specifications(24)
+    np.testing.assert_allclose([p['dimensions_m'][0]*1000 for p in rows],
+                              [.05, .1, .25, .5, 1, 2, 4, 6, 9, 12, 15, 18])
+    assert all(p['height_m'] == .05 and p['size_policy_version'] == 5 for p in rows)
+    args = SimpleNamespace(radius=None, height=None, primitive_grid_explicit=False)
+    standard = canonical_specification(24, 'cylinder', args)
+    assert standard['radius_m'] == pytest.approx(.006)
+    assert standard['size_scale'] == 1.
+    # Explicit user grids remain authoritative.
+    assert len(size_specifications(24, explicit=True, radius_scales=[.5])) == 1
+
+
+def test_extension_uses_a_broad_disk_and_preserves_other_types_policy():
+    assert CATALOG[18] == [("disk", .08, .008)]
+    rows = size_specifications(18)
+    np.testing.assert_allclose([p["radius_m"] for p in rows], np.linspace(.08,.16,9))
+    assert all(p["height_m"] == .008 and p["kind"] == "disk" for p in rows)
+    assert all(p["size_policy_version"] == 5 for p in rows)
+    assert size_specifications(12)[0]["size_policy_version"] == 4
 
 
 def test_changed_cylinders_and_precision_disk_have_correct_dimensions():

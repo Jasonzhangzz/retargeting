@@ -1,0 +1,10 @@
+{
+  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_type10_range_20261102/meshes/10_Power_Disk_disk_r0.0400000_h0.0150000.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "convention": "scaled source vertices minus recenter_offset_m; fixed object pose identity"
+}

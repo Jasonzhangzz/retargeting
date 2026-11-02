@@ -8,6 +8,7 @@ task:
     hand_model: wuji2
     primary_shape_only: true
     primitive_seed_policy: taxonomy
+    gesture_policy: whole_hand_v1
 solver:
   type: graspadmm
   graspadmm:

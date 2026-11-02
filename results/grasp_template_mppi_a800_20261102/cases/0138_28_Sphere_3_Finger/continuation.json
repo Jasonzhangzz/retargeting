@@ -1,0 +1,99 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "parent_case": "0137_28_Sphere_3_Finger",
+  "parent_entry": {
+    "task": "grasp",
+    "name": "0137_28_Sphere_3_Finger",
+    "method": "mppi",
+    "objective": "template_comfree_soft_contact_v4",
+    "hand": "wuji2",
+    "template": "28_Sphere_3_Finger",
+    "primitive": {
+      "kind": "sphere",
+      "radius_m": 0.026562500000000003,
+      "height_m": 0.053125000000000006,
+      "radial_scale": 1.0625,
+      "axial_scale": 1.0,
+      "size_scale": 1.0625,
+      "size_axis": "radius",
+      "dimensions_m": [
+        0.053125000000000006,
+        0.053125000000000006,
+        0.053125000000000006
+      ],
+      "size_policy_version": 3,
+      "sources": {
+        "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+        "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+        "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+      },
+      "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+    },
+    "seed": 138233,
+    "model": "results/grasp_template_mppi_a800_20261102/cases/0137_28_Sphere_3_Finger/scene.xml",
+    "trajectory": "results/grasp_template_mppi_a800_20261102/cases/0137_28_Sphere_3_Finger/trajectory.npz",
+    "summary": "results/grasp_template_mppi_a800_20261102/cases/0137_28_Sphere_3_Finger/summary.json",
+    "dt": 1.0,
+    "phase": "refinement",
+    "task_success": true,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "continuation_parent": "0136_28_Sphere_3_Finger",
+    "continuation": "results/grasp_template_mppi_a800_20261102/cases/0137_28_Sphere_3_Finger/continuation.json"
+  },
+  "parent_primitive": {
+    "kind": "sphere",
+    "radius_m": 0.026562500000000003,
+    "height_m": 0.053125000000000006,
+    "radial_scale": 1.0625,
+    "axial_scale": 1.0,
+    "size_scale": 1.0625,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.053125000000000006,
+      0.053125000000000006,
+      0.053125000000000006
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "primitive": {
+    "kind": "sphere",
+    "radius_m": 0.02734375,
+    "height_m": 0.0546875,
+    "radial_scale": 1.09375,
+    "axial_scale": 1.0,
+    "size_scale": 1.09375,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.0546875,
+      0.0546875,
+      0.0546875
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "parent_reference": "results/grasp_template_mppi_a800_20261102/cases/0138_28_Sphere_3_Finger/reference/reference.json",
+  "reference_sha256": "fe0e2e195e61057f09e9c7314b09e822297f337335a5669a84b8fac1c1970887",
+  "motion": {
+    "object_translation_m": 0.0006536845161661805,
+    "object_rotation_deg": 0.7570114763519202,
+    "max_joint_change_deg": 6.774772430181852
+  },
+  "selected_attempt": 1,
+  "limits": {
+    "translation_m": 0.002,
+    "rotation_deg": 2.0,
+    "joint_deg": 12.0
+  },
+  "seconds": 68.20494806114584
+}

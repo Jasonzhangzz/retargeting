@@ -1,0 +1,10 @@
+{
+  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_pad_center_20261102/meshes/6_Prismatic_4_Finger_cylinder_r0.0200000_h0.1800000.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "convention": "scaled source vertices minus recenter_offset_m; fixed object pose identity"
+}

@@ -1,0 +1,11 @@
+mode: web
+output:
+  name: viewer
+visualization:
+  port: 8084
+  batch: grasp_template_mppi_current
+  task: grasp
+  hand: wuji2
+  primary_shape_only: true
+  final_only: true
+  initial_case: 0027_6_Prismatic_4_Finger

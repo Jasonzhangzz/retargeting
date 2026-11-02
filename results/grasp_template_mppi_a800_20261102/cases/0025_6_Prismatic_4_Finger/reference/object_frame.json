@@ -1,0 +1,9 @@
+{
+  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_pad_center_20261102/template_initialization/6_Prismatic_4_Finger_cylinder/source_1x.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    0.0,
+    0.0,
+    0.0
+  ]
+}

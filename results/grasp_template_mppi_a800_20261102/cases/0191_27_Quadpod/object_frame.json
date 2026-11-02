@@ -1,0 +1,10 @@
+{
+  "source_mesh": "/mnt/cpfs/zbl-cpfs-new/USERS/jasonzhang/retarget_mppi/output/grasp_template_mppi_a800_20261102_gpu2/meshes/0191_27_Quadpod.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    2.7229543775320053e-05,
+    -2.7413945645093918e-05,
+    0.0
+  ],
+  "convention": "scaled source vertices minus recenter_offset_m; fixed object pose identity"
+}

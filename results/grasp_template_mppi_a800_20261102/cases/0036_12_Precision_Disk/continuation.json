@@ -1,0 +1,100 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "parent_case": "0037_12_Precision_Disk",
+  "parent_entry": {
+    "task": "grasp",
+    "name": "0037_12_Precision_Disk",
+    "method": "mppi",
+    "objective": "template_comfree_soft_contact_v4",
+    "hand": "wuji2",
+    "template": "12_Precision_Disk",
+    "primitive": {
+      "kind": "disk",
+      "radius_m": 0.045,
+      "height_m": 0.016,
+      "radial_scale": 1.0,
+      "axial_scale": 1.0,
+      "size_scale": 1.0,
+      "size_axis": "radius",
+      "dimensions_m": [
+        0.09,
+        0.09,
+        0.016
+      ],
+      "size_policy_version": 4,
+      "sources": {
+        "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+        "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+        "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+      },
+      "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+    },
+    "seed": 0,
+    "model": "results/grasp_template_mppi_a800_20261102/cases/0037_12_Precision_Disk/scene.xml",
+    "trajectory": "results/grasp_template_mppi_a800_20261102/cases/0037_12_Precision_Disk/trajectory.npz",
+    "summary": "results/grasp_template_mppi_a800_20261102/cases/0037_12_Precision_Disk/summary.json",
+    "dt": 1.0,
+    "phase": "refinement",
+    "task_success": true,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "patch_coverage": "results/grasp_template_mppi_a800_20261102/cases/0037_12_Precision_Disk/patch_contact_coverage.json",
+    "source_case_name": "0061_12_Precision_Disk",
+    "continuation_anchor": true
+  },
+  "parent_primitive": {
+    "kind": "disk",
+    "radius_m": 0.045,
+    "height_m": 0.016,
+    "radial_scale": 1.0,
+    "axial_scale": 1.0,
+    "size_scale": 1.0,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.09,
+      0.09,
+      0.016
+    ],
+    "size_policy_version": 4,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "primitive": {
+    "kind": "disk",
+    "radius_m": 0.044437500000000005,
+    "height_m": 0.016,
+    "radial_scale": 0.9875,
+    "axial_scale": 1.0,
+    "size_scale": 0.9875,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.08887500000000001,
+      0.08887500000000001,
+      0.016
+    ],
+    "size_policy_version": 4,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "parent_reference": "results/grasp_template_mppi_a800_20261102/cases/0036_12_Precision_Disk/reference/reference.json",
+  "reference_sha256": "e7bed00ac115c70eb0a049a4f0c0f42d345454c80309d0db0269b47ea82c61f1",
+  "motion": {
+    "object_translation_m": 0.0012110309598957945,
+    "object_rotation_deg": 1.408947811519307,
+    "max_joint_change_deg": 5.8955324236098665
+  },
+  "selected_attempt": 2,
+  "limits": {
+    "translation_m": 0.003,
+    "rotation_deg": 3.0,
+    "joint_deg": 16.0
+  },
+  "seconds": 25.253726022318006
+}

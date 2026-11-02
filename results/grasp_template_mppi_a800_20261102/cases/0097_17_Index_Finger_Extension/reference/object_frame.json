@@ -1,0 +1,9 @@
+{
+  "source_mesh": "/home/zz/retarget/output/grasp_template_mppi_solved_1x_scaled_ik_20261102/template_initialization/17_Index_Finger_Extension_cylinder/source_1x.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    0.0,
+    0.0,
+    0.0
+  ]
+}

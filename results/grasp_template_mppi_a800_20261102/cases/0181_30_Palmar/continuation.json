@@ -1,0 +1,100 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "parent_case": "0180_30_Palmar",
+  "parent_entry": {
+    "task": "grasp",
+    "name": "0180_30_Palmar",
+    "method": "mppi",
+    "objective": "template_comfree_soft_contact_v4",
+    "hand": "wuji2",
+    "template": "30_Palmar",
+    "primitive": {
+      "kind": "disk",
+      "radius_m": 0.05,
+      "height_m": 0.008,
+      "radial_scale": 1.0,
+      "axial_scale": 1.0,
+      "size_scale": 1.0,
+      "size_axis": "thickness",
+      "dimensions_m": [
+        0.1,
+        0.1,
+        0.008
+      ],
+      "size_policy_version": 5,
+      "sources": {
+        "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+        "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+        "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+      },
+      "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+    },
+    "seed": 0,
+    "model": "results/grasp_template_mppi_a800_20261102/cases/0180_30_Palmar/scene.xml",
+    "trajectory": "results/grasp_template_mppi_a800_20261102/cases/0180_30_Palmar/trajectory.npz",
+    "summary": "results/grasp_template_mppi_a800_20261102/cases/0180_30_Palmar/summary.json",
+    "dt": 1.0,
+    "phase": "refinement",
+    "task_success": true,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "patch_coverage": "results/grasp_template_mppi_a800_20261102/cases/0180_30_Palmar/patch_contact_coverage.json",
+    "source_case_name": "0150_30_Palmar",
+    "continuation_anchor": true
+  },
+  "parent_primitive": {
+    "kind": "disk",
+    "radius_m": 0.05,
+    "height_m": 0.008,
+    "radial_scale": 1.0,
+    "axial_scale": 1.0,
+    "size_scale": 1.0,
+    "size_axis": "thickness",
+    "dimensions_m": [
+      0.1,
+      0.1,
+      0.008
+    ],
+    "size_policy_version": 5,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "primitive": {
+    "kind": "disk",
+    "radius_m": 0.05,
+    "height_m": 0.0085,
+    "radial_scale": 1.0,
+    "axial_scale": 1.0625,
+    "size_scale": 1.0625,
+    "size_axis": "thickness",
+    "dimensions_m": [
+      0.1,
+      0.1,
+      0.0085
+    ],
+    "size_policy_version": 5,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "parent_reference": "results/grasp_template_mppi_a800_20261102/cases/0181_30_Palmar/reference/reference.json",
+  "reference_sha256": "e055d30ce672d13fa69168b17eb3a52c35270f3809ef7029d7b1d01fc690815e",
+  "motion": {
+    "object_translation_m": 0.0004858930153827742,
+    "object_rotation_deg": 0.5673304422872777,
+    "max_joint_change_deg": 1.848312368655273
+  },
+  "selected_attempt": 1,
+  "limits": {
+    "translation_m": 0.002,
+    "rotation_deg": 2.0,
+    "joint_deg": 12.0
+  },
+  "seconds": 52.7411722689867
+}

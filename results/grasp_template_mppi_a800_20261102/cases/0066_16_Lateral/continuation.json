@@ -1,0 +1,99 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "parent_case": "0065_16_Lateral",
+  "parent_entry": {
+    "task": "grasp",
+    "name": "0065_16_Lateral",
+    "method": "mppi",
+    "objective": "template_comfree_soft_contact_v4",
+    "hand": "wuji2",
+    "template": "16_Lateral",
+    "primitive": {
+      "kind": "plate",
+      "radius_m": 0.037500000000000006,
+      "height_m": 0.004125,
+      "radial_scale": 1.5,
+      "axial_scale": 1.375,
+      "size_scale": 1.375,
+      "size_axis": "thickness",
+      "dimensions_m": [
+        0.07500000000000001,
+        0.052500000000000005,
+        0.004125
+      ],
+      "size_policy_version": 3,
+      "sources": {
+        "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+        "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+        "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+      },
+      "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+    },
+    "seed": 65585,
+    "model": "results/grasp_template_mppi_a800_20261102/cases/0065_16_Lateral/scene.xml",
+    "trajectory": "results/grasp_template_mppi_a800_20261102/cases/0065_16_Lateral/trajectory.npz",
+    "summary": "results/grasp_template_mppi_a800_20261102/cases/0065_16_Lateral/summary.json",
+    "dt": 1.0,
+    "phase": "refinement",
+    "task_success": false,
+    "success_criterion": "projected_soft_contact_closure_v2",
+    "continuation_parent": "0064_16_Lateral",
+    "continuation": "results/grasp_template_mppi_a800_20261102/cases/0065_16_Lateral/continuation.json"
+  },
+  "parent_primitive": {
+    "kind": "plate",
+    "radius_m": 0.037500000000000006,
+    "height_m": 0.004125,
+    "radial_scale": 1.5,
+    "axial_scale": 1.375,
+    "size_scale": 1.375,
+    "size_axis": "thickness",
+    "dimensions_m": [
+      0.07500000000000001,
+      0.052500000000000005,
+      0.004125
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "primitive": {
+    "kind": "plate",
+    "radius_m": 0.037500000000000006,
+    "height_m": 0.0043125,
+    "radial_scale": 1.5,
+    "axial_scale": 1.4375,
+    "size_scale": 1.4375,
+    "size_axis": "thickness",
+    "dimensions_m": [
+      0.07500000000000001,
+      0.052500000000000005,
+      0.0043125
+    ],
+    "size_policy_version": 3,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "parent_reference": "results/grasp_template_mppi_a800_20261102/cases/0066_16_Lateral/reference/reference.json",
+  "reference_sha256": "06155789c423add3247f8a41799e2146a8d84eca4c9d9a84d502ffa3b18d46aa",
+  "motion": {
+    "object_translation_m": 2.863407369893958e-05,
+    "object_rotation_deg": 0.024605917711475016,
+    "max_joint_change_deg": 0.3247413440882562
+  },
+  "selected_attempt": 1,
+  "limits": {
+    "translation_m": 0.002,
+    "rotation_deg": 2.0,
+    "joint_deg": 12.0
+  },
+  "seconds": 77.99569427035749
+}

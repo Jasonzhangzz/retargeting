@@ -1,0 +1,7 @@
+{
+  "policy": "template_adjacent_solved_grasp_v1",
+  "fits": 31,
+  "cases": 640,
+  "anchors": 31,
+  "fk_backend": "torch_cuda_batched_WujiContactKinematics"
+}

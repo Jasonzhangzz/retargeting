@@ -1,0 +1,10 @@
+{
+  "source_mesh": "/mnt/cpfs/zbl-cpfs-new/USERS/jasonzhang/retarget_mppi/output/grasp_template_mppi_a800_20261102_gpu1/meshes/0151_28_Sphere_3_Finger.obj",
+  "scale": 1.0,
+  "recenter_offset_m": [
+    7.425705424153953e-05,
+    -7.475921634108804e-05,
+    1.142144951532531e-09
+  ],
+  "convention": "scaled source vertices minus recenter_offset_m; fixed object pose identity"
+}

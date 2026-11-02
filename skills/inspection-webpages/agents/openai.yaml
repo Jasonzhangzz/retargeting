@@ -1,0 +1,4 @@
+interface:
+  display_name: "可视化核对网页"
+  short_description: "复用浅色工程检查页风格，快速生成带交互图表、对照视图和逐项明细的网页"
+  default_prompt: "请使用 $inspection-webpages，将我的数据制作成类似 Shadow Hand → Wuji2 检查页风格的可交互网页。"
