@@ -1,0 +1,34 @@
+import warp as wp
+@wp.struct
+class Parameters:
+    mesh: wp.uint64
+    object_body: int
+    object_qpos: int
+    hand_qpos: wp.array(dtype=int)
+    joints: wp.array(dtype=int)
+    joint_slide: wp.array(dtype=int)
+    ancestor: wp.array2d(dtype=int)
+    bodies: wp.array(dtype=int)
+    starts: wp.array(dtype=int)
+    ends: wp.array(dtype=int)
+    samples: wp.array(dtype=wp.vec3)
+    sample_normals: wp.array(dtype=wp.vec3)
+    forbidden: wp.array(dtype=int)
+    body_mass: wp.array(dtype=float)
+    body_com: wp.array(dtype=wp.vec3)
+    body_ancestor: wp.array2d(dtype=int)
+    gravity: wp.vec3
+    force_low: wp.array(dtype=float)
+    force_high: wp.array(dtype=float)
+    seed: wp.array(dtype=float)
+    inverse: wp.array(dtype=float)
+    stiffness: wp.array(dtype=float)
+    command_low: wp.array(dtype=float)
+    command_high: wp.array(dtype=float)
+    root: wp.mat33
+    gravity_force: wp.vec3
+    friction: float
+    dt: float
+    sigma: float
+    cutoff: float
+    weight: float

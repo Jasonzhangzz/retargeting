@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "cases": [
+    {
+      "id": "t04_cylinder_s00_seed00",
+      "bitwise_equal": true,
+      "max_abs_difference": 0.0,
+      "optimization_seconds": 0.61066916200798
+    },
+    {
+      "id": "t09_cylinder_s04_seed04",
+      "bitwise_equal": true,
+      "max_abs_difference": 0.0,
+      "optimization_seconds": 0.37849699100479484
+    },
+    {
+      "id": "t11_sphere_s02_seed03",
+      "bitwise_equal": true,
+      "max_abs_difference": 0.0,
+      "optimization_seconds": 0.31343082210514694
+    },
+    {
+      "id": "t16_plate_s02_seed05",
+      "bitwise_equal": true,
+      "max_abs_difference": 0.0,
+      "optimization_seconds": 0.29789857601281255
+    }
+  ],
+  "scope": "Fresh model and independent process; exact full-run seeds and settings; no physics acceptance selection"
+}

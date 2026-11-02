@@ -329,3 +329,16 @@ def test_affine_position_servo_matches_motor_force_and_respects_saturation(devic
     torch.testing.assert_close(
         servo_gradient[1], torch.zeros_like(servo_gradient[1]), atol=0, rtol=0
     )
+
+
+def test_tracking_rotation_keeps_derivative_at_identity():
+    from retarget.task.humanoid.cost_contact import quat_sub
+    from retarget.task.humanoid.math import quat_sub as original
+
+    identity = torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float64)
+    quaternion = identity.clone().requires_grad_(True)
+    jacobian = torch.autograd.functional.jacobian(lambda q: quat_sub(q, identity), quaternion)
+    torch.testing.assert_close(jacobian[:, 1:], 2 * torch.eye(3, dtype=torch.float64))
+    for sign in (-1, 1):
+        q = sign * torch.tensor([[0.8, 0.6, 0.0, 0.0]], dtype=torch.float64)
+        torch.testing.assert_close(quat_sub(q, identity[None]), original(q, identity[None]))

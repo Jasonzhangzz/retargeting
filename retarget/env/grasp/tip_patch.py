@@ -116,16 +116,32 @@ def tip_patch(model, body):
     )
 
 
-def configure_tip_centers(hand, template, mapping):
+def configure_tip_centers(hand, template, mapping, *, semantic_masks=None):
     if template.partition("_")[0] not in {str(i) for i in TYPES}:
         return
     hand.tip_patches = {}
+    if semantic_masks is not None and len(semantic_masks) != len(hand.bodies):
+        raise ValueError("Semantic tip masks must match the contact slots")
+    candidates = {}
+    for body in np.unique(hand.bodies):
+        if hand.model.body(int(body)).name.endswith("link4"):
+            candidates[int(body)] = tip_patch(hand.model, int(body))
     for i, body in enumerate(hand.bodies):
         if not hand.model.body(int(body)).name.endswith("link4"):
             continue
-        if int(body) not in hand.tip_patches:
-            hand.tip_patches[int(body)] = tip_patch(hand.model, int(body))
-        patch = hand.tip_patches[int(body)]
+        patch = candidates[int(body)]
+        if semantic_masks is not None and any(
+                not np.asarray(semantic_masks[j], bool)[patch["index"]]
+                for j in np.flatnonzero(hand.bodies == body)):
+            # A legacy metric pad center must not override the template's
+            # hard intrinsic semantic region on a different hand morphology.
+            # Keep the original matched point and mask, without enlarging it.
+            mapping[i]["contact_policy"] = "matched_semantic_patch"
+            mapping[i]["central_tip_override_skipped"] = dict(
+                reason="physical_pad_center_outside_matched_semantic_patch",
+                center_query_index=patch["index"], semantic_mask_preserved=True)
+            continue
+        hand.tip_patches[int(body)] = patch
         mapping[i]["original_mapped_query_index"] = mapping[i]["query_index"]
         mapping[i]["contact_policy"] = "central_tip_sensor_pad"
         mapping[i]["tip_patch_reanchor_shift_mm"] = float(

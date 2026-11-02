@@ -27,15 +27,15 @@ CATALOG = {
     6: [("cylinder", 0.020, 0.12)],
     7: [("cylinder", 0.012, 0.12)],
     8: [("cylinder", 0.009, 0.12)],
-    9: [("disk", 0.018, 0.008)],
+    9: [("cylinder", 0.018, 0.12)],
     10: [("disk", 0.040, 0.015)],
     11: [("sphere", 0.035, 0.070)],
-    12: [("disk", 0.045, 0.008), ("plate", 0.045, 0.008)],
+    12: [("disk", 0.045, 0.016), ("plate", 0.045, 0.008)],
     13: [("sphere", 0.020, 0.040), ("cuboid", 0.020, 0.040)],
     14: [("sphere", 0.015, 0.030)],
-    15: [("cylinder", 0.015, 0.10)],
+    15: [("cylinder", 0.015, 0.20)],
     16: [("plate", 0.025, 0.003)],
-    17: [("cylinder", 0.025, 0.10)],
+    17: [("cylinder", 0.025, 0.20)],
     18: [("plate", 0.040, 0.008)],
     19: [("scissors", None, None)],
     20: [("cylinder", 0.004, 0.12)],
@@ -47,12 +47,80 @@ CATALOG = {
     26: [("sphere", 0.030, 0.060)],
     27: [("sphere", 0.020, 0.040)],
     28: [("sphere", 0.025, 0.050)],
-    29: [("cylinder", 0.007, 0.10)],
-    30: [("disk", 0.030, 0.025)],
+    29: [("cylinder", 0.007, 0.20)],
+    30: [("disk", 0.030, 0.008)],
     31: [("cylinder", 0.025, 0.10)],
-    32: [("cylinder", 0.008, 0.10)],
+    32: [("cylinder", 0.008, 0.20)],
     33: [("sphere", 0.008, 0.016), ("plate", 0.015, 0.003)],
 }
+
+SIZE_POLICY_VERSION = 2
+DEFAULT_SCALES = (0.5, 0.75, 1.0, 1.25, 1.5)
+
+
+def size_specifications(type_id, kind=None, *, radius_scales=None,
+                        height_scales=None, radius=None, height=None,
+                        explicit=False, cylinder_length=0.18):
+    """Return the shared, physical per-type experiment dimensions.
+
+    ``explicit`` retains the historical radius/height Cartesian grid. It must
+    come from the original configuration, before generic defaults are injected.
+    ``size_scale`` describes the axis being swept; ``radial_scale`` always
+    describes the actual radius, including the fixed 1.5x plate widths.
+    """
+    type_id = int(type_id)
+    if type_id not in CATALOG:
+        raise ValueError(f"Unknown grasp type {type_id}")
+    if not np.isfinite(cylinder_length) or cylinder_length <= 0:
+        raise ValueError("Cylinder length must be finite and positive")
+    rows = []
+    for family, base_radius, base_height in CATALOG[type_id]:
+        if kind is not None and family != kind or base_radius is None:
+            continue
+        if explicit:
+            radial = list([1.] if radius_scales is None else radius_scales)
+            axial = list([1.] if height_scales is None else height_scales)
+            if not radial or not axial or any(not np.isfinite(v) or v <= 0 for v in radial + axial):
+                raise ValueError("Primitive size grids must be finite and positive")
+            base_r = base_radius if radius is None else float(radius)
+            base_h = base_height if height is None else float(height)
+            samples = [(r, a, r, "radius") for r in radial
+                       for a in ([1.] if family == "sphere" else axial)]
+        else:
+            base_r, base_h = base_radius, base_height
+            if family == "cylinder" and type_id <= 6:
+                base_h = cylinder_length
+            scales = DEFAULT_SCALES
+            if type_id == 10:
+                scales = np.linspace(1., 1.5, 11)
+            elif type_id in (11, 28):
+                scales = np.linspace(1., 1.5, 5)
+            elif type_id == 12:
+                scales = np.linspace(.5, 1., 5)
+            elif type_id == 26:
+                scales = np.linspace(.75, 1.5, 5)
+            elif type_id == 33 and family == "sphere":
+                scales = np.linspace(1., 2., 5)
+            if type_id in (16, 22) and family == "plate":
+                samples = [(1.5, s, s, "thickness") for s in scales]
+            elif type_id == 30 and family == "disk":
+                samples = [(1., s, s, "thickness") for s in scales]
+            else:
+                samples = [(s, 1., s, "radius") for s in scales]
+        for radial, axial, scale, axis in samples:
+            r, h = base_r * radial, base_h * axial
+            if family == "sphere":
+                h = 2 * r
+            if not np.isfinite([r, h]).all() or min(r, h) <= 0:
+                raise ValueError("Primitive dimensions must be finite and positive")
+            rows.append(dict(kind=family, radius_m=float(r), height_m=float(h),
+                radial_scale=float(radial), axial_scale=float(axial),
+                size_scale=float(scale), size_axis=axis,
+                dimensions_m=([float(2*r), float(1.4*r), float(h)]
+                    if family in ("plate", "cuboid") else [float(2*r), float(2*r), float(h)]),
+                size_policy_version=SIZE_POLICY_VERSION, sources=SOURCES,
+                dimensions_status="explicit_benchmark_setting_not_Dexonomy_annotation"))
+    return rows
 
 
 def catalog(checkout):
@@ -154,30 +222,17 @@ def jobs(output, templates, args):
                     )
                 )
                 continue
-            for radial in args.radius_scales:
-                # Sphere has only one independent size; do not duplicate it by height.
-                for axial in [1.0] if kind == "sphere" else args.height_scales:
-                    radius = (args.radius if args.radius is not None else r) * radial
-                    height = (args.height if args.height is not None else h) * axial
-                    if kind == "sphere":
-                        height = 2 * radius
-                    tag = f"{template}_{kind}_r{radius:.7f}_h{height:.7f}"
-                    path = primitive_mesh(
-                        output / "meshes" / f"{tag}.obj", kind, radius, height
-                    )
-                    rows.append(
-                        (
-                            path,
-                            template,
-                            dict(
-                                kind=kind,
-                                radius_m=radius,
-                                height_m=2 * radius if kind == "sphere" else height,
-                                radial_scale=radial,
-                                axial_scale=axial,
-                                sources=SOURCES,
-                                dimensions_status="explicit_benchmark_setting_not_Dexonomy_annotation",
-                            ),
-                        )
-                    )
+            # Direct legacy callers without provenance flags keep explicit-grid
+            # behavior. The runner records whether YAML actually supplied one.
+            explicit = getattr(args, "primitive_grid_explicit", True)
+            specifications = size_specifications(int(number), kind,
+                radius_scales=getattr(args, "radius_scales", None),
+                height_scales=getattr(args, "height_scales", None),
+                radius=getattr(args, "radius", None), height=getattr(args, "height", None),
+                explicit=explicit)
+            for primitive in specifications:
+                radius, height = primitive["radius_m"], primitive["height_m"]
+                tag = f"{template}_{kind}_r{radius:.7f}_h{height:.7f}"
+                path = primitive_mesh(output / "meshes" / f"{tag}.obj", kind, radius, height)
+                rows.append((path, template, primitive))
     return rows, skipped

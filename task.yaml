@@ -4,15 +4,16 @@ task:
   name: move_largebox
   data: data/humanoid/move_largebox
 solver:
-  type: cem
-  population: 1024
-  iterations: 16
-  worlds: 128
+  type: dexforge
+  dexforge: {}
 environment:
   device: cuda:0
+  dynamics: dexforge
+  dexforge:
+    gradient_check: true
 seed: 0
 output:
-  name: humanoid_move_largebox_cem
+  name: humanoid_move_largebox_forceaware
 visualization:
   live: false
-  save_video: true
+  save_video: false

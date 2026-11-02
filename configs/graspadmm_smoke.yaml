@@ -1,0 +1,23 @@
+mode: solve
+task:
+  type: grasp
+  name: graspadmm_wuji2_smoke
+  data: ../data/grasp
+  templates: [11]
+  radius_scales: [1.0]
+  height_scales: [1.0]
+  options:
+    hand_model: wuji2
+    primary_shape_only: true
+    primitive_seed_policy: taxonomy
+solver:
+  type: graspadmm
+environment:
+  device: cuda:0
+  dynamics: graspadmm
+seed: 0
+output:
+  name: graspadmm_cli_smoke
+visualization:
+  live: false
+  save_video: false

@@ -1,0 +1,557 @@
+{
+  "task": "grasp",
+  "method": "graspadmm_mppi",
+  "policy": "native_validation_fallback",
+  "case_id": "t25_cylinder_s04_seed03",
+  "template": "25_Lateral_Tripod",
+  "seed": 3,
+  "primitive": {
+    "kind": "cylinder",
+    "radius_m": 0.0105,
+    "height_m": 0.06,
+    "radial_scale": 1.5,
+    "axial_scale": 1.0,
+    "size_scale": 1.5,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.021,
+      0.021,
+      0.06
+    ],
+    "size_policy_version": 2,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "task_success": true,
+  "baseline_success": true,
+  "raw_mppi_success": true,
+  "uses_refined_pose": true,
+  "transition": "retained",
+  "failure_stage": null,
+  "evaluation_protocol": "graspadmm_native_v1",
+  "required_cbody": [
+    [
+      "right_finger1_link4"
+    ],
+    [
+      "right_finger2_link4"
+    ],
+    [
+      "right_finger3_link3"
+    ]
+  ],
+  "mesh": "assets/b53082f0d2e725e234518101cd0ee33397c008d1600c7b713eade55a67db3595.obj",
+  "model": "models/f6dbb8fa3e7437c1cbba77c7e828242e231296c762cffaa746e63b3a00993257.xml",
+  "trajectory": "poses/t25_cylinder_s04_seed03.npz",
+  "evaluation_model": "models/7a56cff846cfd21840fc180109cc7f757881e3d41afad9635c94e7b4990bc5e5.xml",
+  "evaluation_trajectory": "trajectories/t25_cylinder_s04_seed03.npz",
+  "source_evaluation_sha256": "86d153ab49a83d4cdb266e105010282a68f5b90dbe4e97c15faae8066d24d0e8",
+  "graspadmm_evaluation": {
+    "protocol": "graspadmm_native_v1",
+    "evaluation_protocol": "graspadmm_native_v1",
+    "criterion": {
+      "protocol": "graspadmm_native_v1",
+      "object_mass_kg": 0.1,
+      "translation_threshold_m": 0.05,
+      "rotation_threshold_deg": 15.0,
+      "directions": [
+        "+x",
+        "-x",
+        "+y",
+        "-y",
+        "+z",
+        "-z"
+      ],
+      "evaluation_friction": [
+        0.6,
+        0.02
+      ],
+      "filter_qp_friction": [
+        0.6,
+        0.0
+      ],
+      "skip_pregrasp": false,
+      "hard": false,
+      "source": "Dexonomy grasp_admm filtering, squeeze/pregrasp generation and native eval_fc"
+    },
+    "generation": {
+      "success": true,
+      "failure_stage": null,
+      "grasp_filter": {
+        "joint_limits": true,
+        "hand_hand_min_distance_m": null,
+        "hand_object_min_distance_m": 0.00032310429378412664,
+        "contacts": 6,
+        "required_cbody": [
+          [
+            "right_finger1_link4"
+          ],
+          [
+            "right_finger2_link4"
+          ],
+          [
+            "right_finger3_link3"
+          ]
+        ],
+        "required_groups_contact": [
+          true,
+          true,
+          true
+        ],
+        "contact_bodies": [
+          "right_finger1_link4",
+          "right_finger2_link3",
+          "right_finger2_link4",
+          "right_finger3_link2",
+          "right_finger3_link3",
+          "right_finger3_link4"
+        ],
+        "success": true
+      },
+      "pregrasp_filter": {
+        "joint_limits": true,
+        "hand_hand_min_distance_m": 0.0009052581153810024,
+        "hand_object_min_distance_m": 0.04493289440870285,
+        "contacts": 1,
+        "required_cbody": [],
+        "required_groups_contact": [],
+        "contact_bodies": [
+          "right_finger3_link3"
+        ],
+        "success": true
+      }
+    },
+    "upstream_commit": "d561ff9df8545deef7a3f9e7cfb4045ef66f6913",
+    "generation_config": {
+      "grasp": {
+        "device": "cpu",
+        "gpus": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "process_per_gpu": 4,
+        "step": 50,
+        "substep": 10,
+        "step_obj": 1,
+        "step_hand": 1,
+        "rho_admm": 1000.0,
+        "lr_obj": 0.0002,
+        "square_res": true,
+        "cdist": 0.001,
+        "fix_hand_local_cp": false,
+        "opt_miu_coef": [
+          0.1,
+          0
+        ],
+        "filter": {
+          "limit": {
+            "thre": 0.0
+          },
+          "collision": {
+            "hh_thre": 0.0,
+            "ho_thre": 0.0
+          },
+          "contact": {
+            "thre": 0.002,
+            "check_body": true
+          },
+          "qp": {
+            "thre": 0.001,
+            "miu_coef": [
+              0.6,
+              0.0
+            ]
+          }
+        }
+      },
+      "pregrasp": {
+        "step": 20,
+        "substep": 10,
+        "cdist": 0.045,
+        "filter": {
+          "limit": {
+            "thre": 0.0
+          },
+          "collision": {
+            "hh_thre": 0.0,
+            "ho_thre": 0.04
+          }
+        }
+      },
+      "cust_log_dir": "${log_dir}"
+    },
+    "eval_config": {
+      "skip_pregrasp": false,
+      "miu_coef": [
+        0.6,
+        0.02
+      ],
+      "hard": false,
+      "trans_thre": 0.05,
+      "rot_thre": 15,
+      "cust_log_dir": "${log_dir}"
+    },
+    "state": "completed",
+    "success": true,
+    "task_success": true,
+    "six_direction_tested": true,
+    "directions": [
+      {
+        "direction": "+x",
+        "tested": true,
+        "success": true,
+        "checks": [
+          {
+            "translation_m": 0.006529124475685975,
+            "rotation_deg": 7.217057704925537,
+            "success": true
+          },
+          {
+            "translation_m": 0.006498727032033084,
+            "rotation_deg": 7.101535797119141,
+            "success": true
+          },
+          {
+            "translation_m": 0.006477594895047562,
+            "rotation_deg": 7.008397579193115,
+            "success": true
+          },
+          {
+            "translation_m": 0.006463657808735424,
+            "rotation_deg": 6.934140205383301,
+            "success": true
+          },
+          {
+            "translation_m": 0.006455523083595534,
+            "rotation_deg": 6.8764119148254395,
+            "success": true
+          },
+          {
+            "translation_m": 0.006451982871370857,
+            "rotation_deg": 6.83116340637207,
+            "success": true
+          },
+          {
+            "translation_m": 0.006451432900124683,
+            "rotation_deg": 6.794724464416504,
+            "success": true
+          },
+          {
+            "translation_m": 0.00645262096166076,
+            "rotation_deg": 6.765733242034912,
+            "success": true
+          },
+          {
+            "translation_m": 0.006454918307147539,
+            "rotation_deg": 6.7427754402160645,
+            "success": true
+          },
+          {
+            "translation_m": 0.006457942494045057,
+            "rotation_deg": 6.724865436553955,
+            "success": true
+          }
+        ]
+      },
+      {
+        "direction": "-x",
+        "tested": true,
+        "success": true,
+        "checks": [
+          {
+            "translation_m": 0.004463494616907171,
+            "rotation_deg": 6.765501499176025,
+            "success": true
+          },
+          {
+            "translation_m": 0.004469469637235148,
+            "rotation_deg": 6.675893783569336,
+            "success": true
+          },
+          {
+            "translation_m": 0.004514853806822006,
+            "rotation_deg": 6.663565158843994,
+            "success": true
+          },
+          {
+            "translation_m": 0.0045386273181932035,
+            "rotation_deg": 6.640726566314697,
+            "success": true
+          },
+          {
+            "translation_m": 0.004553959699764135,
+            "rotation_deg": 6.624550819396973,
+            "success": true
+          },
+          {
+            "translation_m": 0.004564758522415,
+            "rotation_deg": 6.619465351104736,
+            "success": true
+          },
+          {
+            "translation_m": 0.004572305698738545,
+            "rotation_deg": 6.6254963874816895,
+            "success": true
+          },
+          {
+            "translation_m": 0.004576961278078755,
+            "rotation_deg": 6.641670227050781,
+            "success": true
+          },
+          {
+            "translation_m": 0.004578759377991268,
+            "rotation_deg": 6.666619777679443,
+            "success": true
+          },
+          {
+            "translation_m": 0.00457762457432128,
+            "rotation_deg": 6.698729515075684,
+            "success": true
+          }
+        ]
+      },
+      {
+        "direction": "+y",
+        "tested": true,
+        "success": true,
+        "checks": [
+          {
+            "translation_m": 0.006447947749815597,
+            "rotation_deg": 6.592674732208252,
+            "success": true
+          },
+          {
+            "translation_m": 0.0064413194508176445,
+            "rotation_deg": 6.569231986999512,
+            "success": true
+          },
+          {
+            "translation_m": 0.0064656808729974214,
+            "rotation_deg": 6.536128044128418,
+            "success": true
+          },
+          {
+            "translation_m": 0.006484544654463377,
+            "rotation_deg": 6.5132036209106445,
+            "success": true
+          },
+          {
+            "translation_m": 0.006497190936408196,
+            "rotation_deg": 6.477879524230957,
+            "success": true
+          },
+          {
+            "translation_m": 0.006506969742451507,
+            "rotation_deg": 6.437863349914551,
+            "success": true
+          },
+          {
+            "translation_m": 0.006514993827049115,
+            "rotation_deg": 6.395637512207031,
+            "success": true
+          },
+          {
+            "translation_m": 0.006523074250285145,
+            "rotation_deg": 6.350543022155762,
+            "success": true
+          },
+          {
+            "translation_m": 0.006530989235492755,
+            "rotation_deg": 6.30525016784668,
+            "success": true
+          },
+          {
+            "translation_m": 0.006541218737784864,
+            "rotation_deg": 6.289707183837891,
+            "success": true
+          }
+        ]
+      },
+      {
+        "direction": "-y",
+        "tested": true,
+        "success": true,
+        "checks": [
+          {
+            "translation_m": 0.0038057571863713098,
+            "rotation_deg": 8.351777076721191,
+            "success": true
+          },
+          {
+            "translation_m": 0.0037778307731051244,
+            "rotation_deg": 8.676126480102539,
+            "success": true
+          },
+          {
+            "translation_m": 0.0038215356732189364,
+            "rotation_deg": 8.778462409973145,
+            "success": true
+          },
+          {
+            "translation_m": 0.0038252744008828083,
+            "rotation_deg": 8.861515998840332,
+            "success": true
+          },
+          {
+            "translation_m": 0.003819495001919906,
+            "rotation_deg": 8.938279151916504,
+            "success": true
+          },
+          {
+            "translation_m": 0.0038129541906030493,
+            "rotation_deg": 9.008391380310059,
+            "success": true
+          },
+          {
+            "translation_m": 0.0037997528584388113,
+            "rotation_deg": 9.071832656860352,
+            "success": true
+          },
+          {
+            "translation_m": 0.0037847407816740558,
+            "rotation_deg": 9.133633613586426,
+            "success": true
+          },
+          {
+            "translation_m": 0.0037736726210369177,
+            "rotation_deg": 9.194679260253906,
+            "success": true
+          },
+          {
+            "translation_m": 0.003759014808803358,
+            "rotation_deg": 9.260062217712402,
+            "success": true
+          }
+        ]
+      },
+      {
+        "direction": "+z",
+        "tested": true,
+        "success": true,
+        "checks": [
+          {
+            "translation_m": 0.006444413834892432,
+            "rotation_deg": 8.025762557983398,
+            "success": true
+          },
+          {
+            "translation_m": 0.0064734309838364226,
+            "rotation_deg": 8.035323143005371,
+            "success": true
+          },
+          {
+            "translation_m": 0.006507836467125894,
+            "rotation_deg": 8.069952964782715,
+            "success": true
+          },
+          {
+            "translation_m": 0.006535760813356613,
+            "rotation_deg": 8.110328674316406,
+            "success": true
+          },
+          {
+            "translation_m": 0.006558255698060305,
+            "rotation_deg": 8.156270027160645,
+            "success": true
+          },
+          {
+            "translation_m": 0.006572601872767646,
+            "rotation_deg": 8.197273254394531,
+            "success": true
+          },
+          {
+            "translation_m": 0.006575554219555006,
+            "rotation_deg": 8.230270385742188,
+            "success": true
+          },
+          {
+            "translation_m": 0.0065733516872983925,
+            "rotation_deg": 8.258585929870605,
+            "success": true
+          },
+          {
+            "translation_m": 0.006566074226766975,
+            "rotation_deg": 8.286332130432129,
+            "success": true
+          },
+          {
+            "translation_m": 0.0065557397380575,
+            "rotation_deg": 8.316810607910156,
+            "success": true
+          }
+        ]
+      },
+      {
+        "direction": "-z",
+        "tested": true,
+        "success": true,
+        "checks": [
+          {
+            "translation_m": 0.00490269341450221,
+            "rotation_deg": 6.377122402191162,
+            "success": true
+          },
+          {
+            "translation_m": 0.004861725987400981,
+            "rotation_deg": 6.234057903289795,
+            "success": true
+          },
+          {
+            "translation_m": 0.0048520621170018135,
+            "rotation_deg": 6.138489723205566,
+            "success": true
+          },
+          {
+            "translation_m": 0.0048551348904280495,
+            "rotation_deg": 6.07643461227417,
+            "success": true
+          },
+          {
+            "translation_m": 0.0048639346517156965,
+            "rotation_deg": 6.048017978668213,
+            "success": true
+          },
+          {
+            "translation_m": 0.004873804542714437,
+            "rotation_deg": 6.0397257804870605,
+            "success": true
+          },
+          {
+            "translation_m": 0.004884482876373566,
+            "rotation_deg": 6.046075344085693,
+            "success": true
+          },
+          {
+            "translation_m": 0.004890743008491444,
+            "rotation_deg": 6.0729546546936035,
+            "success": true
+          },
+          {
+            "translation_m": 0.004896251151182314,
+            "rotation_deg": 6.109335899353027,
+            "success": true
+          },
+          {
+            "translation_m": 0.004902068413672148,
+            "rotation_deg": 6.144992351531982,
+            "success": true
+          }
+        ]
+      }
+    ],
+    "trajectory_time_scope": "time is strictly increasing display time; reset frames advance by one float unit; sim_time is actual resettable MuJoCo time",
+    "failure_stage": null,
+    "scene": "models/7a56cff846cfd21840fc180109cc7f757881e3d41afad9635c94e7b4990bc5e5.xml",
+    "trajectory": "trajectories/t25_cylinder_s04_seed03.npz",
+    "worker_pid": 645120,
+    "evaluation_wall_seconds": 0.4643222759477794,
+    "runtime_mode": "persistent_native_worker",
+    "candidate_sha256": "48b17fa865daf8d7b2773dcae348994f196efc365c0c721f73dbdd7e34987eb8"
+  }
+}

@@ -20,7 +20,20 @@ def main():
         from retarget.viewer.runtime import run
 
         return run(config)
-    module = importlib.import_module(f"retarget.env.{config.task['type']}.runner")
+    if config.solver.type == "graspadmm":
+        module = importlib.import_module("retarget.env.grasp.grasp_admm_runner")
+    elif config.task.get("type") == "grasp" and config.environment.get("spider") is not None:
+        module = importlib.import_module("retarget.env.grasp.spider_runner")
+    elif config.solver.type == "dexforge":
+        from retarget.dynamics.dexforge_upstream import require_environment
+
+        require_environment()
+        module = importlib.import_module(
+            "retarget.env.grasp.forceaware_runner" if config.task["type"] == "grasp"
+            else "retarget.env.humanoid.dexforge_runner"
+        )
+    else:
+        module = importlib.import_module(f"retarget.env.{config.task['type']}.runner")
     module.validate(config)
     output = prepare_output(config)
     started = time.perf_counter()

@@ -181,6 +181,15 @@ class GraspProblem:
 
         self.explicit = ExplicitPoseModel(self)
         self.cost.pose_cost, self.cost.pose_enabled = self.explicit.cost, 1
+        self.tracking = None
+        objective = getattr(runtime.args, "objective", "card")
+        if objective == "dex_tracking":
+            from retarget.task.grasp.tracking_cost import TrackingObjective
+
+            self.tracking = TrackingObjective(self)
+            self.cost.pose_enabled = 0
+        elif objective != "card":
+            raise ValueError("grasp objective must be card or dex_tracking")
         self.mean = wp.to_torch(self.state.seed).clone()
         self.sigma = wp.to_torch(self.state.initial_sigma).clone()
         self.low = wp.to_torch(self.state.low)
@@ -215,10 +224,20 @@ class GraspProblem:
                     inputs=[self.cost, self.state],
                     device=self.device,
                 )
-                costs.append(wp.to_torch(self.state.scores)[: len(chunk)].clone())
-                ranking.append(
-                    wp.to_torch(self.state.selection_scores)[: len(chunk)].clone()
-                )
+                score = wp.to_torch(self.state.scores)[: len(chunk)].clone()
+                selection = wp.to_torch(self.state.selection_scores)[: len(chunk)].clone()
+                tolerance = getattr(self.explicit, "contact_tolerance_mm", None)
+                if tolerance is not None:
+                    residual = wp.to_torch(self.explicit.contact_residual)[: len(chunk)].amax(1)
+                    converged = torch.isfinite(residual) & (residual <= tolerance)
+                    score = torch.where(converged, score, torch.inf)
+                    # Numerical failures may guide restoration when no finite
+                    # candidate exists, but can never be exported as a solve.
+                    selection += 1.0e4 * torch.nan_to_num(
+                        residual, nan=float("inf"), posinf=float("inf"), neginf=float("inf")
+                    ).square()
+                costs.append(score)
+                ranking.append(selection)
         cost = torch.cat(costs)
         return Evaluation(
             cost, cost if bool(torch.isfinite(cost).any()) else torch.cat(ranking)
@@ -566,12 +585,13 @@ class GraspProblem:
         view = s.qpos if worlds == s.population else s.qpos[:worlds]
         kinematics(self.backend.kinematics, view, self.pose)
         wp.launch(clear_cost, worlds, inputs=[d], device=self.device)
-        wp.launch(
-            contact_cost, (worlds, len(d.group_body)), inputs=[d], device=self.device
-        )
-        wp.launch(style_cost, (worlds, 15), inputs=[d], device=self.device)
-        wp.launch(smooth_cost, worlds, inputs=[d, s], device=self.device)
-        wp.launch(wrist_reference_cost, worlds, inputs=[d], device=self.device)
+        if self.tracking is None:
+            wp.launch(
+                contact_cost, (worlds, len(d.group_body)), inputs=[d], device=self.device
+            )
+            wp.launch(style_cost, (worlds, 15), inputs=[d], device=self.device)
+            wp.launch(smooth_cost, worlds, inputs=[d, s], device=self.device)
+            wp.launch(wrist_reference_cost, worlds, inputs=[d], device=self.device)
         wp.launch(
             object_cost, (worlds, len(d.sample_body)), inputs=[d], device=self.device
         )
@@ -584,6 +604,13 @@ class GraspProblem:
             inputs=[d, self.palm_capsules],
             device=self.device,
         )
+        if self.tracking is not None:
+            from retarget.task.grasp.tracking_cost import finish_tracking
+
+            self.explicit.forward(worlds, score_pose=False)
+            self.tracking.evaluate(worlds)
+            wp.launch(finish_tracking, worlds, inputs=[d, s, self.tracking.cost], device=self.device)
+            return
         predict = self.explicit is not None and True
         d.pose_enabled = int(predict)
         if predict:

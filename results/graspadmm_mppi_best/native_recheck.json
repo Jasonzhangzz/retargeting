@@ -1,0 +1,35 @@
+{
+  "passed": true,
+  "cases": [
+    {
+      "case_id": "t04_cylinder_s01_seed00",
+      "expected": true,
+      "actual": true,
+      "match": true
+    },
+    {
+      "case_id": "t05_cylinder_s02_seed01",
+      "expected": true,
+      "actual": true,
+      "match": true
+    },
+    {
+      "case_id": "t28_sphere_s00_seed00",
+      "expected": true,
+      "actual": true,
+      "match": true
+    },
+    {
+      "case_id": "t29_cylinder_s02_seed00",
+      "expected": true,
+      "actual": true,
+      "match": true
+    },
+    {
+      "case_id": "t33_sphere_s04_seed09",
+      "expected": false,
+      "actual": false,
+      "match": true
+    }
+  ]
+}

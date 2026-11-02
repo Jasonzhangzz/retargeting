@@ -13,6 +13,41 @@ DEFAULT_REFERENCE = (
 )
 
 
+def grasp_physics(args):
+    """Resolve an optional reference scene or explicit standalone parameters."""
+    reference = getattr(args, "physics_reference", DEFAULT_REFERENCE)
+    values = (
+        dict(reference_physics(str(reference)))
+        if reference is not None
+        else dict(
+            impratio=1.0,
+            friction=[1.0, 0.005, 0.0001],
+            solref=[0.02, 1.0],
+            solimp=[0.9, 0.95, 0.001, 0.5, 2.0],
+            condim=3,
+        )
+    )
+    for option, key in (
+        ("impratio", "impratio"),
+        ("contact_solref", "solref"),
+        ("contact_solimp", "solimp"),
+    ):
+        override = getattr(args, option, None)
+        if override is not None:
+            values[key] = override
+    if getattr(args, "friction", None) is not None:
+        values["friction"] = [args.friction, *values["friction"][1:]]
+    if not np.isfinite(values["friction"]).all() or min(values["friction"]) < 0:
+        raise ValueError("Grasp friction must be finite and nonnegative")
+    if not np.isfinite(values["impratio"]) or values["impratio"] <= 0:
+        raise ValueError("Grasp impratio must be finite and positive")
+    for name, size in (("solref", 2), ("solimp", 5)):
+        value = np.asarray(values[name], dtype=float)
+        if value.shape != (size,) or not np.isfinite(value).all():
+            raise ValueError(f"Grasp {name} must contain {size} finite values")
+    return values
+
+
 @lru_cache(maxsize=8)
 def reference_physics(path):
     """Compile only the CPU collision XML; do not allocate a reference GPU model."""

@@ -4,7 +4,7 @@ import pytest
 import torch
 from retarget.solver.base import Settings, Problem, Evaluation, NoValidCandidate, solve
 from retarget.solver.cem import elite_mean
-from retarget.solver.mppi import weights
+from retarget.solver.mppi import weights, refine_mean
 
 
 def test_card_update_independent_population_std_and_ceil():
@@ -72,3 +72,109 @@ def test_mppi_early_stop_counts_actual_budget():
         0,
     )
     assert len(r.history) == 1 and r.sampled == 20 and r.evaluated == 21
+
+
+def test_gradient_mppi_improves_same_objective_and_counts_all_evaluations():
+    seen = []
+
+    def score(x):
+        seen.append((len(x), torch.is_grad_enabled()))
+        return (x - 1).square().sum(1)
+
+    problem = Problem(torch.zeros(2), torch.full((2,), 0.01), score)
+    common = dict(type="mppi", population=20, iterations=3, improvement_threshold=0.0)
+    baseline = solve(problem, Settings(**common), 4)
+    assert all(not enabled for _, enabled in seen)
+    seen.clear()
+    # solve() normally runs under no_grad. Only mean-gradient evaluations need
+    # an autograd graph; population scoring and backtracking remain no_grad.
+    with torch.no_grad():
+        guided = solve(
+            problem,
+            Settings(**common, gradient_steps=2, gradient_step_size=40),
+            4,
+        )
+    assert guided.cost < baseline.cost * 0.1
+    assert guided.sampled == baseline.sampled == 60
+    assert guided.evaluated == sum(count for count, _ in seen)
+    assert sum(enabled for _, enabled in seen) > 0
+    assert all(count == 1 for count, enabled in seen if enabled)
+    assert guided.evaluated == guided.sampled + 1 + sum(
+        row["gradient_evaluated"] for row in guided.history
+    )
+    assert all(
+        row["gradient_final_cost"] <= row["gradient_initial_cost"]
+        for row in guided.history
+    )
+    assert not guided.parameters.requires_grad
+
+
+def test_gradient_refinement_projects_and_backtracks_invalid_trials():
+    def score(x):
+        cost = (x - 0.5).square().sum(1)
+        return torch.where((x.abs() > 0.75).any(1), torch.inf, cost)
+
+    settings = Settings(
+        type="mppi", gradient_steps=1, gradient_step_size=4, gradient_backtracks=4
+    )
+    problem = Problem(torch.zeros(1), torch.ones(1), score)
+    with torch.no_grad():
+        mean, info = refine_mean(problem, problem.mean, settings)
+    torch.testing.assert_close(mean, torch.tensor([0.5]))
+    assert info["gradient_accepted_steps"] == 1
+    assert info["gradient_evaluated"] == 5  # one gradient and four trials
+    assert info["gradient_final_cost"] == 0
+
+    projected = Problem(
+        torch.zeros(1), torch.ones(1), lambda x: (x - 1).square().sum(1),
+        project=lambda x: x.clamp(-0.2, 0.2),
+    )
+    with torch.no_grad():
+        mean, info = refine_mean(projected, projected.mean, settings)
+    torch.testing.assert_close(mean, torch.tensor([0.2]))
+    assert info["gradient_final_cost"] < info["gradient_initial_cost"]
+
+
+@pytest.mark.parametrize(
+    "score",
+    [
+        lambda x: x.square().sum(1),  # zero gradient
+        lambda x: x.sqrt().sum(1),  # finite cost, nonfinite derivative
+        lambda x: x.sum(1) * 0 + torch.inf,  # hard-invalid mean
+    ],
+)
+def test_gradient_refinement_keeps_mean_on_zero_or_nonfinite_gradient(score):
+    problem = Problem(torch.zeros(2), torch.ones(2), score)
+    with torch.no_grad():
+        mean, info = refine_mean(
+            problem, problem.mean, Settings(type="mppi", gradient_steps=3)
+        )
+    torch.testing.assert_close(mean, problem.mean)
+    assert info["gradient_accepted_steps"] == 0
+    assert info["gradient_evaluated"] == 1
+
+
+def test_gradient_refinement_requires_differentiable_objective():
+    with pytest.raises(ValueError, match="differentiable"):
+        solve(
+            Problem(torch.zeros(2), torch.ones(2), lambda x: torch.zeros(len(x))),
+            Settings(type="mppi", population=20, gradient_steps=1),
+        )
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        dict(gradient_steps=-1),
+        dict(gradient_steps=True),
+        dict(gradient_steps=1.5),
+        dict(gradient_step_size=0),
+        dict(gradient_step_size=float("nan")),
+        dict(gradient_backtracks=0),
+        dict(gradient_backtracks=1.5),
+        dict(type="cem", gradient_steps=1),
+    ],
+)
+def test_invalid_gradient_settings_fail_before_solving(options):
+    with pytest.raises(ValueError):
+        Settings(**{**dict(type="mppi"), **options})

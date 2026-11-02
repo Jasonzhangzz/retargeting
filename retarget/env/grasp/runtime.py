@@ -81,36 +81,45 @@ def prepare_experiment(directory, hand, guess, args):
         friction=f"{args.friction} .005 .0001",
         mass="0",
     )
-    from retarget.env.grasp.physics import apply_object_physics, reference_physics
+    from retarget.env.grasp.physics import apply_object_physics, grasp_physics
 
-    values = dict(
-        reference_physics(
-            str(
-                getattr(
-                    args,
-                    "physics_reference",
-                    ROOT
-                    / "data/dexycb/prepared/sugar_box/sequence/scene/wuji_right/sugar_box_sdf.xml",
-                )
-            )
-        )
-    )
-    values.update(
-        friction=[args.friction, *values["friction"][1:]],
-        impratio=getattr(args, "impratio", values["impratio"]),
-        solref=getattr(args, "contact_solref", values["solref"]),
-        solimp=getattr(args, "contact_solimp", values["solimp"]),
-    )
+    values = grasp_physics(args)
     apply_object_physics(tree, values)
     # Physics uses standard mesh collision; task surface queries are separate.
     (scene / "primitive_sdf.xml").write_text(ET.tostring(tree, encoding="unicode"))
     (metadata / "meta.json").write_text(json.dumps(dict(object="primitive")))
-    reference = np.tile(guess.hand_qpos, (2, 1))
+    hand_reference = getattr(guess, "contactaware_reference_qpos", guess.hand_qpos)
+    reference = np.tile(hand_reference, (2, 1))
     from retarget.env.grasp.rollout import force_priorities
 
     supplied = dict(
         object_points=guess.object_points, object_normals=guess.object_normals
     )
+    if hasattr(hand, "ik_reference_qpos"):
+        supplied["gesture_reference_qpos"] = hand.ik_reference_qpos.copy()
+    for name in ("pose_intent_qpos", "pose_intent_radius", "pose_intent_center", "intent_palm_position",
+                 "intent_palm_rotation", "cylinder_middle_slots", "cylinder_middle_half_band"):
+        if hasattr(hand, name):
+            supplied[name] = np.asarray(getattr(hand, name)).copy()
+    if hasattr(guess, "contactaware_reference_qpos"):
+        q_reference = np.asarray(guess.contactaware_reference_qpos, dtype=float)
+        if q_reference.shape != (26,) or not np.isfinite(q_reference).all():
+            raise ValueError("ContactAware must produce a finite 26-coordinate hand reference")
+        supplied["hand_reference_qpos"] = q_reference.copy()
+        supplied["hand_reference_source"] = np.asarray("dexforge_contactaware")
+        supplied["hand_initial_qpos"] = np.asarray(guess.hand_qpos, dtype=float).copy()
+        from retarget.common.results import write_json
+
+        write_json(directory / "contactaware_reference.json", guess.metadata["contactaware"])
+    if hasattr(hand, "semantic_contact_masks"):
+        masks = hand.semantic_contact_masks
+        supplied.update(
+            semantic_patch_offsets=np.r_[0, np.cumsum([len(mask) for mask in masks])],
+            semantic_patch_masks=np.concatenate(masks),
+            semantic_patch_labels=np.asarray(hand.semantic_patch_labels),
+            semantic_reference_local=hand.semantic_contact_local,
+            semantic_reference_normals=hand.semantic_contact_normals,
+        )
     if hasattr(hand, "contact_reference_normals"):
         supplied["region_reference_normals"] = hand.contact_reference_normals
     if hasattr(hand, "object_orientation"):
@@ -141,6 +150,12 @@ def prepare_experiment(directory, hand, guess, args):
     if forces is not None:
         force_priorities(forces, len(guess.object_points))
         supplied["contact_forces"] = forces
+    count = len(hand.local)
+    contact_mask = np.asarray(getattr(guess, "contact_mask", np.ones(count)), dtype=np.float32)
+    if (contact_mask.shape != (count,) or not np.isfinite(contact_mask).all()
+            or not np.isin(contact_mask, [0.0, 1.0]).all() or not contact_mask.any()):
+        raise ValueError("Reference contact mask must select at least one finite binary contact slot")
+    supplied["reference_contact_mask"] = contact_mask.copy()
     np.savez_compressed(directory / "card_input.npz", **supplied)
     frames = len(reference)
     np.save(guidance / "wuji_right_qpos.npy", reference.astype(np.float32))
@@ -149,10 +164,11 @@ def prepare_experiment(directory, hand, guess, args):
         guidance / "object_pose_7.npy",
         np.tile([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0], (frames, 1)).astype(np.float32),
     )
-    count = len(hand.local)
+    # ContactAware may release individual unreachable slots; this does not
+    # release a mandatory finger, which the front end validates separately.
     np.savez_compressed(
         guidance / "contact_guidance.npz",
-        contact_mask=np.ones((frames, count), np.float32),
+        contact_mask=np.tile(contact_mask, (frames, 1)),
         contact_weight=np.ones((frames, count), np.float32),
         contact_pos_obj=np.tile(guess.object_points, (frames, 1, 1)).astype(np.float32),
         hand_query_body_ids=np.tile(hand.bodies, (frames, 1)).astype(np.int32),
@@ -224,6 +240,12 @@ class GraspRuntime:
             ref_dt=cfg.simulator.time_grid.ref_dt,
             hold=True,
         )
+        with np.load(experiment / "card_input.npz", allow_pickle=False) as supplied:
+            if "hand_initial_qpos" in supplied:
+                actual_hand = supplied["hand_initial_qpos"]
+                if actual_hand.shape != (26,) or not np.isfinite(actual_hand).all():
+                    raise ValueError("Actual hand initial state must contain 26 finite coordinates")
+                self.qpos[np.asarray(index.hand_qpos)] = actual_hand
         self.targets = make_window(
             sequence,
             executed_steps=0,

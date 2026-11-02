@@ -1,2 +1,3 @@
 # Grasp initialization dependencies are included in the common runtime.
 -r requirements.txt
+clarabel==0.11.1

@@ -1,0 +1,28 @@
+# Static local MPPI of each saved final ADMM grasp, followed by the pinned
+# original filter + squeeze/pregrasp + six-direction physical evaluation.
+# Budget is fixed for every case; no evaluation-guided retries or selection.
+refinement:
+  population: 256
+  worlds: 64
+  iterations: 8
+  stages: 2
+  points_per_body: 128
+  pos_noise: 0.0015
+  rot_noise: 0.015
+  joint_noise: 0.04
+  final_stage_noise: 0.25
+  max_pos_delta: 0.01
+  max_rot_delta: 0.15
+  max_joint_delta: 0.35
+  target_gap_m: 0.0007
+  contact_scale_m: 0.002
+  penetration_scale_m: 0.001
+  penetration_weight: 1000.0
+  collision_clearance_m: 0.00005
+  collision_margin_m: 0.0001
+  contact_weight: 1.0
+  normal_weight: 0.1
+  pose_weight: 0.01
+  wrench_weight: 0.1
+  temperature: 1.0
+  nconmax: 256

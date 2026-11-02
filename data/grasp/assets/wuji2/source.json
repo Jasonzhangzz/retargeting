@@ -1,0 +1,285 @@
+{
+  "hand": "official WUJI Hand 2.2 right (bare)",
+  "source": "https://github.com/wuji-technology/wuji-description",
+  "commit": "5c4dfa16917355d073e2e1d7e3d03897b6cf9508",
+  "source_xml": "hand2/hand2_2/body/mjcf/right.xml",
+  "source_xml_sha256": "c11ab34b0fd0c1d520d108ffdefe45bfc05711bb2e97946a6bda96888cf02847",
+  "license": "MIT; see assets/wuji2/LICENSE",
+  "adapter": {
+    "source_to_adapter_body_names": {
+      "r_wrist": "right_palm_link",
+      "r_thumb_proximal": "right_finger1_link1",
+      "r_thumb_proximal_abd": "right_finger1_link2",
+      "r_thumb_middle": "right_finger1_link3",
+      "r_thumb_distal": "right_finger1_link4",
+      "r_thumb_tip": "right_thumb_tip",
+      "r_index_finger_proximal": "right_finger2_link1",
+      "r_index_finger_proximal_abd": "right_finger2_link2",
+      "r_index_finger_middle": "right_finger2_link3",
+      "r_index_finger_distal": "right_finger2_link4",
+      "r_index_finger_tip": "right_index_tip",
+      "r_middle_finger_proximal": "right_finger3_link1",
+      "r_middle_finger_proximal_abd": "right_finger3_link2",
+      "r_middle_finger_middle": "right_finger3_link3",
+      "r_middle_finger_distal": "right_finger3_link4",
+      "r_middle_finger_tip": "right_middle_tip",
+      "r_ring_finger_proximal": "right_finger4_link1",
+      "r_ring_finger_proximal_abd": "right_finger4_link2",
+      "r_ring_finger_middle": "right_finger4_link3",
+      "r_ring_finger_distal": "right_finger4_link4",
+      "r_ring_finger_tip": "right_ring_tip",
+      "r_pinky_proximal": "right_finger5_link1",
+      "r_pinky_proximal_abd": "right_finger5_link2",
+      "r_pinky_middle": "right_finger5_link3",
+      "r_pinky_distal": "right_finger5_link4",
+      "r_pinky_tip": "right_pinky_tip"
+    },
+    "root_frame": "official r_wrist, with all physical relative transforms retained",
+    "official_mount_pose_in_wrist": {
+      "position": [
+        -0.0030004518980195267,
+        4.902245865510193e-08,
+        0.0284982808512
+      ],
+      "quaternion_wxyz": [
+        0.9999999999666322,
+        -0.0,
+        -0.0,
+        -8.169179229727413e-06
+      ]
+    },
+    "added_wrist_servo": {
+      "order": "xyz + intrinsic XYZ",
+      "kp": [
+        2000.0,
+        2000.0,
+        2000.0,
+        100.0,
+        100.0,
+        100.0
+      ],
+      "kv": [
+        90.0,
+        90.0,
+        90.0,
+        10.0,
+        10.0,
+        10.0
+      ],
+      "force_limits": [
+        200.0,
+        200.0,
+        200.0,
+        30.0,
+        30.0,
+        30.0
+      ],
+      "translation_range_m": 2.0,
+      "rotation_range_rad": 6.283185307179586,
+      "virtual_body_mass_kg": 1e-05,
+      "virtual_body_inertia_kg_m2": 1e-08,
+      "virtual_body_gravcomp": 1
+    },
+    "integrator": "implicitfast (official source: RK4); required by ComFree runtime",
+    "original_finger_joints_geometries_mesh_scales_and_servos_preserved": true
+  },
+  "source_files": {
+    "LICENSE": "38b27e3155e0c1c8d6f3e909e7a00359a302085dfd9ae963b52a91cbbe25afa3",
+    "README.md": "6c803ac69770bdd2a576945960e085d292d6a6effd9954ef3c9813c2d003f7fc",
+    "hand2/hand2_2/body/meshes/right/r_index_finger_distal.STL": "7b11dd372a4a155e2bf1305c7d3cf0bacfbfd526f6659c467ccf35efd7553b7d",
+    "hand2/hand2_2/body/meshes/right/r_index_finger_middle.STL": "9ba4bd6449d5c60255c1bbe1cdf3ec1bd7f9f0413f45f9ee20ca1e97165b5a93",
+    "hand2/hand2_2/body/meshes/right/r_index_finger_proximal.STL": "d07ffb4a0f107d53837b068ee3aafd30b58a2775271beabc26911ac8d4288ef3",
+    "hand2/hand2_2/body/meshes/right/r_index_finger_proximal_abd.STL": "373722f52678f818a311d7c5a4ec6ac711038cfbf36536c082325f9315853cb5",
+    "hand2/hand2_2/body/meshes/right/r_index_finger_tip_sensor_frame.STL": "d5a13c52478576aa461d9739957bcf4612b359be58e449bb199a9ad01cb75cb6",
+    "hand2/hand2_2/body/meshes/right/r_middle_finger_distal.STL": "7b11dd372a4a155e2bf1305c7d3cf0bacfbfd526f6659c467ccf35efd7553b7d",
+    "hand2/hand2_2/body/meshes/right/r_middle_finger_middle.STL": "5f88e7c641888fdc7fbae7c3b613b691b8ae4fc35af473b2daf40bead9198178",
+    "hand2/hand2_2/body/meshes/right/r_middle_finger_proximal.STL": "039bee058e2e24fa083c77c7512d30782aecced1654897c6b9fd7b3b68866f6c",
+    "hand2/hand2_2/body/meshes/right/r_middle_finger_proximal_abd.STL": "91e3f149f9cabc198b903881661db428fa17860af7f79b5f0a4e8ff555616d6e",
+    "hand2/hand2_2/body/meshes/right/r_middle_finger_tip_sensor_frame.STL": "d5a13c52478576aa461d9739957bcf4612b359be58e449bb199a9ad01cb75cb6",
+    "hand2/hand2_2/body/meshes/right/r_mount.STL": "302c1a168417f2c84abc30a148ff6ce364ce6621340f15190c8f53cfe50d6268",
+    "hand2/hand2_2/body/meshes/right/r_pinky_distal.STL": "6832e7482d550cec79298ac1c1a304fcfc64ce0e3c925948d04e62a6242b9dae",
+    "hand2/hand2_2/body/meshes/right/r_pinky_middle.STL": "609cc6cef5df1bd4a92ec8a889c670643a45f8fc559d124622b96ebc77f76122",
+    "hand2/hand2_2/body/meshes/right/r_pinky_proximal.STL": "c88defaf8c670dc4a12a489e653ee4732a79a32780046dbe3fe6d98d1a686680",
+    "hand2/hand2_2/body/meshes/right/r_pinky_proximal_abd.STL": "0d9493bc1a62162c89a1be7673d8d91ebc9f20383847d66e46ac35a3645f9701",
+    "hand2/hand2_2/body/meshes/right/r_pinky_tip_sensor_frame.STL": "22f19f242d73f10231f420ce91ef5ba4dd6d53d2b9c7a15e68b5da0ba1f7a359",
+    "hand2/hand2_2/body/meshes/right/r_ring_finger_distal.STL": "7b11dd372a4a155e2bf1305c7d3cf0bacfbfd526f6659c467ccf35efd7553b7d",
+    "hand2/hand2_2/body/meshes/right/r_ring_finger_middle.STL": "6fbcf92b159a2d9e3b097f459ac5df73577cda5ca2b62020284de287f49323e4",
+    "hand2/hand2_2/body/meshes/right/r_ring_finger_proximal.STL": "da1870bfe85621550c6081c944b91e4dafc7721a73f46be6a77f0c15dd0b214a",
+    "hand2/hand2_2/body/meshes/right/r_ring_finger_proximal_abd.STL": "df3787ff168f4c0fa21c77296fe34418240e8c8d357c1ede99c96cf2f89d32f0",
+    "hand2/hand2_2/body/meshes/right/r_ring_finger_tip_sensor_frame.STL": "d5a13c52478576aa461d9739957bcf4612b359be58e449bb199a9ad01cb75cb6",
+    "hand2/hand2_2/body/meshes/right/r_thumb_distal.STL": "273878b0f78e35ffd5e3ad416cb4c79368c6fc43a886ec047760c5f21a55b04d",
+    "hand2/hand2_2/body/meshes/right/r_thumb_middle.STL": "a04ebd10f24534121672721011c95d26a0c8f734ee65481c49b962fd0b573ea7",
+    "hand2/hand2_2/body/meshes/right/r_thumb_proximal.STL": "e3e9e7c1266c6d3e38287b074e38162bf508626de14d54e995e40e1d56d7247e",
+    "hand2/hand2_2/body/meshes/right/r_thumb_proximal_abd.STL": "2aaafd9ba420bf2b40d2e262f8328ba4937e647021a0ea188aa3620bde0d135a",
+    "hand2/hand2_2/body/meshes/right/r_thumb_tip_sensor_frame.STL": "4bb06fa7ee605b72a21f62debe43fe711e57da3fcc45c89ab2644ee476b0a4af",
+    "hand2/hand2_2/body/meshes/right/r_wrist.STL": "ece3f36af8ed61079d0061dd9d9b11e5eae76ce9640287d0975c1522f8731fc6",
+    "hand2/hand2_2/body/mjcf/right.xml": "c11ab34b0fd0c1d520d108ffdefe45bfc05711bb2e97946a6bda96888cf02847"
+  },
+  "queries": {
+    "method": "stratified triangle-area sampling; actual compiled rigid-attached meshes; radius=0",
+    "bodies": {
+      "right_palm_link": {
+        "samples": 1024,
+        "seed": 7300,
+        "sha256": "3103b431b14891c38b440513ea583edeb4ef811bb9f31545dab8196c22229c7a"
+      },
+      "right_finger1_link1": {
+        "samples": 768,
+        "seed": 7301,
+        "sha256": "46005cce3c3b20783feb10099a6daec06e27a980ffa78f416c21c8b63b1cb4d0"
+      },
+      "right_finger1_link2": {
+        "samples": 768,
+        "seed": 7302,
+        "sha256": "1bbdea112a1b2e69ddbc59aea9f242bcb0d7957aded73495ab4e0842e34f08eb"
+      },
+      "right_finger1_link3": {
+        "samples": 768,
+        "seed": 7303,
+        "sha256": "4c7fd0a20af12d3b0973c7cfd4e762c47bea50019db36caa57e7ab40607c83a9"
+      },
+      "right_finger1_link4": {
+        "samples": 768,
+        "seed": 7304,
+        "sha256": "338802cd25e24113a5ace83f5426ecd8580d028b111add5b7851e8debd498946"
+      },
+      "right_finger2_link1": {
+        "samples": 768,
+        "seed": 7305,
+        "sha256": "eb2e330a762338a550a7eda44645747ff520bb4474fe217a742ea53dd53504b2"
+      },
+      "right_finger2_link2": {
+        "samples": 768,
+        "seed": 7306,
+        "sha256": "f79a18c2f101aa5b37264c9ec3f65e5d633c6953c5e9adcd801488b50fff9f22"
+      },
+      "right_finger2_link3": {
+        "samples": 768,
+        "seed": 7307,
+        "sha256": "a86c6796395216f6f2e205222c2c846d86b35aafcc8b87ac874cbee39145fbd4"
+      },
+      "right_finger2_link4": {
+        "samples": 768,
+        "seed": 7308,
+        "sha256": "0aeebcbc99683ffbc4f894e741d84c042cbe6eb0953881a1f2274032a1862d16"
+      },
+      "right_finger3_link1": {
+        "samples": 768,
+        "seed": 7309,
+        "sha256": "9e55a6f88dd39337e0eb2dfc9a642f0477f3465e3c03296dc8bace06ef7433ce"
+      },
+      "right_finger3_link2": {
+        "samples": 768,
+        "seed": 7310,
+        "sha256": "f4ec63f57795d4374d8d1e3b6cdc8ae548d49fba8abfa673c991feec36f59e3b"
+      },
+      "right_finger3_link3": {
+        "samples": 768,
+        "seed": 7311,
+        "sha256": "4fb39c80e1fb1ad449374d74f478870c59bf6ba589b6421c03b6f83795b88e19"
+      },
+      "right_finger3_link4": {
+        "samples": 768,
+        "seed": 7312,
+        "sha256": "f528b7b4fe44fca5cf8ad74252493ec5d00e1998027bed14abc1e833e61453f8"
+      },
+      "right_finger4_link1": {
+        "samples": 768,
+        "seed": 7313,
+        "sha256": "5d2ca42a4da7e070f76e87d82bb17f690c8d805fe234eff3c56792b63b415643"
+      },
+      "right_finger4_link2": {
+        "samples": 768,
+        "seed": 7314,
+        "sha256": "692bcaca55e0b7385534e1f21065c687f9da81a51e04a76895d00f88a7b20a59"
+      },
+      "right_finger4_link3": {
+        "samples": 768,
+        "seed": 7315,
+        "sha256": "b4c4229735f3cacaeaeb19cdd85d3ca1a9b403fb0c33017785a959ba665deb12"
+      },
+      "right_finger4_link4": {
+        "samples": 768,
+        "seed": 7316,
+        "sha256": "363ac392f6e8f8d53848613c01b688efcc642dd98ef10559ddd86a366c957eb6"
+      },
+      "right_finger5_link1": {
+        "samples": 768,
+        "seed": 7317,
+        "sha256": "eb98a797acbea2e5c8fbfb5a934b9a60b8240ecd64f404013afd2f1b70a9321c"
+      },
+      "right_finger5_link2": {
+        "samples": 768,
+        "seed": 7318,
+        "sha256": "e62fff19dd1e7879c40b66fade9be1191968c6580ebc2c661192e48fae18950b"
+      },
+      "right_finger5_link3": {
+        "samples": 768,
+        "seed": 7319,
+        "sha256": "a79750be889f4680cbfb3b8b3c9cbfdfe19969a0178aeb33f67d739ad7a2603e"
+      },
+      "right_finger5_link4": {
+        "samples": 768,
+        "seed": 7320,
+        "sha256": "37118e1d380e5f808c4510fe946818dbe010523a3a655f45692312619fa517af"
+      }
+    }
+  },
+  "templates": {
+    "source": "https://github.com/JYChen18/Dexonomy",
+    "local_source": "/home/lab423/scsp/thirdparty/Dexonomy",
+    "commit": "d561ff9df8545deef7a3f9e7cfb4045ef66f6913",
+    "license": "CC BY-NC 4.0; see templates/Dexonomy-NOTICE.txt",
+    "files": {
+      "assets/hand/shadow/right.xml": "558852d62a72b388e38bbb7555e55055df5aa7cc0433447ce16e5adf974a0a07",
+      "assets/hand/shadow/keypoint.yaml": "d569a6145c17884c35721aa9a48c678a0e50cfd2f7c57340b4af6ce56694a9b8",
+      "assets/hand/shadow/raw_anno/10_Power_Disk.yaml": "634bcdd77ac1550e5a0db673d708704d781dacf501dae487f3e37e4fd2a02874",
+      "assets/hand/shadow/raw_anno/11_Power_Sphere.yaml": "f1369f79484793f1f8c8043b651a094c1a1c97cf5aaa9a738792a16fd1e3241d",
+      "assets/hand/shadow/raw_anno/12_Precision_Disk.yaml": "e1749ddbebea72e59f33574fa6f6b1d2a15d1a07aa2fd057c759000fc6869f1a",
+      "assets/hand/shadow/raw_anno/13_Precision_Sphere.yaml": "652b535eebafbcef903ad491434a8754d326ae8fbdeaee0f7d49959d0e64e7fa",
+      "assets/hand/shadow/raw_anno/14_Tripod.yaml": "a5e8ea1cbcaa0dfcd833ddbd3a4fbca14a7b735a45ca7525406e5dbadf4d4b9a",
+      "assets/hand/shadow/raw_anno/15_Fixed_Hook.yaml": "c2707c7de8a713e9ed6ab3da593ca1a0f97ac6711647f5f7431597ef49e44535",
+      "assets/hand/shadow/raw_anno/16_Lateral.yaml": "02dfda5228b992b6a4392bf86cad7c449fa300f47e915479ca53adbf8b591fb4",
+      "assets/hand/shadow/raw_anno/17_Index_Finger_Extension.yaml": "8fa934192fd84c60e5ec331a83bd503e4e904b9d232efe139ad9ef40b8089af4",
+      "assets/hand/shadow/raw_anno/18_Extensior_Type.yaml": "26edc99b675a0716a29ba029ea1c36c70498e63b553d74d20a2dcdb9f6f79e77",
+      "assets/hand/shadow/raw_anno/19_Distal.yaml": "12996c07f44445e53aaf4d09b61e9f3097fedd4c064a7274ed6e827659a10b8d",
+      "assets/hand/shadow/raw_anno/1_Large_Diameter.yaml": "db759116b6aab255ec85ad5f2d9c305de431875757b97116432f3bea83a69ae4",
+      "assets/hand/shadow/raw_anno/20_Writing_Tripod.yaml": "f51903bfca7ba7fa290ea6275fbe74bc2aef5658d383fa253cc2e39dff17b0ce",
+      "assets/hand/shadow/raw_anno/21_Tripod_Variation.yaml": "d520033ccfa40c355a6b7e668d458f132b790937764fbb599edd4b9d62f5f434",
+      "assets/hand/shadow/raw_anno/22_Parallel_Extension.yaml": "b5b46a8957627899be8f6130c62d72a2ffcb07b76b5c13904fbc51a8fbdcf74d",
+      "assets/hand/shadow/raw_anno/23_Adduction_Grip.yaml": "6588c9f9386cb8f1aacd282c6bee77f78cf27db73314a5e934907865cf530cf4",
+      "assets/hand/shadow/raw_anno/24_Tip_Pinch.yaml": "65042cfa659341c76096b47187fed7604843df632c8c8be15f61a3f140f8b91f",
+      "assets/hand/shadow/raw_anno/25_Lateral_Tripod.yaml": "9ef4384f2c64edfa4e764b234e14162bc858569342bf92426fe8ac5780446221",
+      "assets/hand/shadow/raw_anno/26_Sphere_4_Finger.yaml": "8344b356cca77ff69c1a62a000f568c0c5e4534743b48c721b6cadaf626a8a83",
+      "assets/hand/shadow/raw_anno/27_Quadpod.yaml": "7cd429e3cd417adb6bae81b218ebdd26530ed4c161329f65be993482fe0fed93",
+      "assets/hand/shadow/raw_anno/28_Sphere_3_Finger.yaml": "de63bd27223c2619059b79013d2a4c7e55f241f556e426bb37346900486b5046",
+      "assets/hand/shadow/raw_anno/29_Stick.yaml": "aae4df4f86c864e679ffe9107d55e39cc822fa34b40f7b8a4f9509ab8b488cc3",
+      "assets/hand/shadow/raw_anno/2_Small_Diameter.yaml": "496c3ca00213a20092fa2365b9c26101c0c3652ff9b6d92f55c15f04b4bf781f",
+      "assets/hand/shadow/raw_anno/30_Palmar.yaml": "c3ea202854943710f7fa5f393d24d9efeae5831bb69e0bd9cfae12b7153c25d0",
+      "assets/hand/shadow/raw_anno/31_Ring.yaml": "d983f1a9cf0b5ac956a49aec449c44fc8762436a3a798f28ff25ef6448c0477c",
+      "assets/hand/shadow/raw_anno/32_Ventral.yaml": "b17a79d5a368265e2d4211485130b7ddd7570a15d156c1cdeb3921394b5927a8",
+      "assets/hand/shadow/raw_anno/33_Inferior_Pincer.yaml": "b4fdb03e474f16def0028283f81ab43f72a06e41f564966bec8f3db0b867a936",
+      "assets/hand/shadow/raw_anno/3_Medium_Wrap.yaml": "677417db974ea590fb01777ba0496d4d94d247b9491f1919acda9e7b1d17bc69",
+      "assets/hand/shadow/raw_anno/4_Adducted_Thumb.yaml": "cd16732d5c4cc4c7f05d218d952ca4baf118e77c851d7900c8788b626d83fdfb",
+      "assets/hand/shadow/raw_anno/5_Light_Tool.yaml": "af0d4c328e5cb5836b1d3f30c8375d5e02dbbeea1ef58ffb5fbb6c7c82c7497f",
+      "assets/hand/shadow/raw_anno/6_Prismatic_4_Finger.yaml": "701c3565171d7c25553a80d0d3970d5062a9b441938645c3fb25b57f83051486",
+      "assets/hand/shadow/raw_anno/7_Prismatic_3_Finger.yaml": "bfab1eed09f94d03b22e096b495f594c4afec16a5b4065f01e67d601035b1f73",
+      "assets/hand/shadow/raw_anno/8_Prismatic_2_Finger.yaml": "189faab684a819a5e95d3e68e12d92b76b417d4e751500fc634d8f82d14a561e",
+      "assets/hand/shadow/raw_anno/9_Palmar_Pinch.yaml": "495032cf742186fd04012c8c0cb89ca6eed83b1a8c3e611571b7fc6a4d5ecebb",
+      "assets/hand/shadow/raw_anno/fingertip_large.yaml": "aec4cdba4dc7c00ab8d7a5e4ebdf33438b0977064e8a0eaa628f7dbb494c1d6d",
+      "assets/hand/shadow/raw_anno/fingertip_middle.yaml": "3f9d8799c2aa8665701846018c509dce1ae3c42b6fc5e1f44af6d047404b2b95",
+      "assets/hand/shadow/raw_anno/mug.yaml": "7d79154027d4d59fc1456a4d310c82c93a1c4838dea2b1793a4ed920574c152b",
+      "dexonomy/config/op/init.yaml": "9c06a14286d57f8577466a8a34aef02450dab40784ce6ae9f531018f193e5758"
+    }
+  },
+  "model_yaml": {
+    "origin": "standalone explicit baseline generated by setup_grasp_assets.py",
+    "sha256": "37fef12711543777a32f7edc3fe622108c5bf0cd84092b753cb92e795de9bef4"
+  },
+  "validation": {
+    "cpu_model": true,
+    "original_finger_parameters": true,
+    "source_wrist_frame_FK": true,
+    "loaded_templates": 36
+  }
+}

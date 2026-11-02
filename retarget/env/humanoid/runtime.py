@@ -1,6 +1,7 @@
 """Humanoid execution with SPIDER or cached-contact trajectory scoring."""
 
 import json
+import time
 from collections.abc import Mapping
 from dataclasses import fields
 from pathlib import Path
@@ -21,8 +22,12 @@ from .rollout import make_rollout_fn
 
 def contact_settings(dynamics, options=None):
     """Validate the opt-in scoring mode without initializing a simulator."""
-    if dynamics not in ("mjwarp", "frozen_contact"):
-        raise ValueError("environment.dynamics must be mjwarp or frozen_contact")
+    if dynamics not in ("mjwarp", "frozen_contact", "scsp"):
+        raise ValueError("environment.dynamics must be mjwarp, frozen_contact or scsp")
+    if dynamics == "scsp":
+        if options is not None:
+            raise ValueError("SCSP contact options belong in environment.scsp_contact")
+        return None
     if dynamics == "mjwarp":
         if options is not None:
             raise ValueError("environment.contact_cost requires dynamics: frozen_contact")
@@ -92,15 +97,36 @@ class HumanoidEnvironment:
         record_predictions=True,
         dynamics="mjwarp",
         contact_options=None,
+        contact_graph=False,
+        scsp_options=None,
     ):
         self.dynamics = dynamics
         self.contact_options = contact_settings(dynamics, contact_options)
+        from .scsp import contact_options as scsp_contact_options
+
+        if scsp_options is not None and dynamics != "scsp":
+            raise ValueError("environment.scsp_contact requires dynamics: scsp")
+        self.scsp_options = scsp_contact_options(scsp_options) if dynamics == "scsp" else None
+        if not isinstance(contact_graph, bool):
+            raise ValueError("contact_graph must be a boolean")
+        if contact_graph and dynamics != "frozen_contact":
+            raise ValueError("contact_graph requires dynamics: frozen_contact")
+        if contact_graph and record_predictions:
+            raise ValueError("contact_graph requires record_predictions=False")
+        self.contact_graph = contact_graph
+        self._contact_graphs = {}
+        self.contact_graph_builds = 0
+        self.contact_graph_seconds = 0.0
         self._contact_cache = None
         self.contact_cache_builds = 0
         self.config = c = make_config(Path(data_root), device, batch)
         self.source_num_dr = c.num_dr
-        if dynamics == "frozen_contact":
+        if dynamics in ("frozen_contact", "scsp"):
             c.num_dr = 0
+        if dynamics == "scsp":
+            c.point_contact_sites = self.scsp_options.hand_sites + self.scsp_options.foot_sites
+            c.point_contact_radius = self.scsp_options.point_radius
+            c.point_contact_friction = self.scsp_options.friction
         if scene is not None:
             c.model_path = str(scene)
         self.refs = load_data(
@@ -115,6 +141,9 @@ class HumanoidEnvironment:
         self.stream.wait_stream(torch.cuda.current_stream(device))
         with torch.cuda.stream(self.stream):
             self.env = physics.setup_env(c, self.refs)
+            c.npair = self.env.model_cpu.npair
+            if dynamics == "scsp":
+                c.contact_site_ids = [self.env.model_cpu.site(name).id for name in c.point_contact_sites]
             self.q = torch.empty((c.horizon_steps + 1, batch, c.nq), device=device)
             self.v = torch.empty((c.horizon_steps + 1, batch, c.nv), device=device)
         torch.cuda.current_stream(device).wait_stream(self.stream)
@@ -163,7 +192,16 @@ class HumanoidEnvironment:
         # upstream sample_ctrls. No extra actuator clamp is added here.
         return self.nominal + interp(knots, c.knot_steps)
 
+    def project_parameters(self, x):
+        """Keep candidate controls inside the cached model's local trust region."""
+        if self.contact_options is None or self.contact_options.action_trust_radius is None:
+            return x
+        limit = self.contact_options.action_trust_radius / self.control_scale
+        return x.clamp(-limit, limit)
+
     def score(self, x):
+        if self.dynamics == "scsp":
+            raise ValueError("SCSP uses prepare_scsp_problem and two coupled objectives")
         count = len(x)
         if count > self.batch:
             return torch.cat([self.score(chunk) for chunk in x.split(self.batch)])
@@ -184,18 +222,22 @@ class HumanoidEnvironment:
         if self.dynamics == "frozen_contact":
             from retarget.task.humanoid.cost_contact import get_trajectory_cost
 
-            prediction = self.prepare_contact_rollout().rollout(controls)
-            trajectory_cost, _ = get_trajectory_cost(
-                c, prediction, refs, options=self.contact_options
-            )
-            if self.record_predictions:
-                with torch.no_grad():
-                    self.q[: c.horizon_steps + 1, :count].copy_(
-                        prediction.qpos.detach().transpose(0, 1)
-                    )
-                    self.v[: c.horizon_steps + 1, :count].copy_(
-                        prediction.qvel.detach().transpose(0, 1)
-                    )
+            cache = self.prepare_contact_rollout()
+            if self.contact_graph:
+                trajectory_cost = self._graphed_contact_score(cache, controls, refs)
+            else:
+                prediction = cache.rollout(controls)
+                trajectory_cost, _ = get_trajectory_cost(
+                    c, prediction, refs, options=self.contact_options
+                )
+                if self.record_predictions:
+                    with torch.no_grad():
+                        self.q[: c.horizon_steps + 1, :count].copy_(
+                            prediction.qpos.detach().transpose(0, 1)
+                        )
+                        self.v[: c.horizon_steps + 1, :count].copy_(
+                            prediction.qvel.detach().transpose(0, 1)
+                        )
             self.calls += 1
             self.trajectories += count
             return trajectory_cost.double().clone()
@@ -206,6 +248,54 @@ class HumanoidEnvironment:
         self.calls += 1
         self.trajectories += count
         return worst_cost[:count].double().clone()
+
+    def _graphed_contact_score(self, cache, controls, refs):
+        """Capture one static horizon per input shape and autograd mode.
+
+        Gradients are first order, as required by ``make_graphed_callables``.
+        A graph's intermediate buffers must survive until its backward finishes.
+        Additional outstanding forwards of that shape therefore run eagerly.
+        """
+        from retarget.task.humanoid.cost_contact import get_trajectory_cost
+
+        def objective(actions):
+            prediction = cache.rollout(actions)
+            return get_trajectory_cost(
+                self.config, prediction, refs, options=self.contact_options
+            )[0]
+
+        requires_grad = torch.is_grad_enabled() and controls.requires_grad
+        key = (tuple(controls.shape), controls.dtype, requires_grad)
+        if key not in self._contact_graphs:
+            sample = controls.detach().clone().requires_grad_(requires_grad)
+            torch.cuda.synchronize(self.device)
+            started = time.perf_counter()
+            with torch.set_grad_enabled(requires_grad):
+                graphed = torch.cuda.make_graphed_callables(
+                    objective, (sample,), num_warmup_iters=1,
+                )
+            torch.cuda.synchronize(self.device)
+            self.contact_graph_seconds += time.perf_counter() - started
+            self.contact_graph_builds += 1
+            self._contact_graphs[key] = dict(callable=graphed, pending=False)
+        entry = self._contact_graphs[key]
+        if requires_grad and entry["pending"]:
+            return objective(controls)
+        # Captured outputs occupy reusable graph storage. Clone before the next
+        # population chunk or line-search trial overwrites that storage.
+        graph_input = controls.view_as(controls) if requires_grad else controls.detach()
+        output = entry["callable"](graph_input).clone()
+        if requires_grad:
+            entry["pending"] = True
+
+            def release(gradient):
+                entry["pending"] = False
+                # Captured backward also returns reusable storage. Preserve
+                # gradients retained by autograd.grad across later replays.
+                return gradient.clone()
+
+            graph_input.register_hook(release)
+        return output
 
     def prepare_contact_rollout(self):
         """Cache nominal-horizon contacts, never candidate-dependent contacts.
@@ -219,11 +309,23 @@ class HumanoidEnvironment:
         if self._contact_cache is None:
             from .frozen_contact import FrozenContactRollout
 
+            self._contact_graphs.clear()
             self._contact_cache = FrozenContactRollout.from_env(
-                self.config, self.env, self.nominal, options=self.contact_options
+                self.config, self.env, self.nominal, options=self.contact_options,
+                anchor_to_mjwarp=self.contact_options.nominal_correction,
             )
             self.contact_cache_builds += 1
         return self._contact_cache
+
+    def prepare_scsp_problem(self, mean, *, seed=0):
+        """Project the dataset hand points and cache this window's dynamics."""
+        if self.dynamics != "scsp":
+            raise ValueError("prepare_scsp_problem requires scsp dynamics")
+        from .scsp import HumanoidSCSP
+
+        self.scsp_model = HumanoidSCSP(self, options=self.scsp_options, seed=seed)
+        self.contact_cache_builds += 1
+        return self.scsp_model.problem(mean)
 
     def rollout_batch(self, controls, refs, params):
         count = len(controls)
@@ -237,6 +339,7 @@ class HumanoidEnvironment:
 
     def execute(self, controls):
         self._contact_cache = None
+        self._contact_graphs.clear()
         states, velocities, warmstarts = [], [], []
         for control in controls:
             physics.step_env(self.config, self.env, control)
@@ -249,6 +352,7 @@ class HumanoidEnvironment:
 
     def shift(self, controls, executed):
         self._contact_cache = None
+        self._contact_graphs.clear()
         self.first_step += executed
         retained = controls[executed:]
         self.nominal = torch.cat(

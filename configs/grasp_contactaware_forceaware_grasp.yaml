@@ -1,0 +1,40 @@
+# Three-size physical hold validation. Explicit PD calibration is recorded; FA costs/optimizer unchanged.
+mode: solve
+seed: 0
+task:
+  type: grasp
+  name: primitive
+  data: ../output/grasp_contactaware_mppi
+  options:
+    hand_model: wuji2
+environment:
+  device: cuda:0
+  dynamics: dexforge
+  dexforge:
+    duration_seconds: 0.4
+    sphere_radius_mm: 1.0
+    servo_integration: implicit_actuator
+    gradient_check: true
+    gradient_horizon: 10
+    gradient_directions: 2
+    control_preload:
+      minimum_per_contact:
+        thumb: 0.5
+        index: 0.5
+        middle: 0.5
+        ring: 0.5
+        pinky: 0.6
+      minimum_total: 8.0
+      iterations: 10000
+    finger_servo_scale:
+      kp_scale: 2.0
+      kv_scale: 1.4142135623730951
+    fixed_initial_state: true
+solver:
+  type: dexforge
+  dexforge: {}
+output:
+  name: grasp_contactaware_forceaware_grasp
+visualization:
+  live: false
+  save_video: false

@@ -1,0 +1,100 @@
+"""Original SPIDER reference interpolation and tail padding."""
+from __future__ import annotations
+from .config import PhysicsConfig as Config
+import numpy as np
+import torch
+import loguru
+from .interp import interp
+
+def load_data(
+    config: Config,
+    data_path: str = "../datasets/inspire/bimanual_wipe.npz",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Load trajectory data from NPZ file."""
+    raw_data = np.load(data_path)
+    qpos_ref = raw_data["qpos"]
+    qvel_ref = raw_data["qvel"]
+    # if contact_rew_scale > 0.0, we need to make sure both contact and contact_pos are provided.
+    if config.contact_rew_scale > 0.0:
+        if "contact" not in raw_data:
+            raise ValueError("contact data not found while contact_rew_scale > 0.0")
+        if "contact_pos" not in raw_data:
+            raise ValueError("contact_pos data not found while contact_rew_scale > 0.0")
+    try:
+        contact = raw_data["contact"]
+    except:
+        contact = np.zeros((qpos_ref.shape[0], 10))
+        loguru.logger.warning("contact data not found")
+    try:
+        contact_pos = raw_data["contact_pos"]
+    except:
+        contact_pos = np.zeros((qpos_ref.shape[0], 10, 3))
+        loguru.logger.warning("contact_pos data not found")
+    if "ctrl" in raw_data:
+        ctrl_ref = raw_data["ctrl"]
+    else:
+        # TODO: disable automatic reference control generation, instead, move it to preprocess
+        # Fallback if 'ctrl' is not in the data file
+        loguru.logger.warning(
+            "ctrl data not found, using 'qpos' as a initial guess for control."
+        )
+        if config.embodiment_type in ["bimanual", "right", "left"]:
+            ctrl_ref = qpos_ref[:, : -config.nq_obj]
+        elif config.embodiment_type in ["CMU", "DanceDB"]:
+            ctrl_ref = qpos_ref[:, 7:]
+        else:
+            raise ValueError(f"Invalid embodiment_type: {config.embodiment_type}")
+    # move to device
+    qpos_ref_torch = torch.from_numpy(qpos_ref).to(config.device).to(torch.float32)
+    qvel_ref_torch = torch.from_numpy(qvel_ref).to(config.device).to(torch.float32)
+    ctrl_ref_torch = torch.from_numpy(ctrl_ref).to(config.device).to(torch.float32)
+    contact_ref_torch = torch.from_numpy(contact).to(config.device).to(torch.float32)
+    contact_pos_ref_torch = (
+        torch.from_numpy(contact_pos).to(config.device).to(torch.float32)
+    )
+    # interpolate to match sim_dt
+    if config.ref_dt > config.sim_dt:
+        qpos_ref_interp = interp(qpos_ref_torch.unsqueeze(0), config.ref_steps).squeeze(
+            0
+        )
+        qvel_ref_interp = interp(qvel_ref_torch.unsqueeze(0), config.ref_steps).squeeze(
+            0
+        )
+        ctrl_ref_interp = interp(ctrl_ref_torch.unsqueeze(0), config.ref_steps).squeeze(
+            0
+        )
+        contact_ref_interp = interp(
+            contact_ref_torch.unsqueeze(0), config.ref_steps
+        ).squeeze(0)
+        H, Nc, D = contact_pos_ref_torch.shape
+        contact_pos_ref_flat = contact_pos_ref_torch.view(H, Nc * D)
+        contact_pos_ref_flat_interp = interp(
+            contact_pos_ref_flat.unsqueeze(0), config.ref_steps
+        ).squeeze(0)
+        contact_pos_ref_interp = contact_pos_ref_flat_interp.view(-1, Nc, D)
+    else:
+        # downsample
+        downsample_factor = int(config.sim_dt / config.ref_dt)
+        qpos_ref_interp = qpos_ref_torch[::downsample_factor]
+        qvel_ref_interp = qvel_ref_torch[::downsample_factor]
+        ctrl_ref_interp = ctrl_ref_torch[::downsample_factor]
+        contact_ref_interp = contact_ref_torch[::downsample_factor]
+        contact_pos_ref_interp = contact_pos_ref_torch[::downsample_factor]
+    # repeat the last frame with extra config.horizon_steps
+    for _ in range(config.horizon_steps + config.ctrl_steps):
+        qpos_ref_interp = torch.cat([qpos_ref_interp, qpos_ref_interp[-1:]], dim=0)
+        qvel_ref_interp = torch.cat([qvel_ref_interp, qvel_ref_interp[-1:]], dim=0)
+        ctrl_ref_interp = torch.cat([ctrl_ref_interp, ctrl_ref_interp[-1:]], dim=0)
+        contact_ref_interp = torch.cat(
+            [contact_ref_interp, contact_ref_interp[-1:]], dim=0
+        )
+        contact_pos_ref_interp = torch.cat(
+            [contact_pos_ref_interp, contact_pos_ref_interp[-1:]], dim=0
+        )
+    return (
+        qpos_ref_interp,
+        qvel_ref_interp,
+        ctrl_ref_interp,
+        contact_ref_interp,
+        contact_pos_ref_interp,
+    )

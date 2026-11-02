@@ -1,0 +1,51 @@
+# Short integration probe of the CA finger retention objective.
+environment:
+  device: cuda:0
+  dynamics: mjwarp
+  spider:
+    cost:
+      base_pos_rew_scale: 0.1
+      base_rot_rew_scale: 0.03
+      contact_keep_rew_scale: 0.05
+      contact_min_force_n: 0.05
+      contact_rew_scale: 1.0
+      joint_rew_scale: 0.003
+      pos_rew_scale: 10.0
+      rot_rew_scale: 0.3
+      terminal_rew_scale: 1.0
+      vel_rew_scale: 0.0001
+    ctrl_dt: 0.03
+    duration_seconds: 0.12
+    exec_dt: 0.002
+    horizon: 0.2
+    joint_noise: 0.08
+    knot_dt: 0.04
+    pos_noise: 0.003
+    preload: true
+    rot_noise: 0.03
+    sim_dt: 0.002
+    case_indices:
+    - 1
+mode: solve
+output:
+  name: grasp_contactaware_spider_contact_keep_pilot
+seed: 0
+solver:
+  final_noise: 0.1
+  gradient_steps: 0
+  improvement_check_steps: 2
+  improvement_threshold: 1.0e-05
+  iterations: 8
+  population: 128
+  temperature: 1.0
+  type: mppi
+  worlds: 128
+task:
+  data: ../output/grasp_contactaware_feature_normals_final
+  name: primitive
+  options:
+    hand_model: wuji2
+  type: grasp
+visualization:
+  live: false
+  save_video: false

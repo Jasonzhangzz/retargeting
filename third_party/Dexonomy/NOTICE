@@ -1,0 +1,11 @@
+Dexonomy / GraspADMM
+https://github.com/JYChen18/Dexonomy
+Pinned commit: d561ff9df8545deef7a3f9e7cfb4045ef66f6913
+
+The original project README states that the work and dataset are licensed under
+Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+https://creativecommons.org/licenses/by-nc/4.0/
+
+The files listed in GRASPADMM_UPSTREAM.json are retained byte-for-byte.
+Local Wuji2 geometry, scene, input and recording adapters live under
+retarget/env/grasp/graspadmm_*.py and grasp_admm_runner.py.

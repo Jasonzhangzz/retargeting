@@ -10,7 +10,8 @@ UPSTREAM = 'https://github.com/asu-iris/Complementarity-Free-Dexterous-Manipulat
 COMMIT = '87b320ffb4b40ab4f3aa344371f6e5e8d619aa7e'
 DEFAULTS = dict(horizon=4, dt=.1, sigma=.5, pose_weight=1.e6,
     translation_metric=50., rotation_metric=.1, contact_cutoff_mm=1.,
-    contact_iterations=64, preload_limit=.5, motion_tolerance_mm=2., rotation_tolerance_deg=5.)
+    contact_iterations=64, preload_limit=.5, motion_tolerance_mm=2., rotation_tolerance_deg=5.,
+    contact_tolerance_mm=None, contact_check_interval=256)
 
 
 @wp.func
@@ -267,6 +268,77 @@ def projected_update(p: Parameters, rate: wp.array(dtype=float), previous: wp.ar
     out[w, row+2] = shared+wp.max(-u, 0.)
     out[w, row+3] = shared+wp.max(-v, 0.)
 
+@wp.kernel(enable_backward=False)
+def contact_normal_residual(
+    jac: wp.array3d(dtype=float), free: wp.array2d(dtype=float),
+    phi: wp.array2d(dtype=float), force: wp.array2d(dtype=float),
+    response: wp.array2d(dtype=float), out: wp.array(dtype=float),
+):
+    """Normal feasibility/complementarity error; this is not a friction KKT test."""
+    w = wp.tid()
+    finite = bool(True)
+    maximum = float(0.)
+    for j in range(free.shape[1]):
+        finite = finite and wp.isfinite(free[w,j]) and wp.isfinite(response[w,j])
+    for contact in range(phi.shape[1] // 4):
+        normal_gap, normal_force = float(0.), float(0.)
+        for edge in range(4):
+            row = 4 * contact + edge
+            gap = phi[w,row]
+            finite = finite and wp.isfinite(gap) and wp.isfinite(force[w,row])
+            normal_force += force[w,row]
+            for j in range(free.shape[1]):
+                finite = finite and wp.isfinite(jac[w,row,j])
+                gap += jac[w,row,j] * (free[w,j] + response[w,j])
+            normal_gap += .25 * gap
+        finite = finite and wp.isfinite(normal_gap) and wp.isfinite(normal_force)
+        maximum = wp.max(maximum, -normal_gap)
+        if normal_force > 1.e-4:
+            maximum = wp.max(maximum, wp.abs(normal_gap))
+    out[w] = 1000. * maximum if finite else float(wp.inf)
+
+
+@wp.kernel(enable_backward=False)
+def store_contact_residual(values: wp.array(dtype=float), step: int,
+                           trajectory: wp.array2d(dtype=float)):
+    w = wp.tid()
+    trajectory[w,step] = values[w]
+
+
+def solve_contact_response(p, stage, worlds, device, maximum_iterations,
+                           tolerance_mm=None, check_interval=256):
+    """Keep fixed-iteration legacy behavior or stop after all worlds are accurate."""
+    launch = lambda kernel, dim, args: wp.launch(kernel, dim, inputs=args, device=device)
+    contacts = stage.phi.shape[1] // 4
+    stage.forces[0].zero_()
+    checked = 0
+
+    def residual(current):
+        # The previous response precedes the last pressure update. Recompute
+        # J.T @ force from the actual pressure iterate being checked.
+        launch(projected_response, (worlds, 32), [p, stage.jac, current, stage.responses[0]])
+        launch(contact_normal_residual, worlds, [stage.jac, stage.free, stage.phi,
+            current, stage.responses[0], stage.contact_residual])
+
+    for i in range(maximum_iterations):
+        launch(projected_response, (worlds, 32), [p, stage.jac, stage.forces[i%2], stage.responses[0]])
+        launch(projected_force, (worlds, contacts*4), [stage.jac, stage.free, stage.phi,
+            stage.responses[0], stage.projections[0]])
+        launch(projected_update, (worlds, contacts), [p, stage.rate, stage.forces[i%2],
+            stage.projections[0], stage.forces[(i+1)%2]])
+        count = i + 1
+        if tolerance_mm is not None and (count % check_interval == 0 or count == maximum_iterations):
+            residual(stage.forces[count%2])
+            checked = count
+            if np.max(stage.contact_residual.numpy()[:worlds]) <= tolerance_mm:
+                break
+    stage.iterations_used = count
+    stage.force = stage.forces[count%2]
+    if checked != count:
+        residual(stage.force)
+    return count
+
+
 @wp.kernel
 def contact_velocity(p: Parameters, free: wp.array2d(dtype=float), jac: wp.array3d(dtype=float),
                      force: wp.array2d(dtype=float), velocity: wp.array2d(dtype=float)):
@@ -311,6 +383,8 @@ class Stage:
     trace: object
     projections: object
     gravity: object
+    contact_residual: object = None
+    iterations_used: int = 0
 
 class ExplicitPoseModel:
     def __init__(self, node):
@@ -322,6 +396,19 @@ class ExplicitPoseModel:
         self.settings = {k: getattr(r.args, 'explicit_'+k, v) for k, v in DEFAULTS.items()}
         self.horizon=int(self.settings['horizon'])
         if self.horizon<1 or self.settings['contact_iterations']<1:raise ValueError('Invalid explicit dynamics budget')
+        maximum_iterations = self.settings['contact_iterations']
+        if isinstance(maximum_iterations, bool) or not isinstance(maximum_iterations, int):
+            raise ValueError('explicit_contact_iterations must be a positive integer')
+        interval = self.settings['contact_check_interval']
+        if isinstance(interval, bool) or not isinstance(interval, int) or interval < 1:
+            raise ValueError('explicit_contact_check_interval must be a positive integer')
+        self.contact_tolerance_mm = self.settings['contact_tolerance_mm']
+        if self.contact_tolerance_mm is not None and (
+            isinstance(self.contact_tolerance_mm, bool)
+            or not isinstance(self.contact_tolerance_mm, (int,float))
+            or not math.isfinite(self.contact_tolerance_mm) or self.contact_tolerance_mm <= 0
+        ):
+            raise ValueError('explicit_contact_tolerance_mm must be finite and positive or null')
         arr = node.array
         p = self.parameters = Parameters()
         p.mesh, p.object_body, p.object_qpos = d.object_mesh, d.object_body, r.index.object_qpos
@@ -385,14 +472,15 @@ class ExplicitPoseModel:
                 forces[0], wp.zeros((n, 32), **options),
                 wp.zeros((n, len(bodies)), dtype=int, device=self.device),
                 wp.zeros(n, **options), forces, responses, wp.zeros(n, **options), projections,
-                wp.zeros((n, 26), **options)))
+                wp.zeros((n, 26), **options), wp.zeros(n, **options)))
         self.selected = self.stages[0].selected
         self.hold = wp.zeros((n, r.model.nq), **options)
         self.cost = wp.zeros(n, **options)
         self.step_costs = wp.zeros((n, self.horizon), **options)
+        self.contact_residual = wp.zeros((n, self.horizon), **options)
 
 
-    def forward(self, worlds, *, select=True):
+    def forward(self, worlds, *, select=True, score_pose=True):
         p, contacts = self.parameters, len(self.parameters.bodies)
         launch = lambda kernel, dim, args: wp.launch(kernel, dim, inputs=args, device=self.device)
         launch(initial_state, worlds, [p, self.node.state.x, self.qpos[0]])
@@ -413,15 +501,14 @@ class ExplicitPoseModel:
             launch(free_displacement, (worlds, 32), [p, self.qpos[k], self.hold, stage.gravity, stage.free])
             launch(contact_trace, worlds, [p, stage.jac, stage.trace])
             launch(contact_step_size, worlds, [p, stage.trace, stage.rate])
-            stage.forces[0].zero_()
-            for i in range(self.settings['contact_iterations']):
-                launch(projected_response, (worlds, 32), [p, stage.jac, stage.forces[i%2], stage.responses[0]])
-                launch(projected_force, (worlds, contacts*4), [stage.jac, stage.free, stage.phi,
-                    stage.responses[0], stage.projections[0]])
-                launch(projected_update, (worlds, contacts), [p, stage.rate, stage.forces[i%2],
-                    stage.projections[0], stage.forces[(i+1)%2]])
-            launch(contact_velocity, (worlds, 32), [p, stage.free, stage.jac, stage.forces[self.settings['contact_iterations']%2], stage.velocity])
+            solve_contact_response(p, stage, worlds, self.device,
+                self.settings['contact_iterations'], self.contact_tolerance_mm,
+                self.settings['contact_check_interval'])
+            launch(store_contact_residual, worlds, [stage.contact_residual, k, self.contact_residual])
+            launch(contact_velocity, (worlds, 32), [p, stage.free, stage.jac, stage.force, stage.velocity])
             launch(integrate, worlds, [p, self.qpos[k], stage.velocity, self.qpos[k+1]])
-            launch(step_pose_cost, worlds, [p, self.qpos[k+1], k, self.step_costs])
-        launch(average_pose_cost, worlds, [self.step_costs, self.cost])
+            if score_pose:
+                launch(step_pose_cost, worlds, [p, self.qpos[k+1], k, self.step_costs])
+        if score_pose:
+            launch(average_pose_cost, worlds, [self.step_costs, self.cost])
 

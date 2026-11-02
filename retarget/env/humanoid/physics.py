@@ -34,17 +34,22 @@ class MJWPEnv:
 
 
 def _compile_step(
-    model_wp: mjwarp.Model, data_wp: mjwarp.Data
+    model_wp: mjwarp.Model, data_wp: mjwarp.Data, warmup_data: mjwarp.Data
 ) -> wp.ScopedCapture.Graph:
     """Warm up and capture a CUDA graph that runs a single mjwarp.step."""
+
+    # MJWarp enables conditional graph nodes by default, but CUDA drivers
+    # before 12.4 cannot capture them. Its ordinary iteration loop is equivalent.
+    if hasattr(model_wp.opt, "graph_conditional") and wp.get_cuda_driver_version() < (12, 4):
+        model_wp.opt.graph_conditional = False
 
     def _step_once():
         mjwarp.step(model_wp, data_wp)
 
-    # Warmup/compile
-    # _step_once()
-    # _step_once()
-    # wp.synchronize()
+    # Load shape-specialized collision kernels before capture. Use the separate
+    # save/restore buffer so warmup cannot advance the execution initial state.
+    mjwarp.step(model_wp, warmup_data)
+    wp.synchronize()
     # Capture
     with wp.ScopedCapture() as capture:
         _step_once()
@@ -53,7 +58,15 @@ def _compile_step(
 
 
 def setup_mj_model(config: Config) -> mujoco.MjModel:
-    model_cpu = mujoco.MjModel.from_xml_path(config.model_path)
+    if config.point_contact_sites:
+        from .point_model import make_point_contact_model
+
+        model_cpu = make_point_contact_model(
+            config.model_path, config.point_contact_sites[:2], config.point_contact_sites[2:],
+            radius=config.point_contact_radius, friction=config.point_contact_friction,
+        )
+    else:
+        model_cpu = mujoco.MjModel.from_xml_path(config.model_path)
     model_cpu.opt.timestep = float(config.sim_dt)
     if config.embodiment_type in ["left", "right", "bimanual"]:
         # setup for hand
@@ -131,7 +144,7 @@ def setup_env(config: Config, ref_data: tuple[torch.Tensor, ...]) -> MJWPEnv:
             nconmax=int(config.nconmax_per_env),
             njmax=int(config.njmax_per_env),
         )
-        default_graph = _compile_step(default_model_wp, default_data_wp)
+        default_graph = _compile_step(default_model_wp, default_data_wp, data_wp_prev)
 
     # Initialize env; default active is main
     return MJWPEnv(

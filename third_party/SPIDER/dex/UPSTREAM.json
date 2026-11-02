@@ -1,0 +1,28 @@
+{
+  "repository": "https://github.com/facebookresearch/spider",
+  "commit": "44717007de41cbef7565dff7ff9f4453557a2d3d",
+  "source_tree_sha": "44717007de41cbef7565dff7ff9f4453557a2d3d",
+  "license": "CC-BY-NC-4.0",
+  "scope": "Unmodified reference sources for actual SPIDER dexterous MJWarp rewards, sampling MPC, defaults, interpolation and state handling; not an installed application package",
+  "sha256": {
+    "spider/tasks/__init__.py": "c76e1502bb50a2280eac7e673fe3891444a348a20860bbf79d12f35a2c28d0eb",
+    "spider/config.py": "45e383f45399a655e62f66018286def56ac957abc3a9015639d3307f20a0a99e",
+    "spider/optimizers/sampling.py": "d4df207522e0ac5656d44763dfcb91982d01a3559da783b42c272bee9ee22940",
+    "spider/optimizers/sampling_fast.py": "b76a8e277daf5a75c92ed9cc146579a7885d209bb4c554a47a99c375fa77e77e",
+    "spider/simulators/mjwp.py": "b414105e5fd276e92ea347a69b529cd21a65a59a198cb2b40406ebdf7644ed66",
+    "spider/simulators/mjwp_eq.py": "08e5dbe18ea495625aeabee6351cc2a81fb458da6a85fa11638bb1b16461b2a8",
+    "examples/run_mjwp.py": "e3d053406cd51232e3293136ac266498f0e2c77e9e054f379468cd9f4f6b99f6",
+    "examples/run_mjwp_fast.py": "56584869816735d774693269e4c094300ac8b0620f6bc17f049652d5fbd4ebaf",
+    "spider/math.py": "e28d0f45bbfb8bd89ed378547c75e9c3a6731b628b2938e6106d0ee71b48dc33",
+    "spider/interp.py": "033bb173c1024948d8ce8ba6d6403c5b254f9c2d9314b3e602147df5ef1e4c94",
+    "LICENSE": "f135c4b13c6fb305da4a85db33556e08abb2b1385aff7d450ce362fe481e527c",
+    "examples/config/default.yaml": "9364ac26626fda33ec7c813888c06f03ff763e0554463018ed91912243f6bba0",
+    "examples/config/mjwp.yaml": "db7c3581c8dbeb5923c5dbf13aad0fbbdbe816f2aba8e4e24d1197ff17b6ecf6",
+    "examples/config/override/gigahand_origin.yaml": "ae6303da958cd15b5e477a7ab1f433e91d5a1f457e9a9ec84c346c02eafc1943",
+    "examples/config/override/gigahand_fast.yaml": "d8227577b2d00a480e19d8bbd50d71df034044b477b99f13ea33154db62cafcf",
+    "examples/config/override/oakink_origin.yaml": "2188b3b22b466b828b77207051499c6c72e0b05d6084018c33c98f530183afa5",
+    "examples/config/override/oakink_fast.yaml": "39013230755846a4c575a1a8289b3d6e3a9da10f3efd2c32d1038ee9ac8ef2bb"
+  },
+  "local_runtime": "Task adapters retain ContactAware inputs and use native MJWarp; original virtual object-actuator guidance is not enabled",
+  "configuration_note": "Config dataclass defaults differ from examples/config/default.yaml; task overrides change scale/noise/horizon, so any transplanted profile must state the effective values."
+}

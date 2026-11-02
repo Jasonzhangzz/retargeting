@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "trials": 1610,
+  "successes": 647,
+  "verified_files": 5086,
+  "replay_entries": 2869,
+  "models": 276,
+  "errors": []
+}

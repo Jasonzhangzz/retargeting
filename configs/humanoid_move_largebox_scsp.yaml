@@ -1,0 +1,57 @@
+mode: solve
+seed: 0
+task:
+  type: humanoid
+  name: move_largebox
+  data: ../data/humanoid/move_largebox
+environment:
+  device: cuda:0
+  dynamics: scsp
+  scsp_contact:
+    hand_sites: [left_palm, right_palm]
+    foot_sites: [left_foot, right_foot]
+    neighbors: 10
+    candidate_radius: 0.03
+    point_radius: 0.0001
+    friction: 0.8
+    max_contact_force: 10.0
+    force_regularization: 0.0001
+    force_smoothness: 0.0001
+    action_regularization: 0.0001
+    foot_tracking_weight: 1.0
+    approach_weight: 1.0
+    # Operation request in seconds; [] disables palm approach/position coupling.
+    # Even within an operation interval, position ADMM requires actual contact.
+    operation_intervals: null
+    position_scale: 0.03
+    force_scale: 10.0
+    action_trust_radius: 0.1
+    comfree_stiffness: 0.2
+    comfree_damping: 0.001
+solver:
+  type: scsp
+  worlds: 32
+  scsp:
+    admm_iterations: 4
+    rho: 10.0
+    abs_tol: 0.001
+    rel_tol: 0.001
+    candidate_population: 24
+    candidate_iterations: 3
+    force_iterations: 20
+    force_step_size: 0.1
+    force_backtracks: 6
+    force_tolerance: 0.00001
+    elite_fraction: 0.2
+    smoothing: 0.6
+    min_probability: 0.02
+    ipopt_max_iter: 80
+    ipopt_max_cpu_time: 30.0
+    ipopt_tol: 0.00001
+    ipopt_acceptable_tol: 0.0001
+    ipopt_print_level: 0
+output:
+  name: humanoid_move_largebox_scsp
+visualization:
+  live: false
+  save_video: true

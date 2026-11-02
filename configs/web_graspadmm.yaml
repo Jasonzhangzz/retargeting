@@ -1,0 +1,10 @@
+mode: web
+output:
+  name: viewer
+visualization:
+  port: 8082
+  batch: graspadmm_wuji2_results
+  task: grasp
+  hand: wuji2
+  initial_case: t02_cylinder_s02_seed00
+  primary_shape_only: true

@@ -68,7 +68,7 @@ def load(path):
             value = Path(task[key]).expanduser()
             task[key] = str((path.parent / value).resolve())
     options = task.get("options", {}).copy()
-    for key in ("physics_reference", "dexonomy_root", "wrist_pose_reference"):
+    for key in ("physics_reference", "dexonomy_root", "wrist_pose_reference", "grasp_intent_reference"):
         if options.get(key):
             options[key] = str(
                 (path.parent / Path(options[key]).expanduser()).resolve()
@@ -99,6 +99,25 @@ def load(path):
         raise ValueError("seed must be a nonnegative integer")
     environment = raw.get("environment", {}).copy()
     solver = Settings(**raw.get("solver", {}))
+    if mode == "solve" and solver.type == "graspadmm":
+        if task.get("type") != "grasp":
+            raise ValueError("solver.type: graspadmm requires task.type: grasp")
+        if options.get("hand_model", "wuji2") != "wuji2":
+            raise ValueError("The GraspADMM synthesis adapter requires hand_model: wuji2")
+    if mode == "solve" and ((solver.type == "graspadmm") != (environment.get("dynamics") == "graspadmm")):
+        raise ValueError("solver.type: graspadmm and environment.dynamics: graspadmm must be used together")
+    if mode == "solve" and solver.type == "scsp" and task.get("type") != "humanoid":
+        raise ValueError("solver.type: scsp requires task.type: humanoid")
+    if mode == "solve" and solver.type == "dexforge" and task.get("type") not in ("humanoid", "grasp"):
+        raise ValueError("solver.type: dexforge requires task.type: humanoid or grasp")
+    if mode == "solve" and ((solver.type == "dexforge") != (environment.get("dynamics") == "dexforge")):
+        raise ValueError("solver.type: dexforge and environment.dynamics: dexforge must be used together")
+    if environment.get("dexforge") is not None and environment.get("dynamics") != "dexforge":
+        raise ValueError("environment.dexforge requires dynamics: dexforge")
+    if environment.get("spider") is not None and not (
+            task.get("type") == "grasp" and solver.type == "mppi"
+            and environment.get("dynamics") == "mjwarp"):
+        raise ValueError("environment.spider requires grasp, solver mppi and native mjwarp dynamics")
     return Config(
         path,
         mode,

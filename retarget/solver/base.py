@@ -19,10 +19,49 @@ class Settings:
     improvement_check_steps: int = 1
     exploit_ratio: float = 0.01
     exploit_noise: float = 0.01
+    gradient_steps: int = 0
+    gradient_step_size: float = 1.0
+    gradient_backtracks: int = 6
+    scsp: object = None
+    dexforge: object = None
+    graspadmm: object = None
 
     def __post_init__(self):
-        if self.type not in ("cem", "mppi"):
-            raise ValueError("solver.type must be cem or mppi")
+        if self.type not in ("cem", "mppi", "scsp", "dexforge", "graspadmm"):
+            raise ValueError("solver.type must be cem, mppi, scsp, dexforge or graspadmm")
+        if self.type == "graspadmm":
+            from .graspadmm import settings
+            object.__setattr__(self, "graspadmm", settings(self.graspadmm))
+        elif self.graspadmm is not None:
+            raise ValueError("solver.graspadmm requires solver.type: graspadmm")
+        if self.type == "dexforge":
+            from .dexforge import DexForgeSettings
+
+            values = self.dexforge
+            if values is None or isinstance(values, dict):
+                try:
+                    values = DexForgeSettings(**(values or {}))
+                except TypeError as exc:
+                    raise ValueError(f"Invalid solver.dexforge: {exc}") from exc
+            if not isinstance(values, DexForgeSettings):
+                raise ValueError("solver.dexforge must be a mapping")
+            object.__setattr__(self, "dexforge", values)
+        elif self.dexforge is not None:
+            raise ValueError("solver.dexforge requires solver.type: dexforge")
+        if self.type == "scsp":
+            from .scsp import SCSPSettings
+
+            values = self.scsp
+            if values is None or isinstance(values, dict):
+                try:
+                    values = SCSPSettings(**(values or {}))
+                except TypeError as exc:
+                    raise ValueError(f"Invalid solver.scsp: {exc}") from exc
+            if not isinstance(values, SCSPSettings):
+                raise ValueError("solver.scsp must be a mapping")
+            object.__setattr__(self, "scsp", values)
+        elif self.scsp is not None:
+            raise ValueError("solver.scsp requires solver.type: scsp")
         if (
             self.population < (20 if self.type == "mppi" else 2)
             or min(self.iterations, self.worlds, self.improvement_check_steps) < 1
@@ -47,6 +86,19 @@ class Settings:
             or self.improvement_threshold < 0
         ):
             raise ValueError("Invalid stopping threshold")
+        if (
+            isinstance(self.gradient_steps, bool)
+            or not isinstance(self.gradient_steps, int)
+            or self.gradient_steps < 0
+            or isinstance(self.gradient_backtracks, bool)
+            or not isinstance(self.gradient_backtracks, int)
+            or self.gradient_backtracks < 1
+            or not math.isfinite(self.gradient_step_size)
+            or self.gradient_step_size <= 0
+        ):
+            raise ValueError("Invalid gradient refinement settings")
+        if self.gradient_steps and self.type != "mppi":
+            raise ValueError("gradient_steps requires solver.type: mppi")
 
     @property
     def temp(self):
@@ -110,7 +162,13 @@ def evaluate(problem, values):
 
 
 def solve(problem, settings, seed=0):
-    if settings.type == "cem":
+    if settings.type == "graspadmm":
+        raise ValueError("GraspADMM requires its dedicated native grasp runner")
+    if settings.type == "dexforge":
+        from .dexforge import solve as implementation
+    elif settings.type == "scsp":
+        from .scsp import solve as implementation
+    elif settings.type == "cem":
         from .cem import solve as implementation
     else:
         from .mppi import solve as implementation

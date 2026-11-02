@@ -1,0 +1,267 @@
+{
+  "task": "grasp",
+  "method": "graspadmm_mppi",
+  "policy": "native_validation_fallback",
+  "case_id": "t06_cylinder_s04_seed08",
+  "template": "6_Prismatic_4_Finger",
+  "seed": 8,
+  "primitive": {
+    "kind": "cylinder",
+    "radius_m": 0.03,
+    "height_m": 0.18,
+    "radial_scale": 1.5,
+    "axial_scale": 1.0,
+    "size_scale": 1.5,
+    "size_axis": "radius",
+    "dimensions_m": [
+      0.06,
+      0.06,
+      0.18
+    ],
+    "size_policy_version": 2,
+    "sources": {
+      "dexonomy": "https://arxiv.org/html/2504.18829v2#S4.SS1",
+      "taxonomy": "https://www.eng.yale.edu/grablab/pubs/Feix_THMS2016.pdf",
+      "shape_catalog": "https://www.cs.cmu.edu/~jialiu1/database.html"
+    },
+    "dimensions_status": "explicit_benchmark_setting_not_Dexonomy_annotation"
+  },
+  "task_success": false,
+  "baseline_success": false,
+  "raw_mppi_success": false,
+  "uses_refined_pose": false,
+  "transition": "neither",
+  "failure_stage": "six_direction_force_test",
+  "evaluation_protocol": "graspadmm_native_v1",
+  "required_cbody": [
+    [
+      "right_finger1_link4"
+    ],
+    [
+      "right_finger2_link4"
+    ],
+    [
+      "right_finger3_link4"
+    ],
+    [
+      "right_finger4_link4"
+    ],
+    [
+      "right_finger5_link4"
+    ]
+  ],
+  "mesh": "assets/0ba06c485af56fb6247b7a953adb6028b3a35edab26e462cc4e4e568ae170162.obj",
+  "model": "models/0699e80e2fe50d252167d6a1f6cf6baea987881487e3b3d3f3752e949c7e0bb1.xml",
+  "trajectory": "poses/t06_cylinder_s04_seed08.npz",
+  "evaluation_model": "models/3ec6c9873910e1e875798c4960de2aa9e4e60ce6e54c8db5bc022c75e1fdbab6.xml",
+  "evaluation_trajectory": "trajectories/t06_cylinder_s04_seed08.npz",
+  "source_evaluation_sha256": "8f155962d59e78612123978cc6fb5bb04ae1df2986437520624e7772c352ea73",
+  "graspadmm_evaluation": {
+    "protocol": "graspadmm_native_v1",
+    "evaluation_protocol": "graspadmm_native_v1",
+    "criterion": {
+      "protocol": "graspadmm_native_v1",
+      "object_mass_kg": 0.1,
+      "translation_threshold_m": 0.05,
+      "rotation_threshold_deg": 15.0,
+      "directions": [
+        "+x",
+        "-x",
+        "+y",
+        "-y",
+        "+z",
+        "-z"
+      ],
+      "evaluation_friction": [
+        0.6,
+        0.02
+      ],
+      "filter_qp_friction": [
+        0.6,
+        0.0
+      ],
+      "skip_pregrasp": false,
+      "hard": false,
+      "source": "Dexonomy grasp_admm filtering, squeeze/pregrasp generation and native eval_fc"
+    },
+    "generation": {
+      "success": true,
+      "failure_stage": null,
+      "grasp_filter": {
+        "joint_limits": true,
+        "hand_hand_min_distance_m": 0.0008399721700698137,
+        "hand_object_min_distance_m": 0.0006410445785149932,
+        "contacts": 7,
+        "required_cbody": [
+          [
+            "right_finger1_link4"
+          ],
+          [
+            "right_finger2_link4"
+          ],
+          [
+            "right_finger3_link4"
+          ],
+          [
+            "right_finger4_link4"
+          ],
+          [
+            "right_finger5_link4"
+          ]
+        ],
+        "required_groups_contact": [
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "contact_bodies": [
+          "right_finger1_link4",
+          "right_finger2_link4",
+          "right_finger3_link4",
+          "right_finger4_link4",
+          "right_finger5_link4"
+        ],
+        "success": true
+      },
+      "pregrasp_filter": {
+        "joint_limits": true,
+        "hand_hand_min_distance_m": null,
+        "hand_object_min_distance_m": null,
+        "contacts": 0,
+        "required_cbody": [],
+        "required_groups_contact": [],
+        "contact_bodies": [],
+        "success": true
+      }
+    },
+    "upstream_commit": "d561ff9df8545deef7a3f9e7cfb4045ef66f6913",
+    "generation_config": {
+      "grasp": {
+        "device": "cpu",
+        "gpus": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "process_per_gpu": 4,
+        "step": 50,
+        "substep": 10,
+        "step_obj": 1,
+        "step_hand": 1,
+        "rho_admm": 1000.0,
+        "lr_obj": 0.0002,
+        "square_res": true,
+        "cdist": 0.001,
+        "fix_hand_local_cp": false,
+        "opt_miu_coef": [
+          0.1,
+          0
+        ],
+        "filter": {
+          "limit": {
+            "thre": 0.0
+          },
+          "collision": {
+            "hh_thre": 0.0,
+            "ho_thre": 0.0
+          },
+          "contact": {
+            "thre": 0.002,
+            "check_body": true
+          },
+          "qp": {
+            "thre": 0.001,
+            "miu_coef": [
+              0.6,
+              0.0
+            ]
+          }
+        }
+      },
+      "pregrasp": {
+        "step": 20,
+        "substep": 10,
+        "cdist": 0.045,
+        "filter": {
+          "limit": {
+            "thre": 0.0
+          },
+          "collision": {
+            "hh_thre": 0.0,
+            "ho_thre": 0.04
+          }
+        }
+      },
+      "cust_log_dir": "${log_dir}"
+    },
+    "eval_config": {
+      "skip_pregrasp": false,
+      "miu_coef": [
+        0.6,
+        0.02
+      ],
+      "hard": false,
+      "trans_thre": 0.05,
+      "rot_thre": 15,
+      "cust_log_dir": "${log_dir}"
+    },
+    "state": "completed",
+    "success": false,
+    "task_success": false,
+    "six_direction_tested": true,
+    "directions": [
+      {
+        "direction": "+x",
+        "tested": true,
+        "success": false,
+        "checks": [
+          {
+            "translation_m": 0.07609613314310956,
+            "rotation_deg": 46.676387786865234,
+            "success": false
+          }
+        ]
+      },
+      {
+        "direction": "-x",
+        "tested": false,
+        "success": null,
+        "checks": []
+      },
+      {
+        "direction": "+y",
+        "tested": false,
+        "success": null,
+        "checks": []
+      },
+      {
+        "direction": "-y",
+        "tested": false,
+        "success": null,
+        "checks": []
+      },
+      {
+        "direction": "+z",
+        "tested": false,
+        "success": null,
+        "checks": []
+      },
+      {
+        "direction": "-z",
+        "tested": false,
+        "success": null,
+        "checks": []
+      }
+    ],
+    "trajectory_time_scope": "time is strictly increasing display time; reset frames advance by one float unit; sim_time is actual resettable MuJoCo time",
+    "failure_stage": "six_direction_force_test",
+    "scene": "models/3ec6c9873910e1e875798c4960de2aa9e4e60ce6e54c8db5bc022c75e1fdbab6.xml",
+    "trajectory": "trajectories/t06_cylinder_s04_seed08.npz",
+    "evaluation_wall_seconds": 0.10594740195665509,
+    "runtime_mode": "in_process_pinned",
+    "candidate_sha256": "4cdd763d47b5cf0b163274a95a8c614b61723491219e83bfc371d2bda54a59d6"
+  }
+}

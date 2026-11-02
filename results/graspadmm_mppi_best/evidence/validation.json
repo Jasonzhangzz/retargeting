@@ -1,0 +1,20 @@
+{
+  "contact_stack": {
+    "command": "OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 .venv-contact/bin/python -m pytest -q tests/test_graspadmm_mppi.py tests/test_grasp_evaluation.py tests/test_unified_viewer.py tests/test_grasp_primitive_viewer.py",
+    "passed": 40,
+    "skipped": 2
+  },
+  "native_stack": {
+    "command": "OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 .venv-graspadmm/bin/python -m pytest -q tests/test_grasp_evaluation.py tests/test_graspadmm_numerics.py tests/test_graspadmm_scene.py tests/test_graspadmm_seed_geometry.py tests/test_grasp_primitive_policy.py tests/test_grasp_primitive_diagnostics.py",
+    "passed": 71
+  },
+  "sampler_parity": "Existing SPIDER source parity tests also passed; complete earlier combined run 46 passed / 2 skipped",
+  "replay_export": {
+    "poses_loaded": 4,
+    "raw_nq": 26,
+    "native_nq": 34,
+    "object_frame_conversion_max_error": 5.551115123125783e-17,
+    "positive_control_success": true
+  },
+  "deterministic_replay": "Four independent fresh-model replays exactly match full-sweep output; see deterministic_replay_audit.json"
+}

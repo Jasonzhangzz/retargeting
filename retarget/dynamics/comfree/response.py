@@ -81,6 +81,29 @@ class ContactResponse:
         return self.total_force
 
 
+def _contact_response_unpadded(
+    timestep, qvel, qacc_smooth, jacobian, distance, mass, smooth_force,
+    *, stiffness, damping,
+):
+    """Tensor-only response for already validated, active constraint rows.
+
+    Cached rollouts validate their model once and have no padded rows. Keeping
+    host checks out of this primitive also permits CUDA forward/backward capture.
+    Parameters broadcast as scalars or (worlds, 1) tensors.
+    """
+    predicted_velocity = qvel + qacc_smooth * timestep
+    row_velocity = torch.matmul(jacobian, predicted_velocity[..., None]).squeeze(-1)
+    penetration = row_velocity * timestep + distance
+    row_force = torch.clamp_min(
+        mass * (-damping / timestep * row_velocity - stiffness / timestep * penetration),
+        0.0,
+    )
+    constraint_force = torch.matmul(
+        jacobian.transpose(-1, -2), row_force[..., None]
+    ).squeeze(-1)
+    return smooth_force + constraint_force, row_force, constraint_force
+
+
 def contact_response_torch(
     timestep,
     qvel,
@@ -148,17 +171,15 @@ def contact_response_torch(
         return value.reshape(-1)[indices, None]
 
     dt = world_parameter(timestep, "timestep", positive=True)
-    k = world_parameter(stiffness, "stiffness") / dt
-    d = world_parameter(damping, "damping") / dt
+    k = world_parameter(stiffness, "stiffness")
+    d = world_parameter(damping, "damping")
     active = torch.arange(rows, device=qvel.device)[None, :] < count.to(qvel.device)[:, None]
     # Mask before multiplication: zeroing a completed response would leave
     # inactive NaNs in both the forward reduction and its backward pass.
     J = torch.where(active[..., None], jacobian[..., :nv], 0.0)
     row_distance = torch.where(active, distance, 0.0)
     row_mass = torch.where(active, mass, 0.0)
-    predicted_velocity = qvel + qacc_smooth * dt
-    row_velocity = (J * predicted_velocity[:, None, :]).sum(dim=-1)
-    penetration = row_velocity * dt + row_distance
-    row_force = torch.clamp_min(row_mass * (-d * row_velocity - k * penetration), 0.0)
-    constraint_force = (J * row_force[..., None]).sum(dim=1)
-    return smooth_force + constraint_force, row_force, constraint_force
+    return _contact_response_unpadded(
+        dt, qvel, qacc_smooth, J, row_distance, row_mass, smooth_force,
+        stiffness=k, damping=d,
+    )

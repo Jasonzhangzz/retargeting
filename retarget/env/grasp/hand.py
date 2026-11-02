@@ -106,7 +106,7 @@ def palmar_axis(model, body, endpoint):
     # flexion direction, supplied by the following PIP/MCP flexion joint.
     if model_hand(model) == "wuji2" and name.endswith("link2"):
         child = model.body(name[:-1] + "3").id
-        hinge = Rotation.from_quat(model.body_quat[child], scalar_first=True).apply(
+        hinge = Rotation.from_quat(model.body_quat[child][[1, 2, 3, 0]]).apply(
             model.jnt_axis[model.body_jntadr[child]]
         )
     direction = np.cross(hinge, endpoint)

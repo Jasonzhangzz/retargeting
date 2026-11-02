@@ -1,0 +1,30 @@
+{
+  "repository": "https://github.com/JYChen18/Dexonomy",
+  "commit": "d561ff9df8545deef7a3f9e7cfb4045ef66f6913",
+  "license": "CC BY-NC 4.0",
+  "sha256": {
+    "dexonomy/op/gen_init.py": "0411fcf466db105e1ee72b3cd295cd5a0f4774ac9c4d076cb1022560dc246708",
+    "dexonomy/op/gen_grasp_admm.py": "3b3694f12b0f78c80879c4d78fef841761c7166b7f9e672350c760a245b7b0f4",
+    "dexonomy/op/eval_data.py": "4ba5932d05fc050251a97b77b5db5b9b73662f5db348dfb3cf447604a31daf2b",
+    "dexonomy/op/convert_template.py": "d5ea3abdd8dbc99b5b401a8b6fadddb5b7d1093a008b02fd50471776c3b785a4",
+    "dexonomy/config/op/init.yaml": "9c06a14286d57f8577466a8a34aef02450dab40784ce6ae9f531018f193e5758",
+    "dexonomy/config/op/grasp_admm.yaml": "f33cd858f7c1bd1f0e26d5b9f1e138582c9384f5ead6b90042115b0482ffa819",
+    "dexonomy/config/op/eval.yaml": "cb2dec6857cf317d5b4dd424a2e97a5f261c9cc0c212ac98bb1231377b311fd6",
+    "dexonomy/config/base.yaml": "e752ab1af0708628436f38698c066563369cc4aee75fd5c72e410acaf61a52e6",
+    "dexonomy/qp/qp_single.py": "5de5484ed350aae6631fb410210b247a8eacdf7e4ac6d7052c8bfe88b4198d60",
+    "dexonomy/qp/qp_batched.py": "7fe3efc5d8160ea29ae80e588e151cc038ac38e9843caf5b8bea2e041a9c2ff4",
+    "dexonomy/sim/basic.py": "c0127157319afed47a5eb41d13f94b977628352eca942494e55e34e608ba8f90",
+    "dexonomy/sim/mujoco_env.py": "be5217b8b3495be119ad6bbe8c65d0f98770a4648d224c2ff51c30e8ad579c8a",
+    "dexonomy/sim/__init__.py": "30f328022543c0bc3b3f83c12fa733862acc1f86b668735f207410de63209f36",
+    "dexonomy/util/np_util.py": "870fc7b856a4c147728e45c6a445220ba934bc622cc1afe746c84a7f8e5eeabb",
+    "dexonomy/util/torch_util.py": "210b92a58fc2206ed642e0b0d536c39c9b6a759720b8d0a5c9a66990342b725f",
+    "dexonomy/util/warp_util.py": "c6a26ca39ce1313b4f3e6671d6f7713a5cb32265c5b0dcb5c01e1a863a9a88e9",
+    "dexonomy/util/file_util.py": "9d18cd1057d74771d26fcdf4451b4dddc813d52dbe7416c0c4a1fc004a0c4452",
+    "dexonomy/util/traj_util.py": "557a62f94f690d2e3be2d2e5a9a98f9cd779ab4a2e75b1efa9ba3cd3663720d8",
+    "dexonomy/data/obj_loader.py": "f92ca45a4aefd9e236a492227ea55b141adef9e2364808c11f20f409d26f2c35",
+    "dexonomy/data/hand_loader.py": "6f310f6e47ed207d832f14c70c00b8fef870fe692080290e5e94e7c1792194f6",
+    "README.md": "4cb948c925d701c3bc66a6dcb2f570e90ddc8600b97d6fafc817773f3b30b2ad",
+    "pyproject.toml": "6b4cb4359ff96c848bb4787e68513f06fc0f65b9db967182debe1fb24cbf53c6",
+    "getting_started/3_ADMM.md": "3da1e5df26a3da82439861149d600646ed80050d0cd6bda9f336e10452d31558"
+  }
+}

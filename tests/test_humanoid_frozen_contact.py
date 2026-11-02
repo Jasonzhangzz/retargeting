@@ -169,6 +169,339 @@ def test_early_action_affects_final_object_pose_and_late_action_is_causal(device
     assert (late_result.qpos[:, 4] - result.qpos[:, 4]).abs().sum() > 1e-6
 
 
+def test_nominal_mjwarp_correction_matches_engine_and_retains_gradients(
+    device, monkeypatch
+):
+    from retarget.env.humanoid.frozen_contact import FrozenContactRollout
+    from retarget.task.humanoid.cost_contact import _stream
+
+    config, env = _environment(device)
+    env.model_cpu.opt.integrator = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
+    env.model_wp.opt.integrator = int(mujoco.mjtIntegrator.mjINT_IMPLICITFAST)
+    horizon = 4
+    nominal = torch.linspace(0.2, 0.5, horizon, device=device)[:, None]
+    before = _state(env)
+    cache = FrozenContactRollout.from_env(
+        config, env, nominal, anchor_to_mjwarp=True
+    )
+    _assert_state(env, before)
+    assert any(frame.velocity_correction.abs().max() > 1e-5 for frame in cache.frames)
+    positions = [wp.to_torch(env.data_wp.qpos)[0].clone()]
+    velocities = [wp.to_torch(env.data_wp.qvel)[0].clone()]
+    for control in nominal:
+        with wp.ScopedDevice(device), _stream(env):
+            wp.copy(env.data_wp.ctrl, wp.from_torch(control[None].contiguous()))
+            mjw.step(env.model_wp, env.data_wp)
+        positions.append(wp.to_torch(env.data_wp.qpos)[0].clone())
+        velocities.append(wp.to_torch(env.data_wp.qvel)[0].clone())
+
+    actions = nominal[None].detach().clone().requires_grad_(True)
+    with monkeypatch.context() as patched:
+        _forbid_engine(patched)
+        result = cache.rollout(actions)
+        torch.testing.assert_close(
+            result.qpos[0], torch.stack(positions), atol=2e-6, rtol=2e-5
+        )
+        torch.testing.assert_close(
+            result.qvel[0], torch.stack(velocities), atol=2e-6, rtol=2e-5
+        )
+        final_x = result.qpos[0, -1, cache.object_qpos_adr]
+        gradient = torch.autograd.grad(final_x, actions)[0]
+        assert torch.isfinite(gradient).all()
+        assert gradient[0, 0, 0].abs() > 1e-7
+        delta = torch.zeros_like(actions)
+        delta[0, 0, 0] = 0.02
+        plus = cache.rollout(actions.detach() + delta)
+        minus = cache.rollout(actions.detach() - delta)
+        numerical = (
+            plus.qpos[0, -1, cache.object_qpos_adr]
+            - minus.qpos[0, -1, cache.object_qpos_adr]
+        ) / 0.04
+        torch.testing.assert_close(gradient[0, 0, 0], numerical, atol=5e-7, rtol=0.03)
+
+
+def test_terminal_site_jacobian_uses_terminal_spatial_dofs(device):
+    from retarget.env.humanoid.frozen_contact import FrozenContactRollout
+
+    config, env = _environment(device)
+    qpos, qvel = env.data_wp.qpos.numpy(), env.data_wp.qvel.numpy()
+    qpos[0, -7] = 0.8  # Isolate the terminal FK from contact forces.
+    qvel[0, 5] = 1.1
+    qvel[0, 6] = 0.3
+    env.data_wp.qpos.assign(qpos)
+    env.data_wp.qvel.assign(qvel)
+    nominal = torch.full((3, config.nu), 0.2, device=device)
+    cache = FrozenContactRollout.from_env(config, env, nominal)
+    terminal = cache._geometry[-1]
+
+    cpu_data = mujoco.MjData(env.model_cpu)
+    cpu_data.qpos[:] = terminal.qpos.cpu().numpy()
+    mujoco.mj_forward(env.model_cpu, cpu_data)
+    expected = []
+    for site in config.contact_site_ids:
+        translation = np.zeros((3, env.model_cpu.nv))
+        rotation = np.zeros_like(translation)
+        mujoco.mj_jacSite(env.model_cpu, cpu_data, translation, rotation, site)
+        expected.append(translation)
+    torch.testing.assert_close(
+        terminal.site_jacobian,
+        torch.as_tensor(np.asarray(expected), device=device, dtype=terminal.qpos.dtype),
+        atol=2e-6,
+        rtol=2e-5,
+    )
+    torch.testing.assert_close(
+        terminal.site_xpos,
+        torch.as_tensor(
+            cpu_data.site_xpos[config.contact_site_ids],
+            device=device,
+            dtype=terminal.qpos.dtype,
+        ),
+        atol=2e-6,
+        rtol=2e-5,
+    )
+
+
+def test_final_robot_root_joint_and_object_gradients_cover_action_sequence(device):
+    from retarget.env.humanoid.frozen_contact import FrozenContactRollout
+
+    config, env = _environment(device)
+    horizon = 4
+    cache = FrozenContactRollout.from_current(config, env, horizon)
+    actions = torch.full(
+        (1, horizon, config.nu), 0.4, device=device, requires_grad=True
+    )
+    result = cache.rollout(actions)
+    # Root x, the actuated sliding joint, and object x all depend on earlier
+    # controls through the coupled contact dynamics. Once contact releases,
+    # later controls can correctly have zero influence on the object.
+    coordinates = (0, 7, env.model_cpu.nq - 7)
+    final = result.qpos[0, -1, list(coordinates)]
+    derivatives = torch.stack(
+        [
+            torch.autograd.grad(value, actions, retain_graph=True)[0][0, :, 0]
+            for value in final
+        ]
+    )
+    assert torch.isfinite(derivatives).all()
+    assert torch.all(derivatives[:, 0].abs() > 1e-8)
+    assert torch.all(derivatives[:2].abs() > 1e-8)
+    epsilon = 0.02
+    finite_difference = []
+    for step in range(horizon):
+        change = torch.zeros_like(actions)
+        change[0, step, 0] = epsilon
+        plus = cache.rollout(actions.detach() + change)
+        minus = cache.rollout(actions.detach() - change)
+        finite_difference.append(
+            (
+                plus.qpos[0, -1, list(coordinates)]
+                - minus.qpos[0, -1, list(coordinates)]
+            )
+            / (2 * epsilon)
+        )
+    torch.testing.assert_close(
+        derivatives, torch.stack(finite_difference, dim=1), atol=3e-7, rtol=0.03
+    )
+
+
+def test_grouped_joint_integration_and_tangents_match_mujoco(device):
+    from retarget.env.humanoid.frozen_contact import (
+        _difference, _integrate, _joint_layout,
+    )
+
+    cpu = mujoco.MjModel.from_xml_string(
+        """<mujoco><worldbody>
+        <body><freejoint/><geom type="sphere" size=".1"/>
+          <body><joint type="hinge" axis="0 1 0"/>
+          <joint type="slide" axis="1 0 0"/>
+          <geom type="sphere" size=".1"/>
+            <body><joint type="ball"/><geom type="sphere" size=".1"/>
+              <body><joint type="hinge" axis="0 0 1"/>
+              <geom type="sphere" size=".1"/></body>
+            </body>
+          </body>
+        </body></worldbody></mujoco>"""
+    )
+    layout = _joint_layout(cpu)
+    assert any(width == 2 for _, _, _, width in layout)
+    initial = cpu.qpos0.copy()
+    warm_velocity = np.linspace(-0.2, 0.4, cpu.nv)
+    mujoco.mj_integratePos(cpu, initial, warm_velocity, 0.7)
+    velocity = np.linspace(-0.6, 0.3, cpu.nv)
+    timestep = 0.13
+    expected = initial.copy()
+    mujoco.mj_integratePos(cpu, expected, velocity, timestep)
+    initial_tensor = torch.as_tensor(initial, dtype=torch.float64, device=device)
+    velocity_tensor = torch.tensor(
+        velocity, dtype=torch.float64, device=device, requires_grad=True
+    )
+    actual = _integrate(initial_tensor, velocity_tensor, timestep, layout)
+    torch.testing.assert_close(
+        actual, torch.as_tensor(expected, device=device), atol=2e-12, rtol=2e-12
+    )
+    tangent = np.zeros(cpu.nv)
+    mujoco.mj_differentiatePos(cpu, tangent, 1.0, initial, expected)
+    torch.testing.assert_close(
+        _difference(actual, initial_tensor, layout),
+        torch.as_tensor(tangent, device=device),
+        atol=2e-12,
+        rtol=2e-12,
+    )
+    assert torch.isfinite(torch.autograd.grad(actual.sum(), velocity_tensor)[0]).all()
+
+
+def test_mesh_collision_jacobian_couples_robot_root_joint_and_object(device):
+    from retarget.env.humanoid.frozen_contact import FrozenContactRollout
+
+    # A convex tetrahedral hand has a unique tip against the box's flat face.
+    # The off-axis tip also exercises rotational columns of both body Jacobians.
+    cpu = mujoco.MjModel.from_xml_string(
+        """<mujoco>
+        <option timestep=".05" gravity="0 0 0" jacobian="dense"/>
+        <asset><mesh name="hand_mesh" vertex="
+          .1 .025 .015  -.08 -.07 -.06  -.08 .07 -.06  -.08 0 .08"/></asset>
+        <worldbody>
+          <body name="robot" pos="0 0 .3"><freejoint/>
+            <inertial pos="0 0 0" mass="10" diaginertia="1 1 1"/>
+            <body name="hand"><joint name="push" type="slide" axis="1 0 0"/>
+              <geom name="hand_geom" type="mesh" mesh="hand_mesh" mass="1"/>
+            </body>
+          </body>
+          <body name="object" pos=".19 0 .3"><freejoint/>
+            <geom name="object_geom" type="box" size=".1 .12 .12" mass="1"/>
+          </body>
+        </worldbody><actuator><motor joint="push"/></actuator>
+        </mujoco>"""
+    )
+    initial = mujoco.MjData(cpu)
+    mujoco.mj_forward(cpu, initial)
+    with wp.ScopedDevice(device):
+        model = mjw.put_model(cpu)
+        data = mjw.put_data(cpu, initial, nworld=1, nconmax=12, njmax=48)
+    env = SimpleNamespace(
+        model_cpu=cpu, model_wp=model, data_wp=data, device=device, num_worlds=1
+    )
+    config = SimpleNamespace(
+        embodiment_type="humanoid_object", contact_site_ids=[], device=device
+    )
+    cache = FrozenContactRollout.from_current(config, env, horizon=3)
+    frame = cache.frames[0]
+    assert cpu.geom_type[cpu.geom("hand_geom").id] == mujoco.mjtGeom.mjGEOM_MESH
+    assert frame.contact_distance.shape == (1,)
+    assert frame.contact_distance[0] < 0
+    robot_root, robot_joint, object_root = 0, 6, 7
+    columns = (robot_root, robot_joint, object_root)
+    normal = frame.contact_jacobian[0]
+    assert torch.all(normal[list(columns)].abs() > 0.9)
+    assert frame.point_jacobian.shape == (1, 3, cpu.nv)
+    assert torch.all(frame.point_jacobian[0, 0, list(columns)].abs() > 0.9)
+    # Both free roots have nonzero angular columns at the off-axis mesh tip.
+    assert normal[3:6].abs().max() > 0.01
+    assert normal[10:13].abs().max() > 0.01
+
+    epsilon = 1e-5
+    finite_difference = []
+    for dof in (*columns, 5, 12):
+        gaps = []
+        for sign in (1, -1):
+            perturbed = mujoco.MjData(cpu)
+            perturbed.qpos[:] = initial.qpos
+            tangent = np.zeros(cpu.nv)
+            tangent[dof] = sign
+            mujoco.mj_integratePos(cpu, perturbed.qpos, tangent, epsilon)
+            mujoco.mj_forward(cpu, perturbed)
+            assert perturbed.ncon == 1
+            gaps.append(perturbed.contact[0].dist)
+        finite_difference.append((gaps[0] - gaps[1]) / (2 * epsilon))
+    torch.testing.assert_close(
+        normal[[*columns, 5, 12]],
+        torch.tensor(finite_difference, dtype=normal.dtype, device=device),
+        atol=3e-4,
+        rtol=0.02,
+    )
+
+    actions = torch.full((1, 3, cpu.nu), 0.2, device=device, requires_grad=True)
+    final_x = cache.rollout(actions).qpos[0, -1, cache.object_qpos_adr]
+    gradient = torch.autograd.grad(final_x, actions)[0]
+    assert torch.isfinite(gradient).all()
+    assert gradient[0, 0, 0] > 1e-7
+    delta = torch.zeros_like(actions)
+    delta[0, 0, 0] = 0.02
+    plus = cache.rollout(actions.detach() + delta).qpos[0, -1, cache.object_qpos_adr]
+    minus = cache.rollout(actions.detach() - delta).qpos[0, -1, cache.object_qpos_adr]
+    torch.testing.assert_close(
+        gradient[0, 0, 0], (plus - minus) / 0.04, atol=5e-7, rtol=0.03
+    )
+
+
+def test_physical_contact_cost_has_gradients_without_annotated_sites(device, monkeypatch):
+    from retarget.env.humanoid.frozen_contact import FrozenContactRollout
+    from retarget.task.humanoid.cost_contact import ContactCostOptions, get_trajectory_cost
+
+    config, env = _environment(device)
+    config.contact_site_ids = []
+    for name in (
+        "base_pos_rew_scale", "base_rot_rew_scale", "pos_rew_scale",
+        "rot_rew_scale", "joint_rew_scale", "vel_rew_scale",
+    ):
+        setattr(config, name, 0.0)
+    qvel = env.data_wp.qvel.numpy()
+    qvel[0, 8] = 0.4  # Tangential motion of the object's physical patch.
+    env.data_wp.qvel.assign(qvel)
+    options = ContactCostOptions(
+        contact_weight=0.0,
+        physical_contact_weight=1.0,
+        soft_penetration_weight=0.0,
+        penetration_weight=0.0,
+        object_motion_weight=0.0,
+    )
+    horizon = 3
+    cache = FrozenContactRollout.from_current(config, env, horizon, options=options)
+    frame = cache.frames[0]
+    assert frame.point_offset.shape == (1, 3)
+    # Translating both complete bodies equally preserves their fixed patch
+    # correspondence, even though their individual Jacobian blocks are nonzero.
+    common = torch.zeros(env.model_cpu.nv, device=device)
+    common[:3] = common[7:10] = torch.tensor([0.3, -0.2, 0.1], device=device)
+    torch.testing.assert_close(
+        torch.einsum("pcv,v->pc", frame.point_jacobian, common),
+        torch.zeros((1, 3), device=device), atol=1e-7, rtol=0,
+    )
+    refs = list(_references(env, horizon))
+    refs[3] = torch.zeros((horizon, 0), device=device)
+    refs[4] = torch.zeros((horizon, 0, 3), device=device)
+    actions = torch.full(
+        (1, horizon, env.model_cpu.nu), 0.4, device=device, requires_grad=True
+    )
+    with monkeypatch.context() as patched:
+        _forbid_engine(patched)
+        result = cache.rollout(actions)
+        assert all(error.shape == (1, 1, 3) for error in result.contact_point_error)
+        assert result.contact_point_error[-1][0, 0, 1].abs() > 1e-6
+        cost, info = get_trajectory_cost(config, result, tuple(refs), options=options)
+        expected = torch.stack(
+            [torch.linalg.vector_norm(error, dim=-1).sum(-1)
+             for error in result.contact_point_error], dim=1
+        )
+        torch.testing.assert_close(info["contact_cost"], expected)
+        torch.testing.assert_close(cost, expected.mean(dim=1))
+        assert cost[0] > 0
+        gradient = torch.autograd.grad(cost.sum(), actions)[0]
+        assert torch.isfinite(gradient).all()
+        assert gradient[0, 0, 0].abs() > 1e-8
+        delta = torch.zeros_like(actions)
+        delta[0, 0, 0] = 0.02
+        plus, _ = get_trajectory_cost(
+            config, cache.rollout(actions.detach() + delta), tuple(refs), options=options
+        )
+        minus, _ = get_trajectory_cost(
+            config, cache.rollout(actions.detach() - delta), tuple(refs), options=options
+        )
+        torch.testing.assert_close(
+            gradient[0, 0, 0], ((plus - minus) / 0.04)[0], atol=5e-7, rtol=0.03
+        )
+
+
 def test_separated_cached_contacts_stop_applying_force(device):
     from retarget.env.humanoid.frozen_contact import FrozenContactRollout
 

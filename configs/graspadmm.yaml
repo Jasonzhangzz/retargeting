@@ -1,0 +1,29 @@
+mode: solve
+task:
+  type: grasp
+  name: graspadmm_wuji2
+  data: ../data/grasp
+  templates: [1]
+  options:
+    hand_model: wuji2
+    primary_shape_only: true
+    primitive_seed_policy: taxonomy
+solver:
+  type: graspadmm
+  graspadmm:
+    step: 50
+    substep: 10
+    rho_admm: 1000.0
+    lr_obj: 0.0002
+    square_res: true
+    init_epoch: 1
+    init_n_final: 1
+environment:
+  device: cuda:0
+  dynamics: graspadmm
+seed: 0
+output:
+  name: graspadmm_wuji2
+visualization:
+  live: false
+  save_video: false

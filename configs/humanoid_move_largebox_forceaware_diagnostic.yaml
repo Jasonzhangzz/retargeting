@@ -1,0 +1,21 @@
+# Observe the main pushing phase; this run does not certify the full clip.
+mode: solve
+seed: 0
+task:
+  type: humanoid
+  name: move_largebox
+  data: ../data/humanoid/move_largebox
+environment:
+  device: cuda:0
+  dynamics: dexforge
+  frames: 75
+  dexforge:
+    gradient_check: false
+solver:
+  type: dexforge
+  dexforge: {}
+output:
+  name: humanoid_forceaware_push_test_2p5s
+visualization:
+  live: false
+  save_video: false

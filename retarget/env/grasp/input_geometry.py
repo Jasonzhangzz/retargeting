@@ -16,6 +16,8 @@ from retarget.env.grasp.template import (
     WujiContactKinematics,
     BoneReference,
     skin_reference,
+    semantic_surface_mask,
+    semantic_query_diagnostics,
 )
 from retarget.env.grasp.regions import SurfaceClearance, contact_mask
 
@@ -270,7 +272,15 @@ def fit_power_cylinder_input(
         valid[i, : len(p)] = contact_mask(
             hand.model, int(hand.bodies[i]), n, region_normals[i]
         )
+        if getattr(hand, "semantic_contact_masks", None) is not None:
+            valid[i, : len(p)] &= semantic_surface_mask(hand, i, len(p))
+            patch = getattr(hand, "tip_patches", {}).get(int(hand.bodies[i]))
+            if patch is not None:
+                valid[i, : len(p)] &= patch["mask"]
     if not valid.any(axis=1).all():
+        if getattr(hand, "semantic_contact_masks", None) is not None:
+            failed = [hand.semantic_patch_labels[i] for i in np.flatnonzero(~valid.any(axis=1))]
+            raise ValueError(f"No query samples in fixed semantic patch intersections: {failed}")
         raise ValueError("No query samples in an annotated contact region")
     pp, nn = fk.tensor(pp), fk.tensor(nn)
     valid = torch.tensor(valid, device=fk.device)
@@ -318,6 +328,30 @@ def fit_power_cylinder_input(
             local.cpu().numpy().copy(),
             normal.cpu().numpy().copy(),
         )
+    semantic_diagnostics = semantic_query_diagnostics(hand, selected.cpu().numpy())
+    if semantic_diagnostics:
+        # Compare grasp shape in a common canonical root frame. The object
+        # envelope remains this refinement's target; this reference records
+        # how far fitting moved the original matched patch layout.
+        canonical_seed = reference_qpos.copy()
+        canonical_seed[:6] = 0.0
+        canonical_fit = fitted.copy()
+        canonical_fit[:6] = 0.0
+        reference_p, reference_n = fk.contacts(
+            fk.tensor(canonical_seed), fk.tensor(hand.semantic_contact_local),
+            fk.tensor(hand.semantic_contact_normals),
+        )
+        fit_p, fit_n = fk.contacts(fk.tensor(canonical_fit), local, normal)
+        semantic_diagnostics.update(
+            semantic_reference_layout_position_error_mm=(
+                torch.linalg.vector_norm(fit_p - reference_p, dim=-1) * 1000
+            ).cpu().tolist(),
+            semantic_reference_layout_normal_error_deg=torch.rad2deg(torch.acos(
+                (fit_n * reference_n).sum(-1).clamp(-1.0, 1.0)
+            )).cpu().tolist(),
+            semantic_target_layout_position_error_mm=np.abs(gap.cpu().numpy() * 1000).tolist(),
+            semantic_target_layout_normal_error_deg=angle.cpu().tolist(),
+        )
     return fitted, dict(
         method="CUDA_dense_power_cylinder_input_IK",
         device=str(fk.device),
@@ -347,4 +381,5 @@ def fit_power_cylinder_input(
         before=before,
         after=template_contact_layout(hand, fitted),
         shared_solver_modified=False,
+        **semantic_diagnostics,
     )

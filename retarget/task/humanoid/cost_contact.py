@@ -27,7 +27,28 @@ import warp as wp
 
 from retarget.dynamics.comfree import contact_response_torch
 
-from .math import quat_sub
+from .math import mul_quat
+
+
+def quat_sub(qa, qb):
+    """Shortest rotation error with its analytic derivative at equal poses.
+
+    The original tracking helper fills an exact-zero rotation with constants.
+    Here that case must retain the quaternion derivative for action gradients.
+    Values follow the original wxyz convention; ``cost.py`` is unchanged.
+    """
+    inverse = torch.cat((qb[..., :1], -qb[..., 1:]), dim=-1)
+    relative = mul_quat(inverse, qa)
+    relative = torch.where(relative[..., :1] < 0, -relative, relative)
+    xyz = relative[..., 1:]
+    length = torch.linalg.vector_norm(xyz, dim=-1, keepdim=True)
+    scalar = relative[..., :1]
+    scale = torch.where(
+        length > 1e-7,
+        2.0 * torch.atan2(length, scalar) / length.clamp_min(1e-7),
+        2.0 / scalar.clamp_min(1e-7),
+    )
+    return xyz * scale
 
 
 @dataclass(frozen=True)
@@ -41,6 +62,7 @@ class ContactCostOptions:
     """
 
     contact_weight: float = 1.0
+    physical_contact_weight: float = 1.0
     soft_penetration_weight: float = 15.0
     penetration_weight: float = 75.0
     soft_penetration_limit: float = 0.002
@@ -48,12 +70,20 @@ class ContactCostOptions:
     object_motion_weight: float = 1.0
     comfree_stiffness: float = 0.2
     comfree_damping: float = 0.001
+    nominal_correction: bool = False
+    action_trust_radius: float | None = None
     object_body_id: int | None = None
 
     def __post_init__(self):
         for name, value in vars(self).items():
-            if name != "object_body_id" and (not math.isfinite(value) or value < 0):
+            if name not in ("object_body_id", "nominal_correction", "action_trust_radius") and (not math.isfinite(value) or value < 0):
                 raise ValueError(f"{name} must be finite and nonnegative")
+        if not isinstance(self.nominal_correction, bool):
+            raise ValueError("nominal_correction must be a boolean")
+        if self.action_trust_radius is not None and (
+            not math.isfinite(self.action_trust_radius) or self.action_trust_radius <= 0
+        ):
+            raise ValueError("action_trust_radius must be finite and positive")
         if self.penetration_limit < self.soft_penetration_limit:
             raise ValueError("penetration_limit must be >= soft_penetration_limit")
 
@@ -520,6 +550,21 @@ def get_trajectory_cost(
             torch.linalg.vector_norm(error, dim=-1) * mask
         ).sum(-1)
 
+    site_contact = contact
+    physical_contact = torch.zeros_like(contact)
+    point_errors = getattr(trajectory, "contact_point_error", ())
+    if point_errors and options.physical_contact_weight > 0:
+        if len(point_errors) != horizon:
+            raise ValueError("physical contact point errors must cover the horizon")
+        for error in point_errors:
+            if error.ndim != 3 or error.shape[0] != worlds or error.shape[-1] != 3:
+                raise ValueError("physical contact errors must have shape (N, contacts, 3)")
+        physical_contact = options.physical_contact_weight * torch.stack(
+            [torch.linalg.vector_norm(error, dim=-1).sum(-1) for error in point_errors],
+            dim=1,
+        )
+        contact = contact + physical_contact
+
     if len(trajectory.penetration_distance) != horizon:
         raise ValueError("cached penetration distances must cover the entire horizon")
     soft, deep = [], []
@@ -564,7 +609,7 @@ def get_trajectory_cost(
         qpos_dist + config.vel_rew_scale * qvel_dist + contact + penetration + motion
     )
     scale = qpos.new_ones(horizon)
-    scale[-1] = config.terminal_rew_scale
+    scale[-1:].fill_(config.terminal_rew_scale)
     step_cost = step_cost * scale
     total = step_cost.mean(dim=1)
     return total, {
@@ -573,6 +618,8 @@ def get_trajectory_cost(
         "qpos_dist": qpos_dist,
         "qvel_dist": qvel_dist,
         "contact_cost": contact,
+        "site_contact_cost": site_contact,
+        "physical_contact_cost": physical_contact,
         "soft_penetration_cost": soft,
         "deep_penetration_cost": deep,
         "penetration_cost": penetration,

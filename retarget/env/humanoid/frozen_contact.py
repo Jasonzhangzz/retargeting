@@ -8,7 +8,7 @@ contacts absent from the nominal trajectory cannot be discovered by a rollout.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
 import mujoco
@@ -16,7 +16,7 @@ import mujoco_warp as mjw
 import torch
 import warp as wp
 
-from retarget.dynamics.comfree import contact_response_torch
+from retarget.dynamics.comfree.response import _contact_response_unpadded
 from retarget.task.humanoid.cost_contact import (
     ContactCostOptions,
     _actuator_force,
@@ -41,6 +41,7 @@ class RolloutResult:
     timestep: torch.Tensor
     object_qpos_adr: int | None
     object_dof_adr: int | None
+    contact_point_error: tuple[torch.Tensor, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -51,21 +52,30 @@ class ContactFrame:
     normal gap. Unlike ``jacobian``, contact rows have no friction tangents.
     ``contact_*`` contains physical robot-object contacts only, and distances
     include no solver margin. Both Jacobians use MuJoCo's nv tangent coordinates.
+    ``point_jacobian`` and ``point_offset`` retain the full 3D difference between
+    touching surface patches, including tangential slip of their frozen points.
+    ``velocity_correction`` is zero for raw ComFree; optional MJWarp anchoring
+    records a detached nominal integration defect, leaving action derivatives
+    to the ComFree model.
     """
 
     nominal_qpos: torch.Tensor
     nominal_qvel: torch.Tensor
     mass_cholesky: torch.Tensor
+    mass_inverse: torch.Tensor
     jacobian: torch.Tensor
     normal_jacobian: torch.Tensor
     gap: torch.Tensor
     impedance_mass: torch.Tensor
     contact_jacobian: torch.Tensor
     contact_distance: torch.Tensor
+    point_jacobian: torch.Tensor
+    point_offset: torch.Tensor
     actuator_moment: torch.Tensor
     actuator_length: torch.Tensor
     smooth_residual: torch.Tensor
     timestep: torch.Tensor
+    velocity_correction: torch.Tensor
 
 
 @dataclass(frozen=True)
@@ -146,15 +156,35 @@ def _advance_quaternion(q, velocity, dt):
 
 
 def _joint_layout(cpu):
-    return tuple(
-        (int(cpu.jnt_type[j]), int(cpu.jnt_qposadr[j]), int(cpu.jnt_dofadr[j]))
-        for j in range(cpu.njnt)
-    )
+    # Hinge and slide coordinates have identical difference/integration rules.
+    # Group contiguous scalar joints so a humanoid's many actuated joints use
+    # one tensor operation, rather than launching one operation per joint.
+    layout = []
+    for j in range(cpu.njnt):
+        kind, qadr, vadr = (
+            int(cpu.jnt_type[j]), int(cpu.jnt_qposadr[j]), int(cpu.jnt_dofadr[j])
+        )
+        scalar = kind in (
+            int(mujoco.mjtJoint.mjJNT_HINGE), int(mujoco.mjtJoint.mjJNT_SLIDE)
+        )
+        if scalar and layout:
+            previous_kind, previous_qadr, previous_vadr, width = layout[-1]
+            if (
+                previous_kind in (
+                    int(mujoco.mjtJoint.mjJNT_HINGE), int(mujoco.mjtJoint.mjJNT_SLIDE)
+                )
+                and qadr == previous_qadr + width
+                and vadr == previous_vadr + width
+            ):
+                layout[-1] = (previous_kind, previous_qadr, previous_vadr, width + 1)
+                continue
+        layout.append((kind, qadr, vadr, 1))
+    return tuple(layout)
 
 
 def _difference(qpos, reference, layout):
     parts = []
-    for kind, qadr, _ in layout:
+    for kind, qadr, _, width in layout:
         if kind == int(mujoco.mjtJoint.mjJNT_FREE):
             parts.extend(
                 (
@@ -172,13 +202,15 @@ def _difference(qpos, reference, layout):
                 )
             )
         else:
-            parts.append(qpos[..., qadr : qadr + 1] - reference[..., qadr : qadr + 1])
+            parts.append(
+                qpos[..., qadr : qadr + width] - reference[..., qadr : qadr + width]
+            )
     return torch.cat(parts, -1)
 
 
 def _integrate(qpos, velocity, dt, layout):
     parts = []
-    for kind, qadr, vadr in layout:
+    for kind, qadr, vadr, width in layout:
         if kind == int(mujoco.mjtJoint.mjJNT_FREE):
             parts.extend(
                 (
@@ -198,7 +230,8 @@ def _integrate(qpos, velocity, dt, layout):
             )
         else:
             parts.append(
-                qpos[..., qadr : qadr + 1] + dt * velocity[..., vadr : vadr + 1]
+                qpos[..., qadr : qadr + width]
+                + dt * velocity[..., vadr : vadr + width]
             )
     return torch.cat(parts, -1)
 
@@ -260,14 +293,16 @@ def _contacts(config, env, options, jacobian, row_count):
     device, dtype = jacobian.device, jacobian.dtype
     empty_j = torch.empty((0, cpu.nv), dtype=dtype, device=device)
     empty_d = torch.empty(0, dtype=dtype, device=device)
+    empty_point = torch.empty((0, 3, cpu.nv), dtype=dtype, device=device)
+    empty_offset = torch.empty((0, 3), dtype=dtype, device=device)
     if ncon == 0:
-        return normal_rows, empty_j, empty_d
+        return normal_rows, empty_j, empty_d, empty_point, empty_offset
     geom = _snapshot(d.contact.geom)[:ncon].long()
     world = _snapshot(d.contact.worldid)[:ncon].long()
     valid = (world == 0) & ((geom >= 0) & (geom < cpu.ngeom)).all(-1)
     indices = torch.nonzero(valid).flatten()
     if not len(indices):
-        return normal_rows, empty_j, empty_d
+        return normal_rows, empty_j, empty_d, empty_point, empty_offset
     geom = geom[indices]
     body_table = torch.as_tensor(
         cpu.geom_bodyid.copy(), device=device, dtype=torch.long
@@ -291,7 +326,7 @@ def _contacts(config, env, options, jacobian, row_count):
 
     joint = _object_joint(config, env, options)
     if joint is None:
-        return normal_rows, empty_j, empty_d
+        return normal_rows, empty_j, empty_d, empty_point, empty_offset
     free = [j for j in range(cpu.njnt) if cpu.jnt_type[j] == mujoco.mjtJoint.mjJNT_FREE]
     robot_body = int(cpu.jnt_bodyid[free[0]])
     object_body = int(cpu.jnt_bodyid[joint])
@@ -303,7 +338,22 @@ def _contacts(config, env, options, jacobian, row_count):
         objects[bodies[:, 0]] & robots[bodies[:, 1]]
     )
     distance = _snapshot(d.contact.dist)[indices]
-    return normal_rows, normal_jacobian[selected].clone(), distance[selected].clone()
+    # Freeze correspondences only for touching/penetrating robot-object patches.
+    # MuJoCo reports the midpoint of the two surface points. Recover each
+    # endpoint so tangential/rotational slip uses its own body's point Jacobian.
+    touching = selected & (distance <= 0)
+    offset = distance[touching, None] * normals[touching]
+    first_surface = points[touching] - 0.5 * offset
+    second_surface = points[touching] + 0.5 * offset
+    point_jacobian = _point_jacobians(env, second_surface, bodies[touching, 1])
+    point_jacobian -= _point_jacobians(env, first_surface, bodies[touching, 0])
+    return (
+        normal_rows,
+        normal_jacobian[selected].clone(),
+        distance[selected].clone(),
+        point_jacobian,
+        offset.clone(),
+    )
 
 
 def _frame(config, env, options):
@@ -313,26 +363,31 @@ def _frame(config, env, options):
     if count > jacobian.shape[1]:
         raise ValueError("MJWarp constraint capacity overflow while caching contacts")
     jacobian = jacobian[0, :count, : env.model_cpu.nv].clone()
-    normal, contact_jacobian, contact_distance = _contacts(
+    normal, contact_jacobian, contact_distance, point_jacobian, point_offset = _contacts(
         config, env, options, jacobian, count
     )
     force = _snapshot(d.actuator_force)[0]
     moment = moment[0].clone()
     residual = _snapshot(d.qfrc_smooth)[0] - torch.einsum("uv,u->v", moment, force)
+    factor = torch.linalg.cholesky(mass[0])
     return ContactFrame(
         nominal_qpos=_snapshot(d.qpos)[0],
         nominal_qvel=_snapshot(d.qvel)[0],
-        mass_cholesky=torch.linalg.cholesky(mass[0]),
+        mass_cholesky=factor,
+        mass_inverse=torch.cholesky_inverse(factor),
         jacobian=jacobian,
         normal_jacobian=normal,
         gap=_snapshot(d.efc.pos)[0, :count].clone(),
         impedance_mass=_snapshot(d.efc.D)[0, :count].clone(),
         contact_jacobian=contact_jacobian,
         contact_distance=contact_distance,
+        point_jacobian=point_jacobian,
+        point_offset=point_offset,
         actuator_moment=moment,
         actuator_length=_snapshot(d.actuator_length)[0],
         smooth_residual=residual,
         timestep=_snapshot(env.model_wp.opt.timestep)[0],
+        velocity_correction=torch.zeros_like(_snapshot(d.qvel)[0]),
     )
 
 
@@ -384,8 +439,27 @@ class FrozenContactRollout:
     """
 
     @classmethod
-    def from_env(cls, config, env, nominal_controls, *, options=None):
+    def from_env(
+        cls, config, env, nominal_controls, *, options=None, anchor_to_mjwarp=None
+    ):
+        """Cache nominal dynamics, optionally correcting their nominal defect.
+
+        With ``anchor_to_mjwarp=True``, scratch MJWarp steps determine the
+        nominal states and a detached velocity offset makes the local ComFree
+        model agree there. Candidate changes still use ComFree derivatives and
+        never call the engine. The default retains the raw ComFree predictor.
+        """
         options = options or ContactCostOptions()
+        if anchor_to_mjwarp is None:
+            anchor_to_mjwarp = options.nominal_correction
+        if not isinstance(anchor_to_mjwarp, bool):
+            raise TypeError("anchor_to_mjwarp must be a boolean")
+        if anchor_to_mjwarp and env.model_cpu.opt.integrator not in (
+            mujoco.mjtIntegrator.mjINT_EULER,
+            mujoco.mjtIntegrator.mjINT_IMPLICIT,
+            mujoco.mjtIntegrator.mjINT_IMPLICITFAST,
+        ):
+            raise ValueError("MJWarp anchoring requires Euler or implicit integration")
         if not isinstance(nominal_controls, torch.Tensor):
             raise TypeError("nominal_controls must be a Torch tensor")
         if (
@@ -409,7 +483,6 @@ class FrozenContactRollout:
                 if instance._actuator is None:
                     instance._actuator = _actuators(scratch)
                 frame = _frame(config, scratch, options)
-                frames.append(frame)
                 geometry.append(_geometry(config, scratch))
                 qpos, qvel = instance._step(
                     frame,
@@ -417,12 +490,24 @@ class FrozenContactRollout:
                     frame.nominal_qvel[None],
                     control[None],
                 )
-                with wp.ScopedDevice(scratch.data_wp.qpos.device), _stream(scratch):
-                    wp.copy(scratch.data_wp.qpos, wp.from_torch(qpos.contiguous()))
-                    wp.copy(scratch.data_wp.qvel, wp.from_torch(qvel.contiguous()))
-            # The terminal geometry needs FK, not another collision query.
+                if anchor_to_mjwarp:
+                    with wp.ScopedDevice(scratch.data_wp.qpos.device), _stream(scratch):
+                        mjw.step(scratch.model_wp, scratch.data_wp)
+                    frame = replace(
+                        frame,
+                        velocity_correction=_snapshot(scratch.data_wp.qvel)[0]
+                        - qvel[0],
+                    )
+                else:
+                    with wp.ScopedDevice(scratch.data_wp.qpos.device), _stream(scratch):
+                        wp.copy(scratch.data_wp.qpos, wp.from_torch(qpos.contiguous()))
+                        wp.copy(scratch.data_wp.qvel, wp.from_torch(qvel.contiguous()))
+                frames.append(frame)
+            # Site positions need kinematics, while their Jacobians also need
+            # the terminal COM frames/spatial DOFs. Neither call runs collision.
             with wp.ScopedDevice(scratch.data_wp.qpos.device), _stream(scratch):
-                mjw.fwd_kinematics(scratch.model_wp, scratch.data_wp)
+                mjw.kinematics(scratch.model_wp, scratch.data_wp)
+                mjw.com_pos(scratch.model_wp, scratch.data_wp)
             geometry.append(_geometry(config, scratch))
         instance.frames, instance._geometry = tuple(frames), tuple(geometry)
         instance.horizon = len(frames)
@@ -489,29 +574,31 @@ class FrozenContactRollout:
         velocity = torch.einsum("uv,nv->nu", moment, qvel)
         force = self._actuator.force(control, length, velocity)
         smooth = frame.smooth_residual + torch.einsum("uv,nu->nv", moment, force)
-        factor = frame.mass_cholesky.expand(len(qpos), -1, -1)
-        acceleration = torch.cholesky_solve(smooth[..., None], factor).squeeze(-1)
+        # M is detached and fixed throughout this local model. Its small dense
+        # inverse is prepared once, avoiding solver allocations during CUDA
+        # graph capture and retaining gradients through each force RHS.
+        acceleration = torch.einsum("ij,nj->ni", frame.mass_inverse, smooth)
         gap = frame.gap + torch.einsum("rv,nv->nr", frame.normal_jacobian, delta)
-        rows = frame.jacobian.shape[0]
-        total, _, _ = contact_response_torch(
+        total, _, _ = _contact_response_unpadded(
             frame.timestep,
             qvel,
             acceleration,
             frame.jacobian.expand(len(qpos), -1, -1),
             gap,
             frame.impedance_mass.expand(len(qpos), -1),
-            torch.full((len(qpos),), rows, device=qpos.device, dtype=torch.int32),
             smooth,
             stiffness=self.options.comfree_stiffness,
             damping=self.options.comfree_damping,
         )
-        acceleration = torch.cholesky_solve(total[..., None], factor).squeeze(-1)
-        next_velocity = qvel + frame.timestep * acceleration
+        acceleration = torch.einsum("ij,nj->ni", frame.mass_inverse, total)
+        next_velocity = qvel + frame.timestep * acceleration + frame.velocity_correction
         return _integrate(
             qpos, next_velocity, frame.timestep, self._layout
         ), next_velocity
 
     def _sites(self, qpos, geometry):
+        if not len(geometry.site_xpos):
+            return geometry.site_xpos.expand(len(qpos), -1, -1)
         delta = _difference(qpos, geometry.qpos, self._layout)
         return geometry.site_xpos + torch.einsum(
             "kcv,nv->nkc", geometry.site_jacobian, delta
@@ -537,15 +624,25 @@ class FrozenContactRollout:
         qvel = self.frames[0].nominal_qvel.expand(len(actions), -1)
         qpositions, qvelocities = [qpos], [qvel]
         sites = [self._sites(qpos, self._geometry[0])]
-        distances, displacements = [], []
+        distances, displacements, point_errors = [], [], []
         for t, frame in enumerate(self.frames):
             previous_qpos = qpos
             qpos, qvel = self._step(frame, qpos, qvel, actions[:, t])
-            delta = _difference(qpos, frame.nominal_qpos, self._layout)
-            distances.append(
-                frame.contact_distance
-                + torch.einsum("pv,nv->np", frame.contact_jacobian, delta)
-            )
+            if len(frame.contact_distance):
+                delta = _difference(qpos, frame.nominal_qpos, self._layout)
+                distances.append(
+                    frame.contact_distance
+                    + torch.einsum("pv,nv->np", frame.contact_jacobian, delta)
+                )
+            else:
+                distances.append(frame.contact_distance.expand(len(qpos), -1))
+            if len(frame.point_offset):
+                point_errors.append(
+                    frame.point_offset
+                    + torch.einsum("pcv,nv->npc", frame.point_jacobian, delta)
+                )
+            else:
+                point_errors.append(frame.point_offset.expand(len(qpos), -1, -1))
             if self.object_qpos_adr is None:
                 displacements.append(qpos.new_zeros((len(actions), 3)))
             else:
@@ -565,4 +662,5 @@ class FrozenContactRollout:
             timestep=self.timestep,
             object_qpos_adr=self.object_qpos_adr,
             object_dof_adr=self.object_dof_adr,
+            contact_point_error=tuple(point_errors),
         )

@@ -49,7 +49,7 @@ def _measure(
     body = bodies[row]
     origin = positions[w, target]
     rot = rotations[w, target]
-    best = 1.0e10
+    best = float(1.0e10)
     best_point = wp.vec3(0.0)
     normal = wp.vec3(1.0, 0.0, 0.0)
     for i in range(starts[row], starts[row + 1]):

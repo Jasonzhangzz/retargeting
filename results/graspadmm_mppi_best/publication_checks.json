@@ -1,0 +1,54 @@
+{
+  "portable_bundle": {
+    "passed": true,
+    "trials": 1610,
+    "successes": 647,
+    "verified_files": 5086,
+    "replay_entries": 2869,
+    "models": 276,
+    "errors": []
+  },
+  "native_recheck": {
+    "passed": true,
+    "cases": [
+      {
+        "case_id": "t04_cylinder_s01_seed00",
+        "expected": true,
+        "actual": true,
+        "match": true
+      },
+      {
+        "case_id": "t05_cylinder_s02_seed01",
+        "expected": true,
+        "actual": true,
+        "match": true
+      },
+      {
+        "case_id": "t28_sphere_s00_seed00",
+        "expected": true,
+        "actual": true,
+        "match": true
+      },
+      {
+        "case_id": "t29_cylinder_s02_seed00",
+        "expected": true,
+        "actual": true,
+        "match": true
+      },
+      {
+        "case_id": "t33_sphere_s04_seed09",
+        "expected": false,
+        "actual": false,
+        "match": true
+      }
+    ]
+  },
+  "contact_tests": {
+    "passed": 55,
+    "skipped": 2
+  },
+  "pinned_native_tests": {
+    "passed": 71
+  },
+  "scope": "Current solver code and portable result export; unrelated optional solver environments are not part of these checks"
+}

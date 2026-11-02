@@ -15,6 +15,9 @@ from retarget.config.run import ROOT
         ("frozen_contact", []),
         ("frozen_contact", {"unknown_option": 1}),
         ("frozen_contact", {"contact_weight": -1}),
+        ("frozen_contact", {"physical_contact_weight": -1}),
+        ("frozen_contact", {"nominal_correction": 1}),
+        ("frozen_contact", {"action_trust_radius": 0}),
     ],
 )
 def test_invalid_contact_settings_fail_before_simulator_setup(
@@ -33,6 +36,25 @@ def test_invalid_contact_settings_fail_before_simulator_setup(
             dynamics=dynamics,
             contact_options=options,
         )
+
+
+def test_contact_trust_region_bounds_dense_controls_and_keeps_gradient():
+    from retarget.env.humanoid.runtime import HumanoidEnvironment
+    from retarget.task.humanoid.cost_contact import ContactCostOptions
+    from types import SimpleNamespace
+
+    task = HumanoidEnvironment.__new__(HumanoidEnvironment)
+    task.config = SimpleNamespace(nu=2, knot_steps=3)
+    task.knots, task.control_scale = 2, 0.05
+    task.nominal = torch.randn(6, 2)
+    task.contact_options = ContactCostOptions(action_trust_radius=0.1)
+    parameters = torch.tensor([[4.0, -4.0, 0.2, 0.3]], requires_grad=True)
+    dense = task.controls(task.project_parameters(parameters))
+    assert float((dense - task.nominal).detach().abs().max()) <= 0.100001
+    gradient = torch.autograd.grad(dense.sum(), parameters)[0]
+    assert torch.isfinite(gradient).all()
+    assert torch.count_nonzero(gradient[0, :2]) == 0
+    assert torch.all(gradient[0, 2:] > 0)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")

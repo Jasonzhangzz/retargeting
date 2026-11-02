@@ -37,6 +37,7 @@ INITIALIZATION_FAILURES = (
     "object_orientation_mismatch",
     "missing_size_one_reference",
     "tip_patch_center_mismatch",
+    "semantic_patch_mismatch",
 )
 
 
@@ -102,6 +103,24 @@ def validate_initialization(hand, guess, args, reference_normals):
     dots = np.einsum("ij,ij->i", hand.normals, reference_normals)
     if not np.isfinite(dots).all() or np.any(dots <= 0.5):
         failures.append("contact_skin_region_mismatch")
+    if hasattr(hand, "semantic_contact_masks"):
+        from retarget.env.grasp.hand import query_path
+
+        membership, indices = [], []
+        for i, body in enumerate(hand.bodies):
+            with np.load(query_path(hand.model, int(body))) as queries:
+                points, normals = queries["local_pos"], queries["local_normal"]
+            error = np.sum((points - hand.local[i]) ** 2, axis=1)
+            error += 1.0e-6 * np.sum((normals - hand.normals[i]) ** 2, axis=1)
+            selected = int(np.argmin(error))
+            indices.append(selected)
+            membership.append(bool(error[selected] < 1.0e-14 and hand.semantic_contact_masks[i][selected]))
+        info["semantic_patch_labels"] = hand.semantic_patch_labels
+        info["semantic_surface_query_indices"] = indices
+        info["semantic_patch_membership"] = membership
+        info["semantic_patch_membership_valid"] = all(membership)
+        if not all(membership):
+            failures.append("semantic_patch_mismatch")
     if getattr(hand, "tip_patches", None):
         patches = []
         for i, body in enumerate(hand.bodies):
@@ -499,6 +518,9 @@ def global_alignment(hand, template_q, args, rng, *, pose_seed=None):
     result = matcher.forward(tmpl, obj)
     sampled_count = len(result["loss_dist"])
     extra_poses = [] if pose_seed is None else [pose_seed]
+    if hasattr(hand, "pose_intent_qpos"):
+        from .intent import intent_pose_seeds
+        extra_poses.extend(intent_pose_seeds(hand, template_q, hand.primitive))
     if hasattr(hand, "wrist_pose_reference"):
         from retarget.task.grasp.wrist_prior import reference_pose_seeds
 
@@ -662,6 +684,33 @@ def global_alignment(hand, template_q, args, rng, *, pose_seed=None):
                 ~valid,
             )
         )
+    if hasattr(hand, "pose_intent_qpos"):
+        from .intent import rotation_angle
+        rotations = Rotation.from_quat(arrays["obj_pose"][:, 3:], scalar_first=True).inv()
+        configurations = np.zeros((len(objective), 26))
+        configurations[:, :3] = rotations.apply(arrays["grasp_pose"][:, :3]-arrays["obj_pose"][:, :3])
+        configurations[:, 3:6] = (rotations*Rotation.from_quat(
+            arrays["grasp_pose"][:, 3:], scalar_first=True)).as_euler("XYZ")
+        angles = rotation_angle(configurations, hand.pose_intent_qpos)
+        limit = getattr(args, "contactaware", {}).get("pose_rotation_limit_deg", 15.)
+        excess = np.maximum(angles-limit, 0.)
+        valid &= excess <= 1e-5
+        if hasattr(hand, "pose_intent_center"):
+            from .intent import palm_object_center
+            centers = np.asarray([palm_object_center(hand, q) for q in configurations])
+            errors = np.linalg.norm(centers-hand.pose_intent_center, axis=1)*1000
+            center_limit = getattr(args, "contactaware", {}).get("pose_center_limit_mm", 15.)
+            excess += np.maximum(errors-center_limit, 0.)
+            valid &= errors <= center_limit+1e-5
+        if hasattr(hand, "cylinder_middle_slots"):
+            hand.set(np.r_[np.zeros(6), arrays["grasp_qpos"][0]])
+            middle = hand.points(hand.bodies, hand.local)[hand.cylinder_middle_slots]
+            matrices = Rotation.from_euler("XYZ", configurations[:, 3:6]).as_matrix()
+            z = (np.einsum("nij,kj->nki", matrices, middle)+configurations[:, None, :3])[:, :, 2]
+            excess += np.maximum(np.abs(z).max(1)-hand.cylinder_middle_half_band, 0.)*1000
+            valid &= np.max(np.abs(z), axis=1) <= hand.cylinder_middle_half_band+1e-7
+        order = np.lexsort((selection_objective, np.maximum(penetration-tolerance, 0.),
+                           excess, ~valid))
     loads = {}
     edge_clearance = None
     if getattr(args, "load_conditioning", False) and not shape_first:

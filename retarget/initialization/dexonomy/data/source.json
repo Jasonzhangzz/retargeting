@@ -1,0 +1,25 @@
+{
+  "repository": "https://github.com/JYChen18/Dexonomy",
+  "commit": "d561ff9df8545deef7a3f9e7cfb4045ef66f6913",
+  "license": "CC BY-NC 4.0",
+  "notice": "licenses/Dexonomy-NOTICE.txt",
+  "adaptations": [
+    "Only sample_init_pose and HandTemplateLoader._load_data are retained.",
+    "Imports resolve to the retained local numerical utilities.",
+    "Postponed annotations avoid loading the unused upstream viewer type."
+  ],
+  "functions": {
+    "sample_init_pose": {
+      "path": "obj_loader.py",
+      "upstream_path": "dexonomy/data/obj_loader.py",
+      "function_ast_sha256": "7f891ef698a6bd2f0c2e855a79264cfa78aee75ab5014d450722e163e8f6cdae",
+      "upstream_file_sha256": "f92ca45a4aefd9e236a492227ea55b141adef9e2364808c11f20f409d26f2c35"
+    },
+    "HandTemplateLoader._load_data": {
+      "path": "hand_loader.py",
+      "upstream_path": "dexonomy/data/hand_loader.py",
+      "function_ast_sha256": "03b52011e7584ee1bb92579f49af137c0cf4bc593b0c2346f956009c5413b6b8",
+      "upstream_file_sha256": "6f310f6e47ed207d832f14c70c00b8fef870fe692080290e5e94e7c1792194f6"
+    }
+  }
+}

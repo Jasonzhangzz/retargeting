@@ -1,0 +1,10 @@
+Dexonomy: https://github.com/JYChen18/Dexonomy
+The original project README states: "This work and the dataset are licensed
+under CC BY-NC 4.0": https://creativecommons.org/licenses/by-nc/4.0/
+
+This repository retains only HandObjMatcher, sample_init_pose,
+HandTemplateLoader._load_data and their numerical/query utilities, plus the
+Shadow annotated templates and kinematic XML needed for input initialization.
+Python imports were relocated; the Warp device helper is called through its
+current public API. Unused task solvers, filters, viewers and pipelines are removed.
+Local initialization adaptations and their annotations are described in README.md.

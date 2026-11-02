@@ -2,6 +2,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+.venv-forceaware/
+.venv-contact/
+.venv-graspadmm/
 output/
 .cache/
 *.so
@@ -10,4 +13,13 @@ output/
 .DS_Store
 *.log
 .aws
-data/
+/data/*
+!/data/grasp/
+/data/grasp/*
+!/data/grasp/assets/
+/data/grasp/assets/*
+!/data/grasp/assets/wuji2/
+!/data/grasp/templates/
+MUJOCO_LOG.TXT
+!retarget/initialization/dexonomy/data/
+!third_party/Dexonomy/dexonomy/data/

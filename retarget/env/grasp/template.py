@@ -44,7 +44,7 @@ class WujiContactKinematics:
             raise ValueError("Expected one hinge per Wuji finger body")
         self.position = self.tensor(model.body_pos[ids])
         self.rotation = self.tensor(
-            Rotation.from_quat(model.body_quat[ids].reshape(-1, 4), scalar_first=True)
+            Rotation.from_quat(model.body_quat[ids].reshape(-1, 4)[:, [1, 2, 3, 0]])
             .as_matrix()
             .reshape(5, 4, 3, 3)
         )
@@ -192,23 +192,9 @@ def skin_reference(hand, reference_normals=None):
     return normals / lengths
 
 
-def contact_targets(shadow, posed, contacts, template_q, opening=None):
-    """Preserve annotated contact layout in the aligned Wuji palm frame.
-
-    For cylinders/spheres, resize the opposed opening to their diameter. This
-    is a Wuji input adaptation, not an object pose or surface-contact result:
-    both of those are still obtained from the original Dexonomy matcher.
-    """
-    points, normals = [], []
-    for name, local in contacts:
-        body = shadow.body(name).id
-        rotation = posed.xmat[body].reshape(3, 3)
-        points.append(posed.xpos[body] + rotation @ local[:3])
-        normals.append(rotation @ local[3:])
-    root = Rotation.from_euler("XYZ", template_q[3:6])
-    points = root.inv().apply(np.asarray(points) - template_q[:3])
-    normals = root.inv().apply(normals)
-    normals /= np.linalg.norm(normals, axis=-1, keepdims=True)
+def resize_contact_opening(points, normals, opening=None):
+    """Resize the opening of an already morphology-correct contact layout."""
+    points, normals = np.array(points, copy=True), np.array(normals, copy=True)
     info = dict(requested_opening_m=opening, opening_resized=False)
     if opening is not None and len(points) > 1:
         # The leading normal axis identifies opposed surfaces without relying
@@ -227,6 +213,78 @@ def contact_targets(shadow, posed, contacts, template_q, opening=None):
                 ] * axis
                 info.update(opening_resized=True, source_opening_m=float(gap))
     return points, normals, info
+
+
+def contact_targets(shadow, posed, contacts, template_q, opening=None):
+    """Preserve the legacy Shadow layout in the aligned Wuji palm frame."""
+    points, normals = [], []
+    for name, local in contacts:
+        body = shadow.body(name).id
+        rotation = posed.xmat[body].reshape(3, 3)
+        points.append(posed.xpos[body] + rotation @ local[:3])
+        normals.append(rotation @ local[3:])
+    root = Rotation.from_euler("XYZ", template_q[3:6])
+    points = root.inv().apply(np.asarray(points) - template_q[:3])
+    normals = root.inv().apply(normals)
+    normals /= np.linalg.norm(normals, axis=-1, keepdims=True)
+    return resize_contact_opening(points, normals, opening)
+
+
+def semantic_surface_mask(hand, annotation, count):
+    """Return the immutable semantic region for one annotated contact.
+
+    Each annotation owns a mask even when several annotations share a body.
+    A malformed or empty mask is an input error, never a reason to switch to
+    another skin region. Legacy inputs have no semantic mask.
+    """
+    masks = getattr(hand, "semantic_contact_masks", None)
+    if masks is None:
+        return np.ones(count, dtype=bool)
+    if len(masks) != len(hand.bodies):
+        raise ValueError("One semantic surface mask is required per annotation")
+    mask = np.asarray(masks[annotation], dtype=bool)
+    if mask.shape != (count,) or not mask.any():
+        raise ValueError(f"Invalid/empty semantic patch for annotation {annotation}")
+    return mask.copy()
+
+
+def semantic_query_diagnostics(hand, selected):
+    if getattr(hand, "semantic_contact_masks", None) is None:
+        return {}
+    selected = np.asarray(selected, dtype=int)
+    violations = sum(
+        index < 0 or index >= len(mask) or not mask[index]
+        for index, mask in zip(selected, hand.semantic_contact_masks)
+    )
+    if len(selected) != len(hand.semantic_contact_masks):
+        raise ValueError("Selected queries and semantic annotations disagree")
+    if violations:
+        raise ValueError(f"Selected {violations} queries outside fixed semantic patches")
+    return dict(
+        semantic_patch_labels=list(hand.semantic_patch_labels),
+        semantic_patch_violation_count=int(violations),
+        semantic_patch_query_indices=selected.tolist(),
+    )
+
+
+def matched_patch_targets(hand, fk, reference_qpos, opening=None):
+    """Fixed matched Wuji patches posed with the bone-direction seed.
+
+    Using the target hand's own geometry avoids pulling its differently sized
+    bones back toward absolute Shadow positions after semantic matching.
+    """
+    canonical = np.array(reference_qpos, copy=True)
+    canonical[:6] = 0.0
+    local = np.asarray(hand.semantic_contact_local)
+    normals = np.asarray(hand.semantic_contact_normals)
+    if (local.shape != (len(hand.bodies), 3) or normals.shape != local.shape
+            or not np.isfinite(local).all() or not np.isfinite(normals).all()
+            or np.any(np.linalg.norm(normals, axis=-1) < 1.0e-12)):
+        raise ValueError("One finite fixed semantic point/normal is required per annotation")
+    p, n = fk.contacts(fk.tensor(canonical), fk.tensor(local), fk.tensor(normals))
+    points, normals = p.detach().cpu().numpy(), n.detach().cpu().numpy()
+    normals /= np.maximum(np.linalg.norm(normals, axis=-1, keepdims=True), 1.0e-12)
+    return resize_contact_opening(points, normals, opening)
 
 
 def fit_contact_template(
@@ -255,11 +313,22 @@ def fit_contact_template(
     from retarget.env.grasp.initialization import template_contact_layout
 
     before = template_contact_layout(hand, template_q)
+    reference_qpos = np.array(
+        template_q if reference_qpos is None else reference_qpos, copy=True
+    )
+    fk = WujiContactKinematics(hand.model, hand.bodies, device)
+    semantic = getattr(hand, "semantic_contact_masks", None) is not None
     if object_contacts is None:
-        target_p, target_n, opening_info = contact_targets(
-            shadow, posed, contacts, template_q, opening
-        )
-        target_source = "Shadow annotated contact layout"
+        if semantic:
+            target_p, target_n, opening_info = matched_patch_targets(
+                hand, fk, reference_qpos, opening
+            )
+            target_source = "fixed matched Wuji semantic patches posed by the bone-direction seed"
+        else:
+            target_p, target_n, opening_info = contact_targets(
+                shadow, posed, contacts, template_q, opening
+            )
+            target_source = "Shadow annotated contact layout"
     else:
         # These are the unedited surface contacts/normals returned by the
         # original matcher, expressed in the current fixed object frame.
@@ -268,7 +337,6 @@ def fit_contact_template(
         target_n = root.inv().apply(object_contacts[1])
         opening_info = dict(requested_opening_m=None, opening_resized=False)
         target_source = "original Dexonomy object contacts and inward normals"
-    fk = WujiContactKinematics(hand.model, hand.bodies, device)
     tp, tn = fk.tensor(target_p), fk.tensor(target_n)
     local, normals = fk.tensor(hand.local), fk.tensor(hand.normals)
     start = fk.tensor(np.r_[np.zeros(6), template_q[6:]])
@@ -279,9 +347,6 @@ def fit_contact_template(
     low, high = (fk.tensor(v) for v in hand.model.jnt_range[joint_ids].T)
     prior = fk.tensor(np.r_[np.full(3, 100.0), np.ones(23)]) * 0.03
     posture = start.clone()
-    reference_qpos = np.array(
-        template_q if reference_qpos is None else reference_qpos, copy=True
-    )
     posture[6:] = fk.tensor(reference_qpos[6:])
     center_weight = 0.03 * (joint_prior or 0.0)
     center = (low[6:] + high[6:]) / 2
@@ -343,10 +408,15 @@ def fit_contact_template(
         valid[i, : len(p)] = contact_mask(
             hand.model, int(hand.bodies[i]), n, region_normals[i]
         )
+        if semantic:
+            valid[i, : len(p)] &= semantic_surface_mask(hand, i, len(p))
         patch = getattr(hand, "tip_patches", {}).get(int(hand.bodies[i]))
         if patch is not None:
             valid[i, : len(p)] &= patch["mask"]
     if not valid.any(axis=1).all():
+        if semantic:
+            failed = [hand.semantic_patch_labels[i] for i in np.flatnonzero(~valid.any(axis=1))]
+            raise ValueError(f"No query samples in fixed semantic patch intersections: {failed}")
         raise ValueError("No query samples in an annotated contact region")
     pool_p, pool_n = fk.tensor(pool_p), fk.tensor(pool_n)
     valid = torch.tensor(valid, device=fk.device)
@@ -401,6 +471,24 @@ def fit_contact_template(
         (root * Rotation.from_euler("XYZ", values[3:6])).as_euler("XYZ"),
         values[6:],
     ]
+    semantic_diagnostics = semantic_query_diagnostics(hand, selected.cpu().numpy())
+    if semantic:
+        source_p, source_n, _ = contact_targets(shadow, posed, contacts, template_q)
+        fitted_np = fitted_p.cpu().numpy()
+        fitted_nn = fitted_n.cpu().numpy()
+        semantic_diagnostics.update(
+            semantic_source_to_target_layout_offset_mm=(
+                np.linalg.norm(source_p - target_p, axis=-1) * 1000
+            ).tolist(),
+            semantic_source_layout_position_error_mm=(
+                np.linalg.norm(fitted_np - source_p, axis=-1) * 1000
+            ).tolist(),
+            semantic_source_layout_normal_error_deg=np.degrees(np.arccos(np.clip(
+                np.einsum("ij,ij->i", fitted_nn, source_n), -1.0, 1.0
+            ))).tolist(),
+            semantic_target_layout_position_error_mm=position_error.cpu().tolist(),
+            semantic_target_layout_normal_error_deg=normal_error.cpu().tolist(),
+        )
     return fitted, dict(
         method="CUDA_contact_layout_IK_and_actual_query_selection",
         joint_center_prior_weight=center_weight,
@@ -428,4 +516,5 @@ def fit_contact_template(
         before=before,
         after=template_contact_layout(hand, fitted),
         **opening_info,
+        **semantic_diagnostics,
     )
