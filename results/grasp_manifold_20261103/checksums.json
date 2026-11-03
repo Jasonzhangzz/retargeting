@@ -1,0 +1,13 @@
+{
+  "README.md": "d3b9e2f195f568d1af2f863e1d576d66e1ba2a7b44d065c91dbb74204d1028bf",
+  "clean_poses.npz": "a2490f5db2ea3c0cef9a599b63a29a61ba0469d19823bd92e61875dfd1f3dd63",
+  "dataset.json": "0a3c20fcf082e910840f1337cb0b3637e3178a1cc519c4e98533e35854dc449c",
+  "dataset.npz": "a97e1c3be229bdc46a82a23934b82105ac5f9c838363a26e84cd4db51b03bf85",
+  "evaluation.json": "39e519c4fb53529980f8b2649af0ef5aef4fc85fdba2cd94071a0e1bc5d06456",
+  "models/dictionary_seed17/best.pt": "ab06bd0e19e35e2e3ab1f4069f9baf30cd022b54f423ed2243900d424a3b14f6",
+  "models/dictionary_seed17/config.json": "873c195add005bb9d009a19b27ff69e7421d8b374f4a9a6b9f8b88a6fa622766",
+  "models/dictionary_seed17/dictionary_codes.npz": "d3f3ce3b7a7e510f94cea0a83deb632750a757e09b1613fbd34c7e7513027866",
+  "models/diffusion_seed27/best.pt": "746ed871fe465ba8e562dc8cfb399a293e9844e1c9f4cb9678f257f2fac90198",
+  "models/diffusion_seed27/config.json": "d5f3762b0671acea728ff1e5e4bf71c38f601b411ead52edc3f2a88230237dbf",
+  "pca.npz": "b09d9bd1ce0cd1665cd0216d93489189ca020a55032f7d1c4123b7923afb5404"
+}

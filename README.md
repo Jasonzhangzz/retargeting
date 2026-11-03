@@ -78,6 +78,8 @@ visualization:
 并检查全手穿透；实现及验证见[固定模板 MPPI](docs/grasp_template_mppi.md)。
 当前最终抓姿与插值缓存保存在 [`results/grasp_current_20261103`](results/grasp_current_20261103/README.md)：31 个 grid、640 个求解点、39,007 个插值姿态，约 6 MB。只保留一份公共场景和共享物体几何，手姿与尺寸为 float64，无损保留；投影闭合 612/640，插值未重新评测。运行 `.venv-contact/bin/python visualize.py --port 8089` 即可查看；无需先运行求解器。存储与校验方法见[紧凑抓姿缓存](docs/grasp_pose_cache.md)。
 
+独立的[抓取流形实验](docs/grasp_manifold.md)使用原始尺寸节点比较 PCA、尺寸插值、128 原子去噪字典和条件 diffusion，提供残差分解、尺寸收紧、接触诊断及可重建的离线交互式 3D 演示。已完成训练的[精简结果](results/grasp_manifold_20261103/README.md)保留干净姿态、PCA、最佳字典及 diffusion checkpoint；入口为 `.venv-contact/bin/python scripts/grasp_manifold.py --help`。
+
 CEM 使用 CARD 精英成本标准化后的 softmax 均值更新，精英数量向上取整，不拟合精英方差；噪声按 `sigma * final_noise ** (i / iterations)` 退火，每轮包含历史最佳与均值。MPPI 使用前 10% 候选加权、同形式退火和可配置提前停止。两者分离 population 与 worlds，并通过 Torch/Warp 共享数组分批评分。日志记录实际迭代数、采样数与额外评分数。
 
 Humanoid 使用原始 SPIDER reward、terminal reward、参考插值和 post-step 时域聚合；搬箱保留加权非平方 L2，权重为根位置/根旋转/关节/箱体位置/箱体旋转 `1/1/1/1/0.3`，无附加平衡或接触目标。48 步预测、6 步执行、8 个控制 knots、CPU 初始化 pre-step、DR 与执行前参数恢复均保留。只优化关节控制增量，未添加控制裁剪。版本和函数 AST 哈希在任务包 source.json，迁移前冻结评分样本在 tests/fixtures。独立的 3 秒初始化预检会记录失败并继续，实际初态不受其影响。

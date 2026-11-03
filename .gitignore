@@ -6,6 +6,7 @@ __pycache__/
 .venv-contact/
 .venv-graspadmm/
 output/
+results/grasp_manifold_20261103/demo/
 .cache/
 *.so
 *.o
