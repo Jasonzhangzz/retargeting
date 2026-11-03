@@ -25,7 +25,7 @@ Dact = kv    if actuator force is strictly inside its limits
 
 不把速度阻尼移到限力之外：`clip(P-Dv)` 与 `clip(P)-Dv` 不等价。质量、惯量、实际 force clamp 和物理输出 `qacc=M^-1 total_force` 保持原计算；只扩展积分使用的矩阵。固定饱和分支内 `Dact` 为常量，复用原质量求解 VJP，同时保留物理 qacc 的反传路径。边界 mask 变化需要作为不可微分支单独诊断。
 
-这是**本地固定 PD 积分能力扩展，不是完整 MuJoCo implicitfast**；没有加入完整的其他速度相关力导数。每个 worker 在模型编译前激活，`dynamics_adapter.json` 记录 profile、实现哈希及原文件哈希。[测试](../tests/test_dexforge_servo_integration.py) 覆盖未饱和、force 饱和、control 饱和、mask 边界，以及非零物理 qacc cotangent；7 项通过。单 DOF forward 对解析公式及 MuJoCo 对照，qpos/qvel/qacc 的局部 VJP 对解析梯度。
+这是**本地固定 PD 积分能力扩展，不是完整 MuJoCo implicitfast**；没有加入完整的其他速度相关力导数。每个 worker 在模型编译前激活，`dynamics_adapter.json` 记录 profile、实现哈希及原文件哈希。[历史测试（清理前版本）](https://github.com/Jasonzhangzz/retargeting/blob/a24bc7b2fc333b90c593ccaa17784f17cc9de9cb/tests/test_dexforge_servo_integration.py) 覆盖未饱和、force 饱和、control 饱和、mask 边界，以及非零物理 qacc cotangent；7 项通过。单 DOF forward 对解析公式及 MuJoCo 对照，qpos/qvel/qacc 的局部 VJP 对解析梯度。
 
 原 PD、10 ms、0.4 s 恒定 CA command 的三尺寸基线均执行 40/40 finite，但物体仍可明显掉落；有限性修复不等于保持成功。[独立基线结果](../output/grasp_forceaware_pd_implicit_validation/summary.json) 未与控制器变体混合。
 

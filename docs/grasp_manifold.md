@@ -74,7 +74,7 @@ python -m pip --python .venv-contact/bin/python install -r requirements-manifold
 .venv-contact/bin/python scripts/grasp_manifold.py evaluate \
   --output output/manifold_reproduction --seed 7 --noise-seeds 11,23,37
 
-.venv-contact/bin/python -m pytest -q tests/test_grasp_manifold.py
+.venv-contact/bin/python -m pytest -q tests/manifold/test_grasp_manifold.py
 ```
 
 `prepare` 已存在数据集、`train` 已存在相同方法和种子的最佳权重时会拒绝覆盖。`evaluate` 会更新评估文件，`demo` 会更新演示文件。`--device cpu` 可用于 CPU 检查。所有 CLI 子命令支持 `--help`。

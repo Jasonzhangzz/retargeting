@@ -22,4 +22,4 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 CUDA_VISIBLE_DEVICES= \
   python scripts/serve_mano_results.py --port 8101
 ```
 
-服务信息与日志：`results/dexonomy_mano_results_viewer_20261103/server.json`、`server.log`。离线图由 `scripts/render_mano_results.py` 生成，是真实 MPPI 最终结果。新增 smoke test：`python -m pytest -q tests/test_mano_results_viewer.py`（6 项，包括真实 Viser API、世界坐标与接触重建、分页筛选、证书缓存、独立残差审计和原始缓存不变）。
+服务信息与日志：`results/dexonomy_mano_results_viewer_20261103/server.json`、`server.log`。离线图由 `scripts/render_mano_results.py` 生成，是真实 MPPI 最终结果。新增 smoke test：`python -m pytest -q tests/mano/test_mano_results_viewer.py`（6 项，包括真实 Viser API、世界坐标与接触重建、分页筛选、证书缓存、独立残差审计和原始缓存不变）。

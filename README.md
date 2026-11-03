@@ -86,7 +86,7 @@ visualization:
 
 CEM 使用 CARD 精英成本标准化后的 softmax 均值更新，精英数量向上取整，不拟合精英方差；噪声按 `sigma * final_noise ** (i / iterations)` 退火，每轮包含历史最佳与均值。MPPI 使用前 10% 候选加权、同形式退火和可配置提前停止。两者分离 population 与 worlds，并通过 Torch/Warp 共享数组分批评分。日志记录实际迭代数、采样数与额外评分数。
 
-Humanoid 使用原始 SPIDER reward、terminal reward、参考插值和 post-step 时域聚合；搬箱保留加权非平方 L2，权重为根位置/根旋转/关节/箱体位置/箱体旋转 `1/1/1/1/0.3`，无附加平衡或接触目标。48 步预测、6 步执行、8 个控制 knots、CPU 初始化 pre-step、DR 与执行前参数恢复均保留。只优化关节控制增量，未添加控制裁剪。版本和函数 AST 哈希在任务包 source.json，迁移前冻结评分样本在 tests/fixtures。独立的 3 秒初始化预检会记录失败并继续，实际初态不受其影响。
+Humanoid 使用原始 SPIDER reward、terminal reward、参考插值和 post-step 时域聚合；搬箱保留加权非平方 L2，权重为根位置/根旋转/关节/箱体位置/箱体旋转 `1/1/1/1/0.3`，无附加平衡或接触目标。48 步预测、6 步执行、8 个控制 knots、CPU 初始化 pre-step、DR 与执行前参数恢复均保留。只优化关节控制增量，未添加控制裁剪。版本和函数 AST 哈希在任务包 source.json，迁移前冻结评分样本可从 Git 提交 a24bc7b2 的 tests/fixtures 恢复。独立的 3 秒初始化预检会记录失败并继续，实际初态不受其影响。
 
 可选的 [固定接触模型与梯度 MPPI](docs/humanoid_cost_contact.md) 使用 `cost_contact.py`：每个 MPC 窗口从 Warp 碰撞和动力学建立一次缓存，以 ComFree 可微递推对整个控制序列评分。`solver.gradient_steps` 开启同一 MPPI 内的梯度更新与回溯，默认关闭；原 `cost.py` 保持不变。示例配置执行完整搬箱参考，输出实际 MJWarp 执行轨迹及独立验收指标。
 
@@ -139,3 +139,5 @@ python -m pytest -q
 ## Dexonomy Shadow → MANO
 
 默认使用 GPU LM IK 15 步＋自适应 CEM 128×24、均值步长 2，支持四卡分片与已验证缓存续跑。参见 [求解与恢复说明](docs/mano_solver.md)。
+
+测试按功能整理在 [tests/README.md](tests/README.md)。这些是开发回归检查，不会随应用启动；仅列出测试可运行 python -m pytest --collect-only -q。全量测试包含需要 CUDA 或外部资产的检查。

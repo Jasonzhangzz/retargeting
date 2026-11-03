@@ -91,8 +91,8 @@ clean = predictor.predict(observed_normalized, groups, sizes)
 
 ```bash
 .venv-contact/bin/python -m pytest -q \
-  tests/test_grasp_pose_flow.py tests/test_grasp_manifold.py \
-  tests/test_grasp_denoising_inspector.py
+  tests/manifold/test_grasp_pose_flow.py tests/manifold/test_grasp_manifold.py \
+  tests/manifold/test_grasp_manifold.py
 node --check retarget/env/grasp/denoising_inspector.js
 ```
 

@@ -290,11 +290,10 @@ MPPI 的距离、法向、接触分组与力加权代价，以及力闭合、软
 ## 验证命令
 
 ```bash
-.venv-contact/bin/python -m pytest tests/test_template_mppi.py tests/test_template_mppi_inputs.py tests/test_template_mppi_runner.py tests/test_projected_comfree.py
+.venv-contact/bin/python -m pytest tests/primitive/test_template_mppi_inputs.py tests/primitive/test_template_mppi_continuation.py tests/grasp/test_projected_comfree.py
 ```
 
-测试包含 CPU 几何、原始模板身份、真实 CUDA root matcher、批量 FK/碰撞、分块与
-padding、边界上的 MPPI 更新、GN 梯度/单调性、零力假解及退化接触布局。
+当前精简测试覆盖输入身份、原始接触来源、尺寸延续、root matcher/FK 接口以及投影力闭合；部分 CUDA 检查需 GPU。原先完整的 MPPI 更新、分块/padding 等历史测试可从提交 a24bc7b2 恢复。
 
 CUDA 默认缓存完整内层求解的 CUDA Graph，相同 batch/接触数重放时不重复逐算子
 Python 调度；`closure.cuda_graph: false` 可选择数值相同的 eager 参考实现。

@@ -155,13 +155,4 @@ python scripts/benchmark_contact_mppi.py --contact-graph --nominal-correction --
   --action-trust-radius 0.1 --output output/contact_mppi_final_benchmark.json
 ```
 
-相关 solver/config/reference/ComFree/cost/rollout/runtime/CUDA Graph 验证共 105 项通过。另有两项现有 AST 哈希检查在本机未通过，未计入通过数量；`git diff` 确认它们校验的原 `cost.py` 与 ComFree `kernels.py` 没有改动。本次通过测试的命令：
-
-```bash
-.venv-contact/bin/python -m pytest -q \
-  tests/test_unified_solver.py tests/test_unified_config.py tests/test_unified_spider.py \
-  tests/test_comfree_response.py tests/test_humanoid_cost_contact.py \
-  tests/test_humanoid_frozen_contact.py tests/test_humanoid_frozen_runtime.py \
-  tests/test_humanoid_contact_graph.py \
-  -k 'not original_kernel_bodies_are_preserved and not original_cost_function_syntax_is_unchanged'
-```
+相关 solver/config/reference/ComFree/cost/rollout/runtime/CUDA Graph 验证共 105 项通过。另有两项现有 AST 哈希检查在本机未通过，未计入通过数量；`git diff` 确认它们校验的原 `cost.py` 与 ComFree `kernels.py` 没有改动。历史验收使用清理前版本 a24bc7b2 的 humanoid、solver 和 ComFree 测试。此次按近期使用范围移除了这些历史测试，运行代码保留；历史命令涉及的文件可从该提交的 tests/test_*.py 恢复。现行精简检查见 [测试说明](../tests/README.md)。

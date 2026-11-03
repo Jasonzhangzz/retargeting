@@ -67,8 +67,8 @@ Viser 若发现端口被占用会自动选择其他端口；以启动日志为�
 检查包括 24 项相关 Python 测试、DOM 控件逻辑、全部 31 类在 Viser 的实际 WebSocket 网格加载，以及尺寸切换（Type 18 高度、Type 24 半径、Type 26 均匀缩放）。当前没有可连接的浏览器，**未做实际 WebGL 渲染或截图验收**。DOM 检查模拟了 Plotly 绘制，不代表渲染验收。
 
 ```bash
-.venv-contact/bin/python -m pytest -q tests/test_grasp_denoising_inspector.py \
-  tests/test_grasp_manifold.py tests/test_dense_grasp_pose.py tests/test_grasp_primitive_viewer.py
+.venv-contact/bin/python -m pytest -q tests/manifold/test_grasp_manifold.py \
+  tests/manifold/test_grasp_manifold.py tests/primitive/test_grasp_primitive_viewer.py tests/primitive/test_grasp_primitive_viewer.py
 .venv-contact/bin/python scripts/check_dense_viewer.py --port 8090
 # DOM 检查需要本机 Node.js 和 jsdom；可在临时目录安装，不改变项目依赖。
 NODE_PATH=/path/to/node_modules node scripts/check_grasp_denoising_page.cjs

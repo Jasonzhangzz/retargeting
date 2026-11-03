@@ -31,10 +31,6 @@
 
 四组结果、解析配置和逐轮日志分别在 output/smoke_grasp_cem、smoke_grasp_mppi、smoke_dex_cem、smoke_dex_mppi。搬箱结果仍为前次短片段。新 grasp/dex 模型可由统一回放器加载，已用 EGL 成功导出两者的视频；网页服务沿用 8081。清理记录与日志在 output/validation/contact_cleanup。
 
-复现测试：
-
-```bash
-python -m pytest -q
-```
+以上为 2026-10-30 的历史验收记录。相关历史测试可从清理前提交 a24bc7b2 恢复；现行保留范围及运行命令见 [测试说明](../tests/README.md)。
 
 复现短测：使用相应 output/smoke_*/config.yaml（运行时会覆盖同名输出，因此需要先复制配置到别处），或复制 configs 示例并设置上述预算；dex 另设置 environment.frames=1。省略 frames 则执行完整参考。

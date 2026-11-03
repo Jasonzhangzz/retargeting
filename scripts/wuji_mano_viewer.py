@@ -218,7 +218,7 @@ class LiveViewer:
                             self.mesh.vertices = vertices
                         lines = np.stack((points, tracked["sensors"]), 1).astype(np.float32)
                         if self.error_lines is None:
-                            self.error_lines = self.server.scene.add_line_segments("/emf/fit_error", points=lines, colors=(255, 90, 80), thickness=.001)
+                            self.error_lines = self.server.scene.add_line_segments("/emf/fit_error", points=lines, colors=(255, 90, 80), line_width=1.0)
                         else:
                             self.error_lines.points = lines
             state = "接收中" if fresh else "数据已过期 / 等待新帧"
@@ -237,7 +237,7 @@ class LiveViewer:
             p, frame, received = skeleton
             if self.sdk_points is None:
                 self.sdk_points = self.server.scene.add_point_cloud("/sdk/joints", points=p.astype(np.float32), colors=(100, 225, 150), point_size=.004)
-                self.sdk_lines = self.server.scene.add_line_segments("/sdk/bones", points=p[SDK_EDGES].astype(np.float32), colors=(100, 225, 150), thickness=.002)
+                self.sdk_lines = self.server.scene.add_line_segments("/sdk/bones", points=p[SDK_EDGES].astype(np.float32), colors=(100, 225, 150), line_width=2.0)
             else:
                 self.sdk_points.points = p.astype(np.float32)
                 self.sdk_lines.points = p[SDK_EDGES].astype(np.float32)
