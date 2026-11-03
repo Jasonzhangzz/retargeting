@@ -14,9 +14,11 @@ def main():
     parser.add_argument("--config", type=Path, default=ROOT / "configs/web_grasp_template_mppi.yaml")
     parser.add_argument("--batch", help="Saved result directory name under output/")
     parser.add_argument("--port", type=int)
+    parser.add_argument("--host", default="127.0.0.1", help="Viser bind address (default: local only)")
     args = parser.parse_args()
     config = load(args.config)
     config.visualization["final_only"] = True
+    config.visualization["host"] = args.host
     if args.batch:
         config.visualization["batch"] = args.batch
     if args.port is not None:

@@ -1,13 +1,11 @@
 """Self-contained offline 3D report, including source meshes and browser FK."""
 from __future__ import annotations
 
-from pathlib import Path
 import json
-import math
 
 import numpy as np
 
-from .manifold import METHODS, PoseChecker, Predictor, sigma_timestep, write_json
+from .manifold import PoseChecker, Predictor, write_json
 
 STAGES = ("truth", "observed", "projection", "clean", "tight_clean", "recombined", "clipped", "pca_recombined")
 
@@ -54,12 +52,13 @@ def visual_model(model, mesh_library, prefix):
                 geoms=geoms, tips=tips, chains=chain)
 
 
-def demo(data, methods=METHODS, seed=None, noise_seed=11, sigmas=(0., .03, .1),
+def demo(data, methods=None, seed=None, noise_seed=11, sigmas=(0., .03, .1),
          fractions=(0., .1, .2), grasp_type=None, device="auto"):
     if not sigmas or not fractions or any(not np.isfinite(s) or s < 0 for s in sigmas):
         raise ValueError("Demo requires nonnegative finite noise and tightening lists")
     if any(not np.isfinite(f) or not 0 <= f < 1 for f in fractions):
         raise ValueError("Tightening fractions must be in [0,1)")
+    methods = data.available_methods() if methods is None else methods
     report_dir = data.directory / "demo"
     report_dir.mkdir(parents=True, exist_ok=True)
     predictors = {method: Predictor(data, method, seed, device) for method in methods}
@@ -99,9 +98,9 @@ def demo(data, methods=METHODS, seed=None, noise_seed=11, sigmas=(0., .03, .1),
 
         for bias_name, bias in biases.items():
             for sigma_requested in sigmas:
-                schedule = next(iter(predictors.values())).schedule
-                t = sigma_timestep(sigma_requested, schedule)
-                sigma = math.sqrt((1 - schedule[t]) / schedule[t])
+                # Flow time parametrizes observation-to-clean transport; it is
+                # unrelated to DDPM noise time. Corrupt all methods identically.
+                sigma = float(sigma_requested)
                 observed = x + bias + sigma * noise
                 principal, residual = subspace.decompose(observed)
                 _, reference_residual = subspace.decompose(x)
@@ -279,7 +278,7 @@ table{width:100%;border-collapse:collapse;font-size:13px;text-align:right}td,th{
 <p class="small">完整精度 pose：<a href="poses.npz">poses.npz</a> · 实验与诊断：<a href="comparisons.json">comparisons.json</a> · 拖拽旋转，滚轮缩放；视图相机联动。本页包含全部脚本和网格，可离线打开。</p>
 </main><script>
 const DATA=__PAYLOAD__;
-const $=id=>document.getElementById(id), names={pca:'PCA 正交投影',interpolation:'尺寸插值',dictionary:'128 原子去噪字典',diffusion:'条件 diffusion'};
+const $=id=>document.getElementById(id), names={pca:'PCA 正交投影',interpolation:'尺寸插值',dictionary:'128 原子去噪字典',diffusion:'条件 diffusion',diffusion_vq:'VQ-VAE + Pose Flow',diffusion_vae:'VAE + Pose Flow'};
 function options(id,items){for(const [v,label] of items){const o=document.createElement('option');o.value=v;o.textContent=label;$(id).append(o)}}
 options('group',DATA.groups.map(g=>[g,DATA.models[g].label]));options('method',DATA.methods.map(m=>[m,names[m]]));
 options('sigma',DATA.sigmas.map(s=>[s,s]));options('fraction',DATA.fractions.map(f=>[f,(f*100).toFixed(0)+'%']));
@@ -327,3 +326,7 @@ for(const id of ['group','method','bias','sigma','fraction','clip','render'])$(i
 function showError(e){$('status').textContent='显示错误：'+e.message;console.error(e)}
 update().catch(showError);
 </script></body></html>'''
+
+
+# Shared exact MuJoCo body/joint FK for offline inspection pages.
+FK_JS = "const add=" + HTML.split("const add=", 1)[1].split("function traces(", 1)[0]

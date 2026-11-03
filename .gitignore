@@ -28,3 +28,7 @@ MUJOCO_LOG.TXT
 .ruff_cache/
 
 configs/generated/
+
+/results/
+
+/.venv-*/

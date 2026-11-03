@@ -80,6 +80,10 @@ visualization:
 
 独立的[抓取流形实验](docs/grasp_manifold.md)使用原始尺寸节点比较 PCA、尺寸插值、128 原子去噪字典和条件 diffusion，提供残差分解、尺寸收紧、接触诊断及可重建的离线交互式 3D 演示。已完成训练的[精简结果](results/grasp_manifold_20261103/README.md)保留干净姿态、PCA、最佳字典及 diffusion checkpoint；入口为 `.venv-contact/bin/python scripts/grasp_manifold.py --help`。
 
+新的 diffusion 训练采用[两阶段 VAE／VQ-VAE 与条件 pose flow](docs/grasp_pose_flow.md)：先训练跨尺寸一致的姿态编码器，再冻结编码器学习速度场，支持随机手指、多轮高斯加噪；本次仅通过 smoke test，未运行完整训练。
+
+[多轮高斯加噪检查页](docs/grasp_denoising_inspector.md)沿用本地网页 skill 风格，逐类并排展示标准 pose、同一加噪输入、PCA 与 diffusion 预测，支持沿缓存尺寸收紧后加回完整原始噪声。生成入口为 `.venv-contact/bin/python scripts/inspect_grasp_denoising.py`；离线页面位于 `output/grasp_denoising_inspector/index.html`。
+
 CEM 使用 CARD 精英成本标准化后的 softmax 均值更新，精英数量向上取整，不拟合精英方差；噪声按 `sigma * final_noise ** (i / iterations)` 退火，每轮包含历史最佳与均值。MPPI 使用前 10% 候选加权、同形式退火和可配置提前停止。两者分离 population 与 worlds，并通过 Torch/Warp 共享数组分批评分。日志记录实际迭代数、采样数与额外评分数。
 
 Humanoid 使用原始 SPIDER reward、terminal reward、参考插值和 post-step 时域聚合；搬箱保留加权非平方 L2，权重为根位置/根旋转/关节/箱体位置/箱体旋转 `1/1/1/1/0.3`，无附加平衡或接触目标。48 步预测、6 步执行、8 个控制 knots、CPU 初始化 pre-step、DR 与执行前参数恢复均保留。只优化关节控制增量，未添加控制裁剪。版本和函数 AST 哈希在任务包 source.json，迁移前冻结评分样本在 tests/fixtures。独立的 3 秒初始化预检会记录失败并继续，实际初态不受其影响。
@@ -131,3 +135,7 @@ python -m pytest -q
 ```
 
 验证仅使用短测，没有重新完成整套任务求解。本次对受影响的 grasp、dex 分别完成 CEM/MPPI 短测，固定 SPIDER reward 样本逐元素一致，新增接触响应及 MJWarp 委托验证；旧的模型数组一致性结论不适用于这次碰撞几何替换。具体预算、结果、耗时与验证限制见 [验证记录](docs/validation.md)。这些结果证明新流程可运行，不构成任务成功率提升或完整搬箱成功的结论。来源与许可见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+
+## Dexonomy Shadow → MANO
+
+默认使用 GPU LM IK 15 步＋自适应 CEM 128×24、均值步长 2，支持四卡分片与已验证缓存续跑。参见 [求解与恢复说明](docs/mano_solver.md)。

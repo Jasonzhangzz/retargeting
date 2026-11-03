@@ -1,5 +1,9 @@
 # 抓取流形去噪、尺寸收紧与残差叠加
 
+新的训练入口已改为[两阶段 VAE／VQ-VAE + 条件 Flow Matching](grasp_pose_flow.md)，支持按手指独立轮次加噪。下文已发布的指标及 checkpoint 仍属于旧 DDPM／DDIM 实验；新架构本次只做 smoke test，未运行完整训练。
+
+新增的[多轮高斯加噪检查页](grasp_denoising_inspector.md)逐类使用标准 1× pose，并排比较 PCA 与 diffusion，默认在收紧后加回**完整原始高斯噪声**。下文旧演示中的“叠加”主要指 PCA 正交残差，两者有明确区别。
+
 这是独立的研究实验，不改写原始 pose、模板或现有抓取求解器。实现四种方法：每类 PCA、尺寸条件插值、128 原子去噪字典、条件 DDPM / DDIM。
 
 ## 已生成的结果

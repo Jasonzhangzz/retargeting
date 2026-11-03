@@ -18,7 +18,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-METHODS = ("pca", "interpolation", "dictionary", "diffusion")
+METHODS = ("pca", "interpolation", "dictionary", "diffusion", "diffusion_vq", "diffusion_vae")
+LEGACY_METHODS = METHODS[:4]
 SPLITS = {"train": 0, "validation": 1, "test": 2}
 VERSION = 1
 
@@ -192,7 +193,21 @@ class ExperimentData:
 
     def model_seed(self, method, requested=None):
         """Use the retained validation-selected model in compact result bundles."""
-        return int(requested if requested is not None else self.meta.get("selected_seeds", {}).get(method, 7))
+        from .manifold_flow import read_registry
+        registry = read_registry(self)
+        method = registry.get("default_diffusion", method) if method == "diffusion" else method
+        selected = {**self.meta.get("selected_seeds", {}), **registry.get("selected_seeds", {})}
+        return int(requested if requested is not None else selected.get(method, 7))
+
+    def resolve_method(self, method):
+        from .manifold_flow import read_registry
+        return read_registry(self).get("default_diffusion", method) if method == "diffusion" else method
+
+    def available_methods(self):
+        candidates = ("dictionary", "diffusion_vq", "diffusion_vae") if (
+            self.directory / "models.json").exists() else ("dictionary", "diffusion")
+        return ("pca", "interpolation", *[method for method in candidates
+                if list((self.directory / "models").glob(f"{method}_seed*/best.pt"))])
 
     def normalize(self, angles):
         return (np.asarray(angles) - self.mid) / self.half
@@ -420,7 +435,14 @@ def tensors(data, indices, device):
             torch.as_tensor(data.size[indices], dtype=torch.float32, device=device))
 
 
-def train(data, method, seed=7, config=None, device="auto"):
+def train(data, method, seed=7, config=None, device="auto", *, latent_kind="vq", stage="all", autoencoder_path=None):
+    if method in ("diffusion", "diffusion_vq", "diffusion_vae"):
+        from .manifold_flow import FlowConfig, train_flow
+        kind = latent_kind if method == "diffusion" else method.removeprefix("diffusion_")
+        if config is not None and not isinstance(config, FlowConfig):
+            config = FlowConfig(**{key: getattr(config, key) for key in
+                                  ("steps", "batch_size", "lr", "validation_every", "patience")})
+        return train_flow(data, kind, seed, config, device, stage, autoencoder_path)
     config = config or TrainConfig()
     if config.steps < 1 or config.batch_size < 1 or config.validation_every < 1 or config.patience < 1:
         raise ValueError("Training counts must be positive")
@@ -487,6 +509,10 @@ def train(data, method, seed=7, config=None, device="auto"):
 
 
 def load_model(data, method, seed=None, device="auto"):
+    method = data.resolve_method(method)
+    if method in ("diffusion_vq", "diffusion_vae"):
+        from .manifold_flow import load_flow_model
+        return load_flow_model(data, method, seed, device)
     device = device_name(device)
     seed = data.model_seed(method, seed)
     path = data.directory / "models" / f"{method}_seed{seed}" / "best.pt"
@@ -527,20 +553,23 @@ class Predictor:
     def __init__(self, data, method, seed=None, device="auto"):
         if method not in METHODS:
             raise ValueError(f"Unknown method: {method}")
+        method = data.resolve_method(method)
         self.data, self.method = data, method
+        self.is_flow = method in ("diffusion_vq", "diffusion_vae")
         self.device = device_name(device)
         self.model = None
         self.schedule = alpha_schedule()
-        if method in ("dictionary", "diffusion"):
+        if self.is_flow or method in ("dictionary", "diffusion"):
             self.model, _ = load_model(data, method, seed, self.device)
-            self.schedule = alpha_schedule(self.model.config.diffusion_steps)
+            if not self.is_flow:
+                self.schedule = alpha_schedule(self.model.config.diffusion_steps)
         self.curves = []
         for group in range(len(data.subspaces)):
             ids = np.flatnonzero((data.group == group) & data.mask("train"))
             poses = self.predict(data.x[ids], data.group[ids], data.size[ids], 0.) if self.model else None
-            self.curves.append(data.curve(group, poses))
+            self.curves.append(SizeCurve(data.size[ids], poses) if self.is_flow else data.curve(group, poses))
 
-    def predict(self, observed, groups, sizes, sigma):
+    def predict(self, observed, groups, sizes, sigma=None):
         observed = np.asarray(observed, float)
         groups, sizes = np.asarray(groups, int), np.asarray(sizes, float)
         if observed.ndim != 2 or observed.shape[1] != 20 or not np.isfinite(observed).all():
@@ -549,18 +578,23 @@ class Predictor:
             raise ValueError("Conditions must match batch and sizes must be positive")
         if np.any(groups < 0) or np.any(groups >= len(self.data.subspaces)):
             raise ValueError("Unknown grasp group")
-        if not np.isfinite(sigma) or sigma < 0:
+        if sigma is None and not self.is_flow:
+            raise ValueError("Legacy models require a noise sigma")
+        if sigma is not None and (not np.isfinite(sigma) or sigma < 0):
             raise ValueError("Noise sigma must be finite and nonnegative")
         if self.method == "pca":
             return self.data.project(observed, groups)
         if self.method == "interpolation":
             return np.stack([self.curves[int(g)](s) for g, s in zip(groups, sizes)])
-        t = sigma_timestep(sigma, self.schedule)
         with torch.no_grad():
             x = torch.as_tensor(observed, dtype=torch.float32, device=self.device)
             g = torch.as_tensor(groups, dtype=torch.long, device=self.device)
             s = torch.as_tensor(sizes, dtype=torch.float32, device=self.device)
-            return self.model.denoise(x, g, s, t).cpu().numpy().astype(float)
+            if self.is_flow:
+                result = self.model.denoise(x, g, s)
+            else:
+                result = self.model.denoise(x, g, s, sigma_timestep(sigma, self.schedule))
+            return result.cpu().numpy().astype(float)
 
 
 def subspace_stability(data, seed):
@@ -586,7 +620,7 @@ def evaluate(data, seeds=(None,), noise_seeds=(11, 23, 37), sigmas=(0., .03, .1,
     records, timings, stability, code_stability, tightening = [], [], [], [], []
     half = data.half
     for requested_seed in seeds:
-        for method in METHODS:
+        for method in LEGACY_METHODS:
             model_seed = data.model_seed(method, requested_seed)
             predictor = Predictor(data, method, model_seed, device)
             for split in ("validation", "test"):
@@ -658,7 +692,7 @@ def evaluate(data, seeds=(None,), noise_seeds=(11, 23, 37), sigmas=(0., .03, .1,
                             before=checker.inspect(q_before)[0], after=checker.inspect(q_after)[0]))
             print(f"evaluated {method} seed={model_seed}", flush=True)
     summaries = []
-    for method in METHODS:
+    for method in LEGACY_METHODS:
         for split in ("validation", "test"):
             rows = [r for r in records if r["method"] == method and r["split"] == split]
             # Macro-average classes, so denser type grids cannot dominate selection.

@@ -1,0 +1,6 @@
+numpy>=1.24
+scipy>=1.10
+torch>=2.2
+# Official SDK API used by the live-capture adapter; offline fitting needs no SDK.
+wuji-sdk==2026.10.26
+viser==1.1.1

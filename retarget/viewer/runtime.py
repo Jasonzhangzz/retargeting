@@ -337,7 +337,8 @@ def web(config):
     from scipy.spatial.transform import Rotation
 
     final_only = config.visualization.get("final_only", False)
-    server = viser.ViserServer(port=int(config.visualization.get("port", 8081)))
+    server = viser.ViserServer(host=config.visualization.get("host", "127.0.0.1"),
+                               port=int(config.visualization.get("port", 8081)))
     server.scene.world_axes.visible = False
 
     @server.on_client_connect
