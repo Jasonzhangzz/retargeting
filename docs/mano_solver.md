@@ -17,3 +17,5 @@ MANO 提供模型、几何和批量接口。几何评分调用从仓库原有 `e
 运行顺序为输入合批与 MANO 求解；待上游及 MANO 全部正常完成后，才启动 WUJI2。历史无闭合目标的 MANO/WUJI2 输出不作为本轮已完成结果复用。
 
 从输入 pose 到最终 pose 的数值计算使用 GPU：Shadow 模型 FK、掌部 SVD、MANO 解码/IK/CEM、物体投影、QP、碰撞、最终关键点/接触点和局部/世界坐标变换均为 Torch/Warp。WUJI2 初始化保留原掌部/骨骼方向残差，使用已有 bounded_lm 的 GPU 实现；不再调用 SciPy least_squares。文件读取、XML/固定模型资源构建、索引/调度与最终文件编码留在 CPU；NPZ 编解码仍使用 NumPy。
+
+调度采用 `grasp_type_round_robin_v1`：在所有可用 grasp type 间轮询，每轮每类取一个现有 pose batch；不重复抽样，不改变 batch 内来源、初值或随机种子。类型无剩余 batch 时退出轮询。通过 `--resume-from` 校验后复用既有完整分片；已完成结果不重算。不同类型计算耗时不同，因此均匀的是任务领取顺序，不保证同一时刻各类完成数完全相等。

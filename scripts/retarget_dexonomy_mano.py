@@ -53,12 +53,35 @@ def worker_layout(devices,workers_per_device):
 def shard_owner(key,workers):
     return int(hashlib.sha256(key.encode()).hexdigest()[:8],16)%workers
 
-def schedule_groups(groups,reused_keys,scheduled,tasks):
-    """Queue each uncommitted shard once; workers claim dynamically."""
+def round_robin_groups(groups):
+    """One existing batch per available grasp type per round, without resampling."""
+    by_type = collections.defaultdict(dict)
     for group in groups:
-        key=group['type']+'/'+str(group['part'])
-        if key not in reused_keys and key not in scheduled:
-            tasks.put(group);scheduled.add(key)
+        by_type[group['type']][int(group['part'])] = group
+    def type_order(name):
+        prefix = name.partition('_')[0]
+        return (int(prefix) if prefix.isdigit() else math.inf, name)
+    pending = collections.OrderedDict(
+        (typ, collections.deque(parts[index] for index in sorted(parts)))
+        for typ, parts in sorted(by_type.items(), key=lambda item: type_order(item[0]))
+    )
+    ordered = []
+    while pending:
+        for typ in list(pending):
+            ordered.append(pending[typ].popleft())
+            if not pending[typ]:
+                del pending[typ]
+    return ordered
+
+
+def schedule_groups(groups, reused_keys, scheduled, tasks):
+    """Queue uncommitted shards equally by type; workers claim dynamically."""
+    pending = [group for group in groups
+               if group['type']+'/'+str(group['part']) not in reused_keys | scheduled]
+    for group in round_robin_groups(pending):
+        key = group['type']+'/'+str(group['part'])
+        tasks.put(group)
+        scheduled.add(key)
 
 
 def active_path(output,number):
@@ -420,7 +443,7 @@ def main():
     mapping_fingerprint=hashlib.sha256(json.dumps(frozen_mapping,sort_keys=True).encode()).hexdigest()
     from retarget.env.grasp.pose_objective import PoseObjectiveSettings
     from retarget.solver.base import Settings as SamplerSettings
-    payload=dict(objective='template_historical_wrench_qp_axis_v1',closure_backend='historical wrench_qp; 4 sliding rays; no torsional rays; 13 wrench targets; 96 FISTA updates',object_mass_kg=.1,objective_settings=asdict(PoseObjectiveSettings()),sampler_settings=asdict(SamplerSettings(type='cem',population=settings.population,iterations=settings.iterations)),output_format="final_grasp_keypoints_v3",scheduling="dynamic_queue",worker_devices=worker_devices,workers_per_device=a.workers_per_device,settings=asdict(settings),source=str(a.source.resolve()),max_rows=a.max_rows,model_sha256=sha(a.model),mapping_fingerprint=mapping_fingerprint,implementation_sha256={f:sha(ROOT/f) for f in ['retarget/env/grasp/mano_solver.py','retarget/env/grasp/mano_adapter.py','retarget/env/grasp/pose_objective.py','retarget/env/grasp/closure_types.py','retarget/env/grasp/projected_qp.py','retarget/env/grasp/pose_gpu.py','retarget/env/grasp/pose_inputs.py','retarget/env/grasp/qp_projection.py','retarget/solver/cem.py','scripts/retarget_dexonomy_mano.py','scripts/run_dexonomy_mano_background.py']})
+    payload=dict(objective='template_historical_wrench_qp_axis_v1',closure_backend='historical wrench_qp; 4 sliding rays; no torsional rays; 13 wrench targets; 96 FISTA updates',object_mass_kg=.1,objective_settings=asdict(PoseObjectiveSettings()),sampler_settings=asdict(SamplerSettings(type='cem',population=settings.population,iterations=settings.iterations)),output_format="final_grasp_keypoints_v3",scheduling="grasp_type_round_robin_v1",worker_devices=worker_devices,workers_per_device=a.workers_per_device,settings=asdict(settings),source=str(a.source.resolve()),max_rows=a.max_rows,model_sha256=sha(a.model),mapping_fingerprint=mapping_fingerprint,implementation_sha256={f:sha(ROOT/f) for f in ['retarget/env/grasp/mano_solver.py','retarget/env/grasp/mano_adapter.py','retarget/env/grasp/pose_objective.py','retarget/env/grasp/closure_types.py','retarget/env/grasp/projected_qp.py','retarget/env/grasp/pose_gpu.py','retarget/env/grasp/pose_inputs.py','retarget/env/grasp/qp_projection.py','retarget/solver/cem.py','scripts/retarget_dexonomy_mano.py','scripts/run_dexonomy_mano_background.py']})
     if a.resume_from:
         references=a.output/'reused_shards.json'
         reused=reused_shards(a.resume_from,a.source,sha(a.model),mapping_fingerprint)
@@ -449,7 +472,7 @@ def main():
         jobs=[pool.submit(worker,i,d,options,fingerprint,tasks) for i,d in enumerate(worker_devices)]
         while True:
             if not source_closed and not (a.output/'STOP').exists():
-                groups=source_groups(a.source)
+                groups=round_robin_groups(source_groups(a.source))
                 if a.max_shards:groups=groups[:a.max_shards]
                 schedule_groups(groups,reused_keys,scheduled,tasks)
                 producer=read(a.source/'status.json') if (a.source/'status.json').exists() else {'state':'completed'}
