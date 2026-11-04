@@ -20,7 +20,7 @@ def test_relative_input_and_dispatch(tmp_path):
     c = run.load(write(tmp_path))
     assert c.task["data"] == str(tmp_path / "inputs")
     assert c.solver.type == "cem" and c.mode == "solve"
-    for task in ("grasp", "dex", "humanoid"):
+    for task in ("dex", "humanoid"):
         module = __import__("retarget.env." + task + ".runner", fromlist=["validate"])
         assert callable(module.validate)
 
@@ -63,3 +63,11 @@ def test_missing_dex_reports_preparation_required_before_output(tmp_path):
 def test_only_sampling_solvers(tmp_path, solver):
     with pytest.raises(ValueError):
         run.load(write(tmp_path, solver=dict(type=solver)))
+
+
+def test_grasp_dispatch_rejects_removed_methods(tmp_path):
+    for method in ('cem','mppi','dexforge'):
+        with pytest.raises(ValueError):
+            run.load(write(tmp_path, task=dict(type='grasp',data='inputs'),solver=dict(type=method)))
+    from retarget.env.grasp import grasp_admm_runner
+    assert callable(grasp_admm_runner.validate)

@@ -1,3 +1,3 @@
-# Preserve numerical caches and checksums across Git configurations.
-results/grasp_current_20261103/** -text linguist-generated=true
-results/grasp_manifold_20261103/** -text linguist-generated=true
+# Preserve binary numerical assets without line-ending conversion.
+*.npz binary
+*.npy binary

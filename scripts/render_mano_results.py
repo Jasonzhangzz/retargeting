@@ -50,7 +50,7 @@ def main():
         title=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',22);small=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',18)
         draw.text((18,12),'SOLVED MPPI / '+r['key'],font=title,fill='white')
         d=r['metric']['geometry_diagnostics']
-        draw.text((18,44),f"Geometry: {'PASS' if r['metric']['geometry_accepted'] else 'FAIL'} | coverage {d['mapped_coverage']:.0%} | penetration {d['max_hand_object_penetration_m']*1000:.3f} mm | cost {r['metric']['final_cost']:.4f}",font=small,fill='#bdd3e8')
+        draw.text((18,44),f"Geometry: {'PASS' if r['metric']['geometry_accepted'] else 'FAIL'} | coverage {d['mapped_coverage']:.0%} | penetration {d['max_hand_object_penetration_m']*1000:.3f} mm",font=small,fill='#bdd3e8')
         for j,view in enumerate(('palm','oblique')):image.paste(render(r,view),(j*780,80))
         text=f"Projected closure: {'PASS' if report['projected']['certified'] else 'UNPROVEN'} | near-surface closure: {'PASS' if report['near_surface']['certified'] else 'UNPROVEN'} | dynamics: not evaluated"
         draw.text((18,770),text,font=small,fill='white')

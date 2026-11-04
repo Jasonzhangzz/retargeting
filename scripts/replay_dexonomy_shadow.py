@@ -32,7 +32,7 @@ def main():
     write_json(a.output/'verification.json',verification)
     report['full_batch_threshold']=a.threshold
     report['eligible_for_full_batch']=report['closure_pass_rate']>=a.threshold and not report['errors'] and verification['success']
-    report['code_sha256']={str(f.relative_to(ROOT)):sha(f) for f in [Path(__file__),ROOT/'retarget/env/grasp/dexonomy_replay.py',ROOT/'retarget/env/grasp/projected_comfree.py']}
+    report['code_sha256']={str(f.relative_to(ROOT)):sha(f) for f in [Path(__file__),ROOT/'retarget/env/grasp/dexonomy_replay.py',ROOT/'retarget/env/grasp/closure_types.py']}
     report['python']=sys.executable;report['full_batch_started']=False
     if a.auto_full and report['eligible_for_full_batch']:
         output=a.full_output or a.output.with_name(a.output.name+'_full');output.mkdir(parents=True,exist_ok=True)

@@ -36,7 +36,7 @@ def pose_markdown(row):
         f"固定映射槽贴合率：{d['mapped_coverage']:.1%}；仅距离贴合率：{d['mapped_distance_coverage']:.1%}",
         f"固定槽 {d['mapped_contact_count']} 个；2 mm 近表面顶点 {d['contact_count']} 个",
         f"最大槽间隙：{d['max_mapped_gap_m']*1000:.3f} mm；最大手物穿透：{d['max_hand_object_penetration_m']*1000:.3f} mm",
-        f"优化 cost：{m['initial_cost']:.5f} → {m['final_cost']:.5f}；关节位置 RMSE：{d['joint_rmse_to_shadow_m']*1000:.2f} mm",
+        f"关节位置 RMSE：{d['joint_rmse_to_shadow_m']*1000:.2f} mm",
         f"物体局部包围盒：{extent[0]:.1f} × {extent[1]:.1f} × {extent[2]:.1f} mm；scene_scale={e['scene_scale']:.6g}",
         f"物体网格闭合：{'是' if d['object_watertight'] else '否'}；自碰撞／关节限位：未评估",
         f"来源物体：{Path(e['object']['source_record']).parts[-3]}；原始行 {e['object']['source_row']}",
@@ -52,9 +52,9 @@ def pose_markdown(row):
 def palm_camera(row):
     s=row['snapshot'];i=row['index'];j=s.poses['mano_joints'][i]
     x=j[5]-j[17];y=j[9]-j[0];normal=np.cross(x,y);normal/=max(np.linalg.norm(normal),1e-9)
-    palm=j[[0,5,9,13,17]].mean(0);ov,_=s.object_mesh(i);target=np.concatenate((s.poses['mano_vertices'][i],ov)).mean(0)
+    palm=j[[0,5,9,13,17]].mean(0);ov,_=s.object_mesh(i);target=np.concatenate((s.mano_mesh(i)[0],ov)).mean(0)
     if np.dot(normal,ov.mean(0)-palm)<0:normal=-normal
-    span=max(np.ptp(np.concatenate((s.poses['mano_vertices'][i],ov)),axis=0).max(),.15)
+    span=max(np.ptp(np.concatenate((s.mano_mesh(i)[0],ov)),axis=0).max(),.15)
     up=y/max(np.linalg.norm(y),1e-9)
     return target+normal*span*2.4,target,up
 
@@ -135,7 +135,7 @@ class Viewer:
                     for k,x in enumerate(hp):add(client.scene.add_label('/pose/label_'+str(k),str(k+1),position=x,font_screen_scale=.7))
                 if near.value:points('/pose/near',s.contacts(i)['hand_points_world'],(245,225,35),.0025)
                 if shadow.value:
-                    j=p['source_shadow_joints_world'][i];pairs=[]
+                    j=s.source_joints(i);pairs=[]
                     for base in (1,5,9,13,17):
                         pairs.append([j[0],j[base]])
                         pairs.extend([j[a],j[a+1]] for a in range(base,base+3))

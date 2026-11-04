@@ -1,9 +1,0 @@
-mode: web
-output:
-  name: viewer
-visualization:
-  port: 8084
-  batch: graspadmm_mppi_wuji2_results
-  task: grasp
-  hand: wuji2
-  primary_shape_only: true

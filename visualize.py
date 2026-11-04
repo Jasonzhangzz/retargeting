@@ -11,7 +11,7 @@ from retarget.viewer.runtime import web
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=ROOT / "configs/web_grasp_template_mppi.yaml")
+    parser.add_argument("--config", type=Path, default=ROOT / "configs/web_graspadmm.yaml")
     parser.add_argument("--batch", help="Saved result directory name under output/")
     parser.add_argument("--port", type=int)
     parser.add_argument("--host", default="127.0.0.1", help="Viser bind address (default: local only)")

@@ -4,6 +4,7 @@ from unittest.mock import patch
 import numpy as np
 from retarget.env.grasp.dexonomy_grasp_static import ROOT,StaticModels,decode_record,static_sample
 class GraspOnlyTests(unittest.TestCase):
+    @unittest.skipUnless((ROOT/'results/dexonomy_shadow_pilot100_20261103/plan.json').is_file(), 'Requires external Dexonomy dataset/cache')
     def test_grasp_only_record_without_other_stages(self):
         plan=json.loads((ROOT/'results/dexonomy_shadow_pilot100_20261103/plan.json').read_text());item=plan[0]
         p=Path(item['path']);p=p if p.is_absolute() else ROOT/p;original=decode_record(p.read_bytes())
@@ -14,6 +15,7 @@ class GraspOnlyTests(unittest.TestCase):
         self.assertEqual(sample['stage_qpos'].shape,(1,36));self.assertEqual(len(sample['contacts']),1)
         np.testing.assert_array_equal(sample['source_stage_hand_qpos'][0],original['grasp_qpos'][item['row']])
 
+    @unittest.skipUnless((ROOT/'results/dexonomy_shadow_pilot100_20261103/plan.json').is_file(), 'Requires external Dexonomy dataset/cache')
     def test_preview_cache_contains_only_grasp(self):
         root=ROOT/'results/dexonomy_shadow_grasp_preview_20261103';total=0
         for path in root.glob('*/shards/*/manifest.json'):
@@ -28,6 +30,7 @@ class GraspOnlyTests(unittest.TestCase):
             total+=len(manifest['cases'])
         self.assertEqual(total,100)
 
+    @unittest.skipUnless((ROOT/'results/dexonomy_shadow_pilot100_20261103/plan.json').is_file(), 'Requires external Dexonomy dataset/cache')
     def test_migration_preserves_original_grasp_contacts(self):
         old=ROOT/'results/dexonomy_shadow_static_full';new=ROOT/'results/dexonomy_shadow_grasp_full'
         marker=next(new.glob('*/shards/*/verification.json'));source=old/marker.parent.relative_to(new)
@@ -37,6 +40,7 @@ class GraspOnlyTests(unittest.TestCase):
             points=a['points_world'];offsets=a['offsets'];chunks=[points[int(offsets[3*i+1]):int(offsets[3*i+2])] for i in range((len(offsets)-1)//3)]
             np.testing.assert_array_equal(np.concatenate(chunks),b['points_world'])
 
+    @unittest.skipUnless((ROOT/'results/dexonomy_shadow_pilot100_20261103/plan.json').is_file(), 'Requires external Dexonomy dataset/cache')
     def test_full_resume_does_not_double_count(self):
         import tempfile,tarfile
         from retarget.env.grasp.dexonomy_grasp_static import run_static_full
@@ -56,6 +60,7 @@ class GraspOnlyTests(unittest.TestCase):
             self.assertEqual(first['samples_cached'],1);self.assertEqual(second['samples_cached'],1)
             self.assertEqual(second['samples_reused'],1);self.assertEqual(second['shards_completed'],1)
 
+    @unittest.skipUnless((ROOT/'results/dexonomy_shadow_grasp_full').is_dir(), 'Requires external full Dexonomy cache')
     def test_viewer_pages_full_cache(self):
         p=ROOT/'scripts/serve_dexonomy_grasp.py';spec=importlib.util.spec_from_file_location('grasp_viewer_for_test',p);viewer=importlib.util.module_from_spec(spec);spec.loader.exec_module(viewer)
         page=viewer.listing('full','',0,12)

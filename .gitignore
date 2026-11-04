@@ -32,3 +32,10 @@ configs/generated/
 /results/
 
 /.venv-*/
+
+# Local hardware SDK distributions and workstation runtimes.
+/GloveIPC_pack/
+/GloveIPC_pack.zip
+/MoxianEMF-Windows-*/
+/MoxianEMF-Windows-*.zip
+*.tmp

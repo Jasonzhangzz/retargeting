@@ -1,37 +1,19 @@
-# Shadow → MANO 全量求解
+# MANO 批量接口
 
-唯一生产配置是 GPU LM IK 15 步和自适应对角 CEM：128 个候选、最多 24 轮、均值步长 2、步长上限 3 个初始标准差。批量默认 64。实现统一在 retarget/env/grasp/mano_solver.py；不再提供 Adam IK、旧 elite 搜索、手动切换求解器或退火实验选项。
+MANO 提供模型、几何和批量接口。几何评分调用从仓库原有 `evaluate` 提取的 `TemplatePoseObjective.score_geometry`，原几何公式和权重保留。闭合部分按用户授权改用历史 `4cc156c3^:retarget/contact_solvers.py:wrench_qp`：四条滑动摩擦射线、每接触点 10 N 上限、总压力至少 1 N，96 步 FISTA，正则项 1e-7。NumPy 原函数仅保留作测试对照；正式路径为 Torch 和 Warp 的设备适配，已对齐原函数数值。
 
-保留按物体和尺寸门控的历史解热启动、每设备有界网格/BVH 缓存、逐行早停、GPU 上的 cost 历史与集中 CPU 导出。IK 使用自动微分 Jacobian 和批量阻尼最小二乘，仅对 5 个指尖做蒙皮；CEM 和最终几何验收仍使用 MANO 表面，最后检查完整 778 顶点。
+同一 QP 分别处理零载荷和六个 wrench 轴的正负载荷。检查射线权重非负、单接触压力上限、总压力下限和平衡残差后，才标记离散摩擦锥下的数值投影力闭合。采用现有的 0.05 归一化残差阈值；闭合裕度为测试力乘以 `(1/sqrt(6) - 最大残差)`。它不调用 ComFree，不包含扭转摩擦，也不证明动态抓取成功。
 
-## 启动与恢复
+采样调用 `retarget/solver/cem.py`。单条路径保持原样；批量路径沿 batch 维独立运行同样的候选采样、退火、稳定排序、精英加权均值和最优候选保留规则。第 i 行使用 seed+i，等价测试对照逐条原版调用。MANO 使用 128 个候选、24 轮；精英比例、温度和最终噪声比例沿用原版 CEM 默认值。无自定义协方差更新或 CEM 早停。
 
-    python scripts/run_dexonomy_mano_background.py \
-      --source results/dexonomy_shadow_grasp_full \
-      --output results/dexonomy_mano_lm_cem_full_20261103 \
-      --resume-from results/dexonomy_mano_mppi_fast_20261103 \
-      --devices cuda:0,cuda:1,cuda:2,cuda:3 --watch
+初始化沿用仓库 MANO 的掌部对齐和 15 步 LM 骨架 IK。最终目标不包含此前的骨架、接触对应、信赖域等自定义加权组合。
 
-只开放设备、batch、显存上限、候选分块、seed、输入输出与运行范围等操作参数。算法使用同一套默认参数。
+四卡各一个 worker，pose batch 为 2048，候选几何按 2048 个状态分块。`scripts/pack_dexonomy_batches.py` 按抓取类型跨原始分片合批，保留原始来源和顺序，不增加或重复 pose；上游完成后的尾批可小于 2048。
 
-恢复时展开历史引用，校验 MANO 模型、固定映射、源数据、行数及全部缓存文件 SHA256；原始已验证文件直接引用，不重复计算、不改写。不同实现指纹使用独立结果目录。当前结果入口是 results/dexonomy_mano_current 符号链接。
+接触点使用已审核 MANO 三角形及重心坐标，随实际蒙皮变形；物体接触点及法向逐候选重新投影。手物穿透查询完整 778 顶点。自碰撞使用按最大蒙皮权重划分的 16 个骨骼刚性凸碰撞体，排除父子骨骼对，由原有 MuJoCo-Warp 碰撞及穿透提取代码计算。这是碰撞几何近似，不是完整变形皮肤之间的碰撞；模型 XML 随运行保存以供复核。
 
-所有未通过几何验收的求解结果仍保留并标记。数据格式沿用 primitive grasp pose 的 NPZ、JSON/gzip manifest、模板和接触记录；新数据用 cem_iterations、cem_best_cost_history，查看器兼容历史 MPPI 字段。
+仅保存最终 wrist/hand pose、21 个关键点、物体位姿/尺度/几何引用、接触点与法向、闭合判定和最终质量指标，不保存优化历史。未通过闭合或几何验收的结果保留失败标记，不当作成功抓取。
 
-停止码：0=预算耗尽，1=严格几何通过，2=停滞，3=几何复核未通过。3 不是成功：最终复核推翻中途判断时保留该姿态和诊断，避免将整分片数据丢弃。已有失败分片不会被当作已完成而跳过。
+运行顺序为输入合批与 MANO 求解；待上游及 MANO 全部正常完成后，才启动 WUJI2。历史无闭合目标的 MANO/WUJI2 输出不作为本轮已完成结果复用。
 
-## 安全停止
-
-创建结果目录中的 STOP 文件，或给 process.json 中的父 PID 发送 SIGTERM。四个 worker 都会完成当前分片并写完校验，再退出。重启前删除 STOP 文件，使用相同配置和恢复根目录。
-
-## 查看
-
-[求解结果 Viser](http://192.168.0.32:8101/)，[进度](http://192.168.0.32:8100/progress.html)，[历史速度与收敛报告](http://192.168.0.32:8100/cem_trials.html)。
-
-几何检查包括完整网格穿透、近表面点及固定映射槽距离和法向。此检查不是动力学稳定性或力闭合证书，失败记录不会过滤掉。查看器支持按需计算仓库的投影力闭合并单独缓存证书。
-
-## 清理与历史
-
-保留全部原始数据、MANO 权重、固定接触映射及已验证 MANO/Shadow 缓存。删除重复的基准 NPZ、旧验证缓存和性能剖析中间文件。旧实现、实验脚本、配置和数值报告归档在仓库外 ../retarget_archives/mano_cleanup_20261103，现行源码只保留一个求解模块。
-
-历史单条延迟：模型/BVH 常驻、batch=1，5 个姿态共 10 次，中位 1.65 秒；batch=64 的完整流程摊销 57–62 ms/条。共享 GPU 上的小样本计时不保证全量性能，四卡持续吞吐以当前进度为准。
+从输入 pose 到最终 pose 的数值计算使用 GPU：Shadow 模型 FK、掌部 SVD、MANO 解码/IK/CEM、物体投影、QP、碰撞、最终关键点/接触点和局部/世界坐标变换均为 Torch/Warp。WUJI2 初始化保留原掌部/骨骼方向残差，使用已有 bounded_lm 的 GPU 实现；不再调用 SciPy least_squares。文件读取、XML/固定模型资源构建、索引/调度与最终文件编码留在 CPU；NPZ 编解码仍使用 NumPy。

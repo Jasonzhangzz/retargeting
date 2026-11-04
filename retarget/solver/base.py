@@ -1,6 +1,6 @@
 """Task-independent, device-resident sampling contract."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 import math
 import torch
@@ -28,7 +28,7 @@ class Settings:
 
     def __post_init__(self):
         if self.type not in ("cem", "mppi", "scsp", "dexforge", "graspadmm"):
-            raise ValueError("solver.type must be cem, mppi, scsp, dexforge or graspadmm")
+            raise ValueError("Unknown solver.type")
         if self.type == "graspadmm":
             from .graspadmm import settings
             object.__setattr__(self, "graspadmm", settings(self.graspadmm))
@@ -137,6 +137,7 @@ class Problem:
     sigma: torch.Tensor
     evaluate: Callable
     project: Callable = lambda x: x
+    observer: Callable | None = None
 
 
 @dataclass
@@ -146,6 +147,7 @@ class Result:
     history: list
     sampled: int
     evaluated: int
+    metadata: dict = field(default_factory=dict)
 
 
 class NoValidCandidate(FloatingPointError):

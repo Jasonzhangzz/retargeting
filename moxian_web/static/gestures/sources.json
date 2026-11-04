@@ -1,0 +1,27 @@
+{
+  "origin": "User-supplied MoxianEMF-Windows-20260917 vendor package, qnbot_hand_openxr_hand/apps/images",
+  "images": [
+    {
+      "file": "together.png",
+      "source_file": "MoxianEMF-Windows-20260917/MoxianEMF/qnbot/resources/runtime/python/Lib/site-packages/qnbot_hand_openxr_hand/apps/images/╩╓╩╞1.png",
+      "sha256": "9c496cb1d58c140d705a85e51d08c42e698defda8985528d91791069c761c0ce",
+      "modifications": "none"
+    },
+    {
+      "file": "spread.png",
+      "source_file": "MoxianEMF-Windows-20260917/MoxianEMF/qnbot/resources/runtime/python/Lib/site-packages/qnbot_hand_openxr_hand/apps/images/╩╓╩╞2.png",
+      "sha256": "32c14180e8a24305824b8fe1866a5df21fea8f1a8a7d97b81758ec7cd76f24ca",
+      "modifications": "none"
+    },
+    {
+      "file": "knuckle-and-fist.png",
+      "source_file": "MoxianEMF-Windows-20260917/MoxianEMF/qnbot/resources/runtime/python/Lib/site-packages/qnbot_hand_openxr_hand/apps/images/╩╓╩╞3.png",
+      "sha256": "3a7b47e4c119674355b72ff0c1fcc15b7f522ce8054e4383268aa5aa7155472d",
+      "modifications": "none"
+    }
+  ],
+  "checked_at": "2026-11-04",
+  "website": "https://docs.qnbot.com/en/docs/vetra-glove-pro/desktop/latest/devices-and-calibration",
+  "website_asset_status": "Indexed overview and step-redo URLs return 404 at original URLs / 400 at image optimizer; current live capture page has no gesture pictures.",
+  "coverage": "Official vendor images cover close, open, mcp90 and mcp90_pip90. Pinch illustrations are local explanatory drawings, not official images."
+}

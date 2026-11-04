@@ -13,6 +13,8 @@ class MappingInspectionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         torch.set_num_threads(1)
+        if not (ROOT/'output/dexonomy_shadow_mano_mapping_20261103/data.json').is_file():
+            raise unittest.SkipTest('Requires externally generated reviewed mapping and dataset assets')
         cls.raw=json.loads((FOLDER/'data.json').read_text())
         cls.decoder=ManoDecoder(ROOT/'data/grasp/assets/mano/MANO_RIGHT.pkl')
         cls.faces=cls.decoder.base.faces

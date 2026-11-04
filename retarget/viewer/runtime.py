@@ -17,7 +17,9 @@ def scan(root=None):
         batch = manifest.parent
         try:
             for case in json.loads(manifest.read_text())["cases"]:
-                if case.get("method") not in ("cem", "mppi", "scsp", "dexforge", "contactaware", "graspadmm", "graspadmm_mppi"):
+                if case.get("method") not in ("cem", "mppi", "scsp", "dexforge", "graspadmm"):
+                    continue
+                if case.get("task") == "grasp" and case.get("method") not in ("cem", "graspadmm"):
                     continue
                 rows.append(
                     dict(case, batch=batch, label=f"{batch.name} / {case['name']}")
@@ -344,7 +346,7 @@ def web(config):
     @server.on_client_connect
     def connect(client):
         client.scene.set_up_direction("+z")
-        method = client.gui.add_dropdown("方法", ("全部", "cem", "mppi", "scsp", "dexforge", "contactaware", "graspadmm", "graspadmm_mppi"), visible=not final_only)
+        method = client.gui.add_dropdown("方法", ("全部", "cem", "mppi", "scsp", "dexforge", "graspadmm"), visible=not final_only)
         task = client.gui.add_dropdown("任务", ("全部", "grasp", "dex", "humanoid"),
             initial_value=config.visualization.get("task", "全部"), visible=not final_only)
         hand = client.gui.add_dropdown("手型", ("全部", "wuji1", "wuji2"),

@@ -42,8 +42,6 @@ def prepare_output(config):
     ):
         raise ValueError("Output must be a real direct child of output/")
     if path.exists():
-        if config.environment.get("template_mppi") is not None:
-            raise FileExistsError(f"Template MPPI keeps existing results; choose a new output.name: {path}")
         shutil.rmtree(path)
     path.mkdir(parents=True)
     import yaml

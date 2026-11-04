@@ -22,19 +22,12 @@ def main():
         return run(config)
     if config.solver.type == "graspadmm":
         module = importlib.import_module("retarget.env.grasp.grasp_admm_runner")
-    elif config.environment.get("template_mppi", {}).get("continuation") is not None:
-        module = importlib.import_module("retarget.env.grasp.template_mppi_dense_runner")
-    elif config.environment.get("template_mppi") is not None:
-        module = importlib.import_module("retarget.env.grasp.template_mppi_runner")
-    elif config.task.get("type") == "grasp" and config.environment.get("spider") is not None:
-        module = importlib.import_module("retarget.env.grasp.spider_runner")
     elif config.solver.type == "dexforge":
         from retarget.dynamics.dexforge_upstream import require_environment
 
         require_environment()
         module = importlib.import_module(
-            "retarget.env.grasp.forceaware_runner" if config.task["type"] == "grasp"
-            else "retarget.env.humanoid.dexforge_runner"
+            "retarget.env.humanoid.dexforge_runner"
         )
     else:
         module = importlib.import_module(f"retarget.env.{config.task['type']}.runner")

@@ -53,16 +53,17 @@ class ReplayTests(unittest.TestCase):
 
     def test_repository_closure_symmetric_contacts(self):
         import torch
-        from retarget.env.grasp.projected_comfree import ProjectedComFreeClosure,ClosureSettings
+        from retarget.env.grasp.projected_qp import ProjectedQPClosure
+        from retarget.env.grasp.closure_types import ClosureSettings
         torch.set_num_threads(1)
         normals=torch.cat([torch.eye(3),-torch.eye(3)]).double()[None]
-        solver=ProjectedComFreeClosure(ClosureSettings(cuda_graph=False),center=[0,0,0],radius=.05,object_mass=.1,object_inertia=[.0001]*3)
+        solver=ProjectedQPClosure(ClosureSettings(cuda_graph=False),center=[0,0,0],radius=.05,object_mass=.1,object_inertia=[.0001]*3)
         result=solver.solve(normals*.05,normals)
         self.assertTrue(bool(result.certified[0]))
         self.assertTrue(bool(result.valid[0]))
         force,torque=solver.contact_wrenches(result.row_forces,normals)
         wrench=torch.cat([force.sum(-2),(torch.linalg.cross((normals*.05)[:,None],force)+torque).sum(-2)/.05],dim=-1)[0]
         loads=torch.cat([torch.zeros(1,6),torch.eye(6),-torch.eye(6)]).double()*solver.test_force_n
-        self.assertLess(float(torch.linalg.vector_norm((wrench+loads)/solver.test_force_n,dim=-1).max()),.05)
+        self.assertLess(float(torch.linalg.vector_norm((wrench-loads)/solver.test_force_n,dim=-1).max()),.05)
 
 if __name__=='__main__':unittest.main()

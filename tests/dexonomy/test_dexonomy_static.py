@@ -15,6 +15,7 @@ class StaticTests(unittest.TestCase):
         np.testing.assert_allclose(c['object_normals_world'],[[1,0,0]],atol=1e-7)
         np.testing.assert_allclose(c['hand_points_world']-c['object_points_world'],c['distances_m'][:,None]*c['object_normals_world'],atol=1e-8)
         self.assertAlmostEqual(od,.001);self.assertFalse(any('force' in key for key in c))
+    @unittest.skipUnless((ROOT/'results/dexonomy_shadow_pilot100_20261103/plan.json').is_file(), 'Requires external Dexonomy dataset/cache')
     def test_real_pose_has_no_simulation_calls(self):
         plan=json.loads((ROOT/'results/dexonomy_shadow_pilot100_20261103/plan.json').read_text())
         p=Path(plan[0]['path']);p=p if p.is_absolute() else ROOT/p
@@ -25,6 +26,7 @@ class StaticTests(unittest.TestCase):
             np.testing.assert_array_equal(out['source_stage_hand_qpos'][i],record[stage+'_qpos'][row])
             np.testing.assert_array_equal(out['stage_qpos'][i,:29],record[stage+'_qpos'][row])
         self.assertEqual(out['stage_qpos'].shape,(3,36))
+    @unittest.skipUnless((ROOT/'results/dexonomy_shadow_pilot100_20261103/plan.json').is_file(), 'Requires external Dexonomy dataset/cache')
     def test_visual_and_collision_only_contacts_match(self):
         plan=json.loads((ROOT/'results/dexonomy_shadow_pilot100_20261103/plan.json').read_text())
         reduced=StaticModels(ROOT/'data/dexonomy',visual=False)
@@ -38,6 +40,7 @@ class StaticTests(unittest.TestCase):
                 for key in ['points_world','object_normals_world','hand_points_world','object_points_world','hand_local_points']:
                     np.testing.assert_allclose(ca[key],cb[key],atol=2e-7)
 
+    @unittest.skipUnless((ROOT/'results/dexonomy_shadow_pilot100_20261103/plan.json').is_file(), 'Requires external Dexonomy dataset/cache')
     def test_completed_preview_shards(self):
         from retarget.viewer.snapshot import get_snapshot
         root=ROOT/'results/dexonomy_shadow_static_preview_20261103';count=0

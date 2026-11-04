@@ -48,16 +48,6 @@ def test_warm_start_object_frames_and_size_gate():
     assert not bank.lookup(['different'],newtarget,surf)[1].item()
 
 
-def test_per_row_early_stop_is_not_a_success_label(fixture):
-    settings=Settings(population=8,iterations=12,ik_steps=12,candidate_chunk=16,
-        search_min_iterations=4,search_check_every=2,search_patience=1,
-        stop_absolute_tol=1.e9,warm_start=False)
-    out=run(fixture,settings)
-    assert (out['ik_iterations']<=4).all() and (out['cem_iterations']<=4).all()
-    assert set(out['stop_reason']).issubset({1,2}) and 2 in out['stop_reason']
-    assert out['history'].shape==(12,2) and (np.diff(out['history'],axis=0)<=1e-5).all()
-    assert (out['final_cost']<=out['initial_cost']+1e-5).all()
-    assert np.isfinite(out['vertices']).all()
 
 def test_round_robin_batches_keep_every_original_index():
     order=interleaved_order([0,0,0,1,1,2,2,2])
@@ -68,22 +58,6 @@ def test_invalid_policy_settings():
     for kwargs in ({'search_check_every':0},{'search_patience':0},{'warm_size_ratio':.9},{'stop_relative_tol':-1}):
         with pytest.raises(ValueError):Settings(**kwargs)
 
-def test_verified_reuse_and_viewer_index(tmp_path):
-    from scripts.retarget_dexonomy_mano import reused_shards
-    from retarget.viewer.mano_results import SolvedIndex
-    full=ROOT/'results/dexonomy_mano_mppi_full_20261103'
-    baseline=tmp_path/'baseline';baseline.mkdir()
-    config=json.loads((full/'configuration.json').read_text())
-    (baseline/'configuration.json').write_text(json.dumps(config))
-    target=baseline/'7_Prismatic_3_Finger/shards';target.mkdir(parents=True)
-    (target/'0000000').symlink_to(full/'7_Prismatic_3_Finger/shards/0000000',target_is_directory=True)
-    refs=reused_shards([baseline],config['source'],config['model_sha256'],config['mapping_fingerprint'])
-    assert len(refs)==1 and refs[0]['samples']==260
-    viewer=tmp_path/'viewer';viewer.mkdir();(viewer/'reused_shards.json').write_text(json.dumps(refs))
-    index=SolvedIndex(viewer).refresh();rows,total=index.page()
-    assert len(rows)==100 and total==260
-    with pytest.raises(ValueError,match='Incompatible'):
-        reused_shards([baseline],config['source'],'wrong',config['mapping_fingerprint'])
 
 def test_reuse_checks_artifacts_and_flattens_references(tmp_path):
     from scripts.retarget_dexonomy_mano import reused_shards,sha
@@ -108,7 +82,7 @@ def test_reuse_checks_artifacts_and_flattens_references(tmp_path):
 
 def test_cli_has_only_production_algorithm(monkeypatch):
     import scripts.retarget_dexonomy_mano as cli
-    for arguments in (['--ik-method','adam_full'],['--search-method','elite'],['--population','512'],['--cem-noise-schedule','hybrid']):
+    for arguments in (['--ik-method','adam_full'],['--search-method','elite'],['--cem-noise-schedule','hybrid']):
         monkeypatch.setattr('sys.argv',['retarget_dexonomy_mano.py',*arguments])
         with pytest.raises(SystemExit) as error:cli.main()
         assert error.value.code==2

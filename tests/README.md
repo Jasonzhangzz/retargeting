@@ -1,29 +1,18 @@
-# 核心测试
+# 测试
 
-这些是开发回归检查，应用启动不会加载。按近期使用的流程，从原来 101 个文件精简为 21 个测试文件（185 个测试函数），按功能分组。先合并 10 个零散文件，再移除 70 个暂未使用的测试文件；删除不表示对应功能已被移除。
+```bash
+python -m pytest --collect-only -q
+python -m pytest -q
+```
 
-| 目录 | 保留的检查 |
-| --- | --- |
-| mano | 当前 LM/CEM、Shadow 接触映射、结果缓存、查看器与标定 |
-| dexonomy | 静态重建、grasp 目标提取和接触坐标 |
-| manifold | VAE/VQ-VAE Flow、去噪检查页及 PCA/旧 diffusion 兼容 |
-| grasp | 投影力闭合、姿态快照和资产接口 |
-| primitive | 姿态查看、连续尺寸输入和缓存延续 |
-| core | 公共配置、统一查看器及 ComFree 力平衡/CUDA |
-| fixtures | 当前力闭合检查、仍在使用的 ADMM 基准所需的小型参考 |
+- `mano`：共享 CEM、四射线 batched QP、GPU 投影、MANO IK/FK、分片恢复与执行顺序。
+- `grasp`：原生 GraspADMM、GPU 约束 QP、模型参数迁移与 Shadow→刚体 MANO 初始化。
+- `dexonomy`：输入坐标、静态接触、缓存及 QP 证书。
+- `core`：公共配置与查看器。
+- `test_moxian_*`：独立硬件与协议工具，需要相应 requirements 和 SDK。
 
-humanoid、dex、Force-Aware、ADMM、SPIDER、SuperMimic 等任务的运行代码及入口保留。移除的历史测试可从 Git 提交 a24bc7b2 恢复，原路径为 tests/test_*.py；仓库外同时保存删除文件和校验清单。此处不承诺这些任务仍有完整回归覆盖。
+历史 MPPI、ComFree 闭合、流形学习和 LM/AdamW 抓取求解对照测试已随实现移除。LM 仍用于输入 IK，不是可选 grasp pose solver。
 
-## 使用
+外部资产与完整历史数据不纳入 Git；对应集成测试明确跳过。`RETARGET_SHADOW_XML`、`RETARGET_RIGID_MANO_XML` 可指定原版刚体手资产。MANO 权重、接触映射和数据集检查不会因缺失输入生成替代成功结果。
 
-只收集测试，不执行求解或训练：
-
-    python -m pytest --collect-only -q
-
-运行核心 CPU 检查（含两步优化的训练接口 smoke）：
-
-    CUDA_VISIBLE_DEVICES='' OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m pytest -q tests
-
-部分检查依赖 MANO 私有资产、已有模型结果、Node 或 CUDA；缺少可选依赖时按各测试声明跳过。不要将单元测试和全量训练/批量求解混同。
-
-共享路径在 _paths.py，MANO fixture 在 mano/helpers.py 和 mano/conftest.py。新增检查优先放入对应文件；临时性能实验不提交，必要数值参考可以保留为小型 fixture。
+`fixtures/grasp_objective_fingerprints.json` 固定清理前工作区中核心几何项、CEM 和 QP 的 AST 指纹，用于核对此次整理未改变公式。QP 同时与保留的历史 NumPy 数值参考比较；该参考仅用于测试。

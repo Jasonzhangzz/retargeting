@@ -35,7 +35,7 @@ class ManoSnapshot:
         with retry(np.load,self.path/'geometry.npz',allow_pickle=False) as a:self.geometry={k:a[k].copy() for k in a.files}
         self.metrics=read_metrics(str(self.path))
         self.templates=json.loads(gzip.decompress(retry((self.path/'templates.json.gz').read_bytes)))
-        self._contacts=None
+        self._contacts=None;self._mesh_cache={};self._source_poses=None
         self.verification=read(self.path/'verification.json')
     def summary(self,index):return self.metrics[index]
     def template(self,index):return self.templates[self.manifest['cases'][index]['template_id']]
@@ -51,7 +51,26 @@ class ManoSnapshot:
             pose=self.poses['object_pose_world'][index];rotation=Rotation.from_quat(pose[3:],scalar_first=True).as_matrix()
             vertices=vertices@rotation.T+pose[:3]
         return vertices,faces
-    def mano_mesh(self,index):return self.poses['mano_vertices'][index].copy(),self.geometry['mano_faces'].copy()
+    def mano_mesh(self,index):
+        if 'mano_vertices' in self.poses:return self.poses['mano_vertices'][index].copy(),self.geometry['mano_faces'].copy()
+        if index not in self._mesh_cache:
+            import torch
+            info=read(self.path/'mano_model.json');model=mesh_decoder(info['model_path'],info['model_sha256'],info['pca_components'])
+            variables=np.concatenate((self.poses['qpos'][index,:6],self.poses['mano_pca'][index]))
+            with torch.no_grad():vertices=model(torch.as_tensor(variables[None],dtype=torch.float32),full=True)[0][0].numpy()
+            self._mesh_cache[index]=vertices
+        return self._mesh_cache[index].copy(),self.geometry['mano_faces'].copy()
+    def source_pose(self,index):
+        if 'source_shadow_grasp_qpos' in self.poses:return self.poses['source_shadow_grasp_qpos'][index]
+        if self._source_poses is None:
+            source=Path(self.manifest['cases'][index]['source_manifest']).parent/'poses.npz'
+            with retry(np.load,source,allow_pickle=False) as a:self._source_poses=a['grasp_qpos'].copy()
+        return self._source_poses[self.manifest['cases'][index]['source_cached_case']]
+    def source_joints(self,index):
+        if 'source_shadow_joints_world' in self.poses:return self.poses['source_shadow_joints_world'][index]
+        from retarget.env.grasp.mano_solver import ShadowSkeleton
+        return ShadowSkeleton(ROOT/'data/dexonomy/shadow_assets/right.xml')(self.source_pose(index)[None])[0]
+
     def contacts(self,index):
         if self._contacts is None:
             with retry(np.load,self.path/'contacts.npz',allow_pickle=False) as a:self._contacts={k:a[k].copy() for k in a.files}
@@ -60,6 +79,12 @@ class ManoSnapshot:
     def row(self,index):
         return dict(snapshot=self,index=int(index),entry=self.manifest['cases'][index],metric=self.metrics[index],
             key=self.path.parents[1].name+'/'+self.path.name+'/'+str(index))
+
+@lru_cache(maxsize=2)
+def mesh_decoder(path,checksum,components):
+    from retarget.env.grasp.mano_solver import ManoDecoder
+    if sha(path)!=checksum:raise ValueError('MANO model checksum mismatch')
+    return ManoDecoder(path,'cpu',components)
 
 @lru_cache(maxsize=6)
 def snapshot(path):return ManoSnapshot(path)
@@ -128,7 +153,7 @@ class ClosureCache:
     """CPU-only on-demand certificates, with source pose and solver fingerprints."""
     def __init__(self,cache=DEFAULT_CACHE):
         self.root=Path(cache);self.lock=threading.RLock();self.models=None
-        self.code_sha={name:sha(ROOT/'retarget/env/grasp'/name) for name in ('projected_comfree.py','comfree_equilibrium.py','dexonomy_replay.py')}
+        self.code_sha={name:sha(ROOT/'retarget/env/grasp'/name) for name in ('projected_qp.py','closure_types.py','dexonomy_replay.py')}
     def cache_path(self,row):
         s=row['snapshot'];e=row['entry']
         return self.root/'closure'/e['grasp_type']/s.path.name/(str(row['index']).zfill(5)+'.json')
@@ -158,7 +183,7 @@ class ClosureCache:
             if self.models is None:self.models=StaticModels(ROOT/'data/dexonomy',2,visual=False)
             record=dict(scene_path=e['scene_path'],scene_scale=np.array([e['scene_scale']]),grasp_qpos=np.zeros((1,29)))
             env,_,_=self.models.get(record,0);model,data=env._model,env._data
-            data.qpos[:29]=s.poses['source_shadow_grasp_qpos'][i];data.qpos[29:]=s.poses['object_pose_world'][i]
+            data.qpos[:29]=s.source_pose(i);data.qpos[29:]=s.poses['object_pose_world'][i]
             mujoco.mj_kinematics(model,data);mujoco.mj_comPos(model,data)
             projected=s.poses['mapped_object_points'][i];normal=s.poses['mapped_object_normals'][i]
             report,arrays=closure(model,data,env._obj_active_bodyid,dict(points=projected,object_points=projected,normals=normal))
@@ -167,7 +192,7 @@ class ClosureCache:
                 m=report['closure_model'];f=arrays['closure_response_forces_n'];spin=arrays['closure_response_intrinsic_torques_nm']
                 wrench=np.concatenate((f.sum(1),(np.cross(projected[None]-np.array(m['center']),f)+spin).sum(1)/m['radius_m']),-1)
                 loads=np.concatenate((np.zeros((1,6)),np.eye(6),-np.eye(6)))*m['test_force_n']
-                residual=np.linalg.norm((wrench+loads)/m['test_force_n'],axis=-1)
+                residual=np.linalg.norm((wrench-loads)/m['test_force_n'],axis=-1)
                 report['audited_max_wrench_residual']=float(residual[1:].max())
                 report['witness_audit_passed']=bool(not report['certified'] or residual[1:].max()<=m['certificate_tolerance']+1e-6)
                 if not report['witness_audit_passed']:raise ValueError('Projection force witness failed independent audit')

@@ -1,9 +1,0 @@
-mode: web
-output:
-  name: viewer
-visualization:
-  port: 8083
-  batch: grasp_history_admm_evaluation_final
-  task: grasp
-  hand: wuji2
-  primary_shape_only: true

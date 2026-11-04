@@ -1,7 +1,7 @@
 """Reconstruct released Shadow grasps and cache measured MuJoCo contacts by type.
 
 Source poses are never optimized. Closure uses the repository's unchanged
-ProjectedComFreeClosure on actual collision contacts, with its default settings.
+ProjectedQPClosure on actual collision contacts, with its default settings.
 """
 from __future__ import annotations
 import copy,gzip,hashlib,io,json,os,pickle,time,traceback
@@ -113,7 +113,8 @@ def contacts(model,data,object_body):
 
 def closure(model,data,body,observation):
     import torch
-    from .projected_comfree import ClosureSettings,ProjectedComFreeClosure
+    from .closure_types import ClosureSettings
+    from .projected_qp import ProjectedQPClosure
     n=len(observation['points'])
     if n<2:return {'certified':False,'reason':'fewer_than_two_contacts','contacts':n},{}
     # The attached scene root may be massless; aggregate the rigid subtree.
@@ -134,7 +135,7 @@ def closure(model,data,body,observation):
         vertices=model.mesh_vert[model.mesh_vertadr[mesh]:model.mesh_vertadr[mesh]+model.mesh_vertnum[mesh]]
         world=vertices@data.geom_xmat[g].reshape(3,3).T+data.geom_xpos[g]
         radius=max(radius,float(np.linalg.norm(world-center,axis=1).max()))
-    solver=ProjectedComFreeClosure(ClosureSettings(cuda_graph=False),center=center,radius=radius,
+    solver=ProjectedQPClosure(ClosureSettings(cuda_graph=False),center=center,radius=radius,
         object_mass=mass,object_inertia=inertia)
     points=torch.as_tensor(observation['object_points'][None],dtype=torch.float64)
     normals=torch.as_tensor(observation['normals'][None],dtype=torch.float64)
@@ -210,7 +211,7 @@ def replay_one(dataset,path,row,destination,case_id,dynamic=True):
             value=executed_state[model.jnt_qposadr[j]];limit_violation=max(limit_violation,float(model.jnt_range[j,0]-value),float(value-model.jnt_range[j,1]))
     depths=[executed_obs['object_penetration_m'],executed_obs['self_penetration_m']]
     metric={'hand':'shadow','method':'dexonomy_replay','task_success':executed_report['certified'],
-        'success_criterion':'repository_projected_comfree_replayed_actual_contacts','geometry_diagnostics':{
+        'success_criterion':'repository_projected_qp_replayed_actual_contacts','geometry_diagnostics':{
             'projected_closure':executed_report['certified'],'max_hand_object_penetration_m':depths[0],
             'max_hand_hand_penetration_m':depths[1],'joint_limit_violation_rad':limit_violation,'source_joint_limit_violation_rad':source_limit_violation,
             'contact_count':len(executed_obs['points'])},'stage_closure':dict(zip(STAGES,reports)),'executed_closure':executed_report,
@@ -296,7 +297,7 @@ def run_pilot(dataset,destination,total=100,seed=7,dynamic=True,workers=8):
     report={'planned':len(plan),'replayed':replayed,'errors':len(failures),'closure_passed':passed,
         'closure_pass_rate':passed/len(plan),'grasp_types':len(groups),'seed':seed,'elapsed_seconds':time.time()-start,
         'full_batch_threshold':.90,'eligible_for_full_batch':passed/len(plan)>=.90 and not failures,
-        'closure_method':'unchanged repository ProjectedComFreeClosure default settings on actual contacts after three-stage execution and settling',
+        'closure_method':'unchanged repository ProjectedQPClosure default settings on actual contacts after three-stage execution and settling',
         'by_type':{typ:{'samples':len(entries),'passed':sum(m['task_success'] for m,_,_ in entries)} for typ,entries in groups.items()}}
     write_json(root/'index.json',{'storage':'dexonomy_shadow_grasp_type_index_v1','groups':[{'grasp_type':typ,'manifest':typ+'/manifest.json','cases':len(entries)} for typ,entries in groups.items()]})
     write_json(root/'failures.json',failures);write_json(root/'summary.json',report);write_json(root/'status.json',{'state':'completed',**report})
@@ -378,7 +379,7 @@ def run_full(dataset,destination,workers=8,shard_size=256,dynamic=True):
     source=Path(dataset)/'extracted/Dexonomy_GRASP_shadow/succ_collect';root=Path(destination);root.mkdir(parents=True,exist_ok=True)
     types=sorted(p.name for p in source.iterdir() if p.is_dir());results=[]
     write_json(root/'status.json',{'state':'running','grasp_types':types,'workers':workers,'shard_size':shard_size})
-    write_json(root/'provenance.json',{'dataset_manifest_sha256':sha(Path(dataset)/'download_manifest.json'),'hand_assets':json.loads((Path(dataset)/'shadow_assets/provenance.json').read_text()),'code_sha256':sha(Path(__file__)),'closure_source_sha256':sha(Path(__file__).with_name('projected_comfree.py')),'source_poses_preserved_in_separate_arrays':True,'passed_and_failed_closure_cases_retained':True,'nominal_object_mass_kg':.1})
+    write_json(root/'provenance.json',{'dataset_manifest_sha256':sha(Path(dataset)/'download_manifest.json'),'hand_assets':json.loads((Path(dataset)/'shadow_assets/provenance.json').read_text()),'code_sha256':sha(Path(__file__)),'closure_source_sha256':sha(Path(__file__).with_name('projected_qp.py')),'source_poses_preserved_in_separate_arrays':True,'passed_and_failed_closure_cases_retained':True,'nominal_object_mass_kg':.1})
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool:
         jobs=[pool.submit(full_type_job,(str(dataset),str(destination),typ,shard_size,dynamic)) for typ in types]
         for job in concurrent.futures.as_completed(jobs):

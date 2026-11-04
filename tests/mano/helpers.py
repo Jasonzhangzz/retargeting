@@ -9,6 +9,8 @@ from scripts.retarget_dexonomy_mano import GeometryLoader
 @pytest.fixture(scope='module')
 def fixture():
     torch.set_num_threads(1)
+    if not (ROOT/'output/dexonomy_shadow_mano_mapping_20261103/data.json').is_file():
+        pytest.skip('Requires externally generated reviewed mapping and dataset assets')
     raw=json.loads((ROOT/'output/dexonomy_shadow_mano_mapping_20261103/data.json').read_text())
     source=ROOT/'results/dexonomy_shadow_grasp_full/7_Prismatic_3_Finger/shards/0000000'
     entries=json.loads((source/'manifest.json').read_text())['cases'][:2]

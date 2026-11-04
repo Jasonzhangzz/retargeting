@@ -1,6 +1,6 @@
 {
   "1": {
-    "source": "output/grasp_template_mppi_validation_20261102_v1/000_1_Large_Diameter/projection_force_closure.json",
+    "source": "output/grasp_pose_objective_validation_20261102_v1/000_1_Large_Diameter/projection_force_closure.json",
     "points": [
       [
         0.02267586812376976,
@@ -192,7 +192,7 @@
     "expected_closure": true
   },
   "6": {
-    "source": "output/grasp_template_mppi_validation_20261102_v1/001_6_Prismatic_4_Finger/projection_force_closure.json",
+    "source": "output/grasp_pose_objective_validation_20261102_v1/001_6_Prismatic_4_Finger/projection_force_closure.json",
     "points": [
       [
         -0.016990402713418007,
@@ -274,7 +274,7 @@
     "expected_closure": true
   },
   "9": {
-    "source": "output/grasp_template_mppi_validation_20261102_v1/002_9_Palmar_Pinch/projection_force_closure.json",
+    "source": "output/grasp_pose_objective_validation_20261102_v1/002_9_Palmar_Pinch/projection_force_closure.json",
     "points": [
       [
         -0.014912628568708897,
@@ -326,7 +326,7 @@
     "expected_closure": false
   },
   "10": {
-    "source": "output/grasp_template_mppi_validation_20261102_v1/003_10_Power_Disk/projection_force_closure.json",
+    "source": "output/grasp_pose_objective_validation_20261102_v1/003_10_Power_Disk/projection_force_closure.json",
     "points": [
       [
         -0.002884996123611927,
@@ -468,7 +468,7 @@
     "expected_closure": true
   },
   "11": {
-    "source": "output/grasp_template_mppi_validation_20261102_v1/004_11_Power_Sphere/projection_force_closure.json",
+    "source": "output/grasp_pose_objective_validation_20261102_v1/004_11_Power_Sphere/projection_force_closure.json",
     "points": [
       [
         0.02531643956899643,

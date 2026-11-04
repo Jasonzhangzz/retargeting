@@ -114,18 +114,10 @@ def load(path):
         raise ValueError("solver.type: dexforge and environment.dynamics: dexforge must be used together")
     if environment.get("dexforge") is not None and environment.get("dynamics") != "dexforge":
         raise ValueError("environment.dexforge requires dynamics: dexforge")
-    if environment.get("spider") is not None and not (
-            task.get("type") == "grasp" and solver.type == "mppi"
-            and environment.get("dynamics") == "mjwarp"):
-        raise ValueError("environment.spider requires grasp, solver mppi and native mjwarp dynamics")
-    if environment.get("template_mppi") is not None:
-        if not (task.get("type") == "grasp" and solver.type == "mppi"
-                and environment.get("dynamics") == "mjwarp"):
-            raise ValueError("environment.template_mppi requires grasp, solver mppi and mjwarp dynamics")
-        if not isinstance(environment["template_mppi"], dict):
-            raise ValueError("environment.template_mppi must be a mapping")
-        if any(environment.get(key) is not None for key in ("spider", "dexforge")):
-            raise ValueError("environment.template_mppi cannot be combined with spider or dexforge")
+    if mode == "solve" and task.get("type") == "grasp" and solver.type != "graspadmm":
+        raise ValueError("Grasp synthesis supports GraspADMM here; use scripts/retarget_dexonomy_mano.py for CEM plus batched QP")
+    if any(environment.get(key) is not None for key in ("spider", "template_mppi")):
+        raise ValueError("Legacy grasp MPPI backends have been removed")
     return Config(
         path,
         mode,

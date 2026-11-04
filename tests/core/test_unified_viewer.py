@@ -7,7 +7,7 @@ from retarget.viewer.runtime import scan, filter_rows
 
 
 def test_manifest_scanning_and_filters(tmp_path):
-    for method in ("cem", "mppi"):
+    for method in ("cem", "graspadmm"):
         folder = tmp_path / method
         folder.mkdir()
         cases = [
@@ -17,10 +17,10 @@ def test_manifest_scanning_and_filters(tmp_path):
         (folder / "manifest.json").write_text(json.dumps(dict(cases=cases)))
     rows = scan(tmp_path)
     assert len(rows) == 4
-    selected = filter_rows(rows, method="mppi", hand="wuji2", template="1_type")
+    selected = filter_rows(rows, method="graspadmm", hand="wuji2", template="1_type")
     assert (
         len(selected) == 1
-        and selected[0]["method"] == "mppi"
+        and selected[0]["method"] == "graspadmm"
         and selected[0]["hand"] == "wuji2"
     )
     assert not filter_rows(rows, task="humanoid")
@@ -91,20 +91,20 @@ def test_patch_viewer_reads_metric_sidecar_without_moving_source_artifacts(tmp_p
     assert original.read_text() == '{}'
 
 
-def test_batch_stage_and_size_filters_keep_ca_previews_distinct(tmp_path):
+def test_batch_stage_and_size_filters_keep_supported_methods_distinct(tmp_path):
     folder = tmp_path/"five_sizes"
     folder.mkdir()
     common = dict(task="grasp", template="27_Quadpod", hand="wuji2")
-    cases = [dict(common, name="actual", method="mppi", stage="MPPI轨迹", radius_scale=1.5),
-             dict(common, name="failed", method="contactaware", stage="CA失败预览", radius_scale=.5)]
+    cases = [dict(common, name="actual", method="cem", stage="CEM结果", radius_scale=1.5),
+             dict(common, name="failed", method="graspadmm", stage="ADMM失败结果", radius_scale=.5)]
     (folder/"manifest.json").write_text(json.dumps(dict(cases=cases)))
     rows = scan(tmp_path)
     assert len(rows) == 2
     assert filter_rows(rows, batch="different") == []
-    actual = filter_rows(rows, batch="five_sizes", stage="MPPI轨迹", size="1.5×")
+    actual = filter_rows(rows, batch="five_sizes", stage="CEM结果", size="1.5×")
     assert len(actual) == 1 and actual[0]["name"] == "actual"
-    preview = filter_rows(rows, method="contactaware", size="0.5×")
-    assert len(preview) == 1 and preview[0]["stage"] == "CA失败预览"
+    preview = filter_rows(rows, method="graspadmm", size="0.5×")
+    assert len(preview) == 1 and preview[0]["stage"] == "ADMM失败结果"
 
 
 def test_size_bar_only_selects_recorded_sizes_and_never_interpolates():
