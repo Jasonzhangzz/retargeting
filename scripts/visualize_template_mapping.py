@@ -2,7 +2,7 @@
 """Export an offline, paired Shadow -> Wuji2 template inspection page.
 
 Uses the production fixed-template bone conversion and contact mapping. No
-object, ADMM, MPPI, or contact-aware refinement is applied to these poses.
+object-dependent refinement is applied to these poses.
 """
 
 import argparse

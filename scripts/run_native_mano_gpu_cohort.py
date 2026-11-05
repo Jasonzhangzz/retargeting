@@ -80,7 +80,7 @@ def build_assets(a):
 def solve(a):
     import validate_native_mano_gpu as validator
     m,jobs=verify(a);first=json.loads((Path(m['first_batch'])/'solve_receipt.json').read_text())
-    completed=m['reused_samples'];native=first['native_output'];closure=first['projected_closure'];receipts=[]
+    completed=m['reused_samples'];native=first['native_output'];receipts=[]
     first_root=Path(m['first_batch'])
     while not (first_root/'dynamic_receipt.json').exists():
         if (a.root/'STOP').exists():raise InterruptedError('Cohort STOP')
@@ -95,7 +95,7 @@ def solve(a):
             if s['state']=='failed':raise RuntimeError('Asset preparation failed')
             time.sleep(5)
         if (a.root/'STOP').exists():raise InterruptedError('Cohort STOP')
-        task.write(a.root/'status.json',dict(state='solving',job=j['id'],completed=completed,total=m['samples'],native_output=native,projected_closure=closure))
+        task.write(a.root/'status.json',dict(state='solving',job=j['id'],completed=completed,total=m['samples'],native_output=native))
         if (root/'solve_receipt.json').exists():raise ValueError('Unexpected existing result without a cohort commit; inspect before replaying')
         with (root/'run.lock').open('w') as lock:
             fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -106,13 +106,13 @@ def solve(a):
             except BaseException:
                 task.write(root/'failure.json',dict(exception=traceback.format_exc(),state_may_be_inflight=True))
                 task.write(root/'status.json',dict(state='failed'));raise
-        r=json.loads((root/'solve_receipt.json').read_text());completed+=r['completed'];native+=r['native_output'];closure+=r['projected_closure']
+        r=json.loads((root/'solve_receipt.json').read_text());completed+=r['completed'];native+=r['native_output']
         receipts.append(dict(job=j['id'],samples=j['samples'],poses_sha256=task.sha(root/'poses.npz'),receipt_sha256=task.sha(root/'solve_receipt.json'),
             dynamic_receipt_sha256=task.sha(root/'dynamic_receipt.json')))
         task.write(a.root/'commits.json',receipts)
-        task.write(a.root/'status.json',dict(state='solving',completed=completed,total=m['samples'],native_output=native,projected_closure=closure))
+        task.write(a.root/'status.json',dict(state='solving',completed=completed,total=m['samples'],native_output=native))
     task.write(a.root/'status.json',dict(state='solve_and_dynamic_validation_complete_pending_quality_review',completed=completed,total=m['samples'],
-        native_output=native,projected_closure=closure,production_launch_allowed=False))
+        native_output=native,production_launch_allowed=False))
 
 
 def main():

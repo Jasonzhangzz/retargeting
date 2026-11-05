@@ -347,3 +347,142 @@ def test_anatomical_tip_extension_is_independent_of_distal_to_emf_mount():
     changed=m.shape.copy();changed[16:21]=.0015;m.set_shape(changed)
     assert np.array_equal(m.sensor_offsets(),sensor)
     assert np.allclose(m.rest_j_np,joints) and np.min(np.linalg.norm(m.tip_anchors-tip,axis=1))>.001
+
+
+def test_fixed_segment_dimensions_change_only_segment_scale_and_finger_radius():
+    m=ManoSurface(DEFAULT_MANO);m.set_dimensions(np.zeros(20));base_v=m.rest_np.copy();base_j=m.rest_j_np.copy()
+    x=np.zeros(20);x[3]=np.log(1.12);x[16]=np.log(1.2);m.set_dimensions(x)
+    c=CHAINS[1]
+    assert np.isclose(np.linalg.norm(m.rest_j_np[c[1]]-m.rest_j_np[c[0]])/np.linalg.norm(base_j[c[1]]-base_j[c[0]]),1.12,atol=1e-5)
+    assert np.allclose(m.rest_j_np[[CHAINS[0][0],CHAINS[2][0]]],base_j[[CHAINS[0][0],CHAINS[2][0]]])
+    fixed=m.rest_np.copy();dimensions=m.dimension_parameters.copy();geometry_version=m.shape_version
+    weights=m.model.weights.cpu().numpy();ids=np.flatnonzero(weights[:,c[-1]]>.9999)
+    assert len(ids)>2
+    for angle in (0,.2,.5,.8):
+        q=np.zeros((15,3),np.float32);q[c[0]-1,2]=angle;q[c[1]-1,2]=angle
+        with torch.no_grad():v,j,r,o=m.decode(torch.tensor(q[None],device=m.device),torch.eye(3,device=m.device)[None])
+        expected=j[0,c[-1]].cpu().numpy()+(fixed[ids]-m.rest_j_np[c[-1]])@r[0,c[-1]].cpu().numpy().T
+        assert np.max(np.linalg.norm(v[0,ids].cpu().numpy()-expected,axis=1))<1e-5
+        assert np.array_equal(m.rest_np,fixed) and np.array_equal(m.dimension_parameters,dimensions) and m.shape_version==geometry_version
+    # The retired patch and fingertip displacement entries cannot change fixed geometry.
+    shape=m.shape.copy();shape[16:]=.001;m.set_shape(shape)
+    assert np.allclose(m.rest_np,fixed)
+
+
+def test_sensor_supported_pinch_is_pose_only_and_requires_bilateral_tactile():
+    m=ManoSurface(DEFAULT_MANO);m.set_dimensions(np.zeros(20))
+    m.build_binding({'assignments':default_mapping('left'),'version':'test','confirmed':PATCH_IDS.copy()})
+    q=np.zeros((15,3),np.float32);root=np.eye(3,dtype=np.float32)
+    with torch.no_grad():_,j,r,_=m.decode(torch.tensor(q[None],device=m.device),torch.eye(3,device=m.device)[None])
+    rotations=r[0,[c[-1] for c in CHAINS]].cpu().numpy()
+    observed=j[0,[c[-1] for c in CHAINS]].cpu().numpy()+(rotations@m.sensor_offsets()[:,:,None]).squeeze(-1)
+    rest=m.rest_np.copy();joints=m.rest_j_np.copy();dims=m.dimension_parameters.copy();version=m.shape_version
+    for finger in range(1,5):
+        near=observed.copy();near[finger]=near[0]+np.array([.02,0,0])
+        frame={'contact':{'ready':False,'patches':[{'id':'thumb_distal','contact':True},{'id':('index','middle','ring','pinky')[finger-1]+'_distal','contact':True}]}}
+        assert np.array_equal(m.fit_sensor_supported_pinch(q,root,near,rotations,frame),q)
+        assert not m.retarget_contacts
+        frame['contact']['ready']=True;frame['contact']['patches'][1]['contact']=False
+        assert np.array_equal(m.fit_sensor_supported_pinch(q,root,near,rotations,frame),q)
+        assert not m.retarget_contacts
+        frame['contact']['patches'][1]['contact']=True
+        solved=m.fit_sensor_supported_pinch(q,root,near,rotations,frame)
+        assert m.retarget_contacts and m.retarget_contacts[0]['applied']
+        assert m.retarget_contacts[0]['pad_gap_mm']<m.retarget_contacts[0]['pad_gap_before_mm']
+        assert not m.retarget_contacts[0]['force_feedback'] and not m.retarget_contacts[0]['geometry_changed']
+        untouched=[c-1 for f,chain in enumerate(CHAINS) if f not in (0,finger) for c in chain]
+        assert np.array_equal(solved[untouched],q[untouched])
+        assert np.array_equal(m.rest_np,rest) and np.array_equal(m.rest_j_np,joints)
+        assert np.array_equal(m.dimension_parameters,dims) and m.shape_version==version
+
+
+def test_calibration_acceptance_requires_real_contact_observations_and_allows_small_overlap():
+    from moxian_web.mano_fit import candidate_validation
+    geo={'noncontact_penetration_m':.003,'contact_gap_m':.004,'contact_stages':['pinch_'+f for f in ('index','middle','ring','pinky')]}
+    assert candidate_validation(10.,8.,geo,.005)==(True,True)
+    # Reduced position error cannot legitimize missing contact data or a
+    # fabricated default distance; all four guided pairs must be evaluated.
+    assert not candidate_validation(10.,8.,{**geo,'contact_stages':[]},.005)[0]
+    assert not candidate_validation(10.,8.,{**geo,'contact_gap_m':.04},.005)[0]
+    assert candidate_validation(10.,8.,{**geo,'noncontact_penetration_m':.008},.005)[0]
+    assert not candidate_validation(10.,11.,geo,.005)[0]
+    assert not candidate_validation(10.,float('nan'),geo,.005)[0]
+
+
+def test_runtime_pose_is_identical_when_tactile_flags_change():
+    from unittest.mock import patch
+    models=[]
+    for _ in range(2):
+        m=ManoSurface(DEFAULT_MANO);m.set_dimensions(np.zeros(20));m.bone_reference=np.array([[.03,.02,.02]]*5)
+        frame,p,r=_emf_observation(m,np.zeros((15,3),np.float32),1000,np.eye(3),np.zeros(3),np.tile(np.eye(3),(5,1,1)))
+        m.last_frame=frame;m.install_flat_reference({'pose':'flat_open','hand_side':'left','observation_space':'raw_emf_sensor','positions_local':p.tolist(),'rotations_local':r.reshape(5,9).tolist()})
+        models.append(m)
+    # A near-pinch input is deliberately identical. Only the tactile bit changes.
+    with patch.object(ManoSurface,'fit_sensor_supported_pinch',side_effect=AssertionError('Runtime must not call contact closure')):
+        for i,level in enumerate([0,.2,.4,.6,.6,.4,.2,0]):
+            a=np.zeros((15,3));a[:12:3,0]=level;a[1:12:3,0]=level
+            b=models[0].anatomy.basis;q=Rotation.from_matrix(b@Rotation.from_euler('XYZ',a).as_matrix()@b.swapaxes(-2,-1)).as_rotvec().astype(np.float32)
+            frame,_,_=_emf_observation(models[0],q,1000+i*50,np.eye(3),np.zeros(3),np.tile(np.eye(3),(5,1,1)))
+            outputs=[]
+            for k,m in enumerate(models):
+                f=copy.deepcopy(frame);f['contact']={'ready':True,'patches':[{'id':p,'contact':bool(k)} for p in PATCH_IDS]}
+                outputs.append(m.track(f,steps=1)[0]);assert not m.retarget_contacts
+            assert np.array_equal(outputs[0],outputs[1])
+
+
+def test_known_capture_gestures_constrain_training_bends_without_resizing():
+    from moxian_web.mano_fit import constrain_capture_pose_
+    m=ManoSurface(DEFAULT_MANO);m.set_dimensions(np.zeros(20));rest=m.rest_np.copy()
+    a=np.zeros((3,15,3));a[:,:,0]=.7;b=m.anatomy.basis
+    q=torch.tensor(Rotation.from_matrix((b@Rotation.from_euler('XYZ',a.reshape(-1,3)).as_matrix().reshape(3,15,3,3)@b.swapaxes(-2,-1)).reshape(-1,3,3)).as_rotvec().reshape(3,15,3),device=m.device,dtype=torch.float32)
+    constrain_capture_pose_(m,q,[{'stage':s} for s in ('open','mcp90','hook')])
+    out=m.anatomy.angles(q.cpu().numpy())
+    assert np.abs(out[0,:12,0]).max()<=np.deg2rad(5.01)
+    assert np.min(out[1,:12:3,0])>=np.deg2rad(74.99)
+    assert np.abs(out[1,[1,2,4,5,7,8,10,11],0]).max()<=np.deg2rad(7.01)
+    assert np.max(out[2,:12:3,0])<=np.deg2rad(8.01)
+    assert np.array_equal(m.rest_np,rest)
+
+
+def test_emf_only_cannot_identify_radial_or_surface_tip_length_scales():
+    m=ManoSurface(DEFAULT_MANO);m.set_dimensions(np.zeros(20));m.flat_reference={'reference_id':'unit'}
+    m.sensor_joint_position=.6*(m.tip_anchors-m.rest_j_np[[c[-1] for c in CHAINS]])
+    q=torch.zeros((1,15,3),device=m.device);root=torch.eye(3,device=m.device)[None]
+    def sensors():
+        with torch.no_grad():_,j,r,_=m.decode(q,root)
+        return j[0,[c[-1] for c in CHAINS]].cpu().numpy()+(r[0,[c[-1] for c in CHAINS]].cpu().numpy()@m.sensor_offsets()[:,:,None]).squeeze(-1)
+    base=sensors();summary=m.dimension_summary();x=np.zeros(20);x[2:15:3]=np.log(1.1);x[15:]=np.log(1.1);m.set_dimensions(x)
+    assert np.allclose(sensors(),base,atol=1e-8)
+    changed=m.dimension_summary();assert changed['index']['surface_length_mm']>summary['index']['surface_length_mm']
+    assert changed['index']['proximal_width_mm']>summary['index']['proximal_width_mm']*1.05
+    assert 5<changed['index']['proximal_width_mm']<50
+
+
+def test_surface_distance_beyond_four_cm_is_not_a_missing_query_sentinel():
+    import trimesh
+    m=ManoSurface(DEFAULT_MANO);m.set_dimensions(np.zeros(20));m.build_binding({'assignments':default_mapping('left'),'version':'far','confirmed':PATCH_IDS.copy()})
+    with torch.no_grad():v,j,r,_=m.decode(torch.zeros((1,15,3),device=m.device),torch.eye(3,device=m.device)[None])
+    v=v[0].cpu().numpy();g=CollisionSurface(m).query(v,j[0].cpu().numpy(),r[0].cpu().numpy())
+    sid=int(np.flatnonzero(np.array(m.mapping['assignments'])==0)[0]);target=PATCH_IDS.index('pinky_distal')
+    mesh=trimesh.Trimesh(vertices=v,faces=m.faces[m.patch_faces[target]],process=False)
+    _,distance,_=trimesh.proximity.closest_point_naive(mesh,g['points'][sid:sid+1])
+    assert distance[0]>.04
+    assert np.isclose(abs(g['gap'][sid,target]),distance[0],atol=1e-5)
+
+
+def test_together_side_strips_cover_adjacent_fingers_and_follow_new_geometry():
+    if not DEFAULT_MANO.exists() or not torch.cuda.is_available():pytest.skip('Local MANO/CUDA required')
+    m=ManoSurface(DEFAULT_MANO);m.dimension_parameters=np.zeros(20);m.set_shape(np.zeros(41))
+    regions=m.together_regions()
+    assert len(regions)==9 and {(r['a'],r['b']) for r in regions}=={(1,2),(2,3),(3,4)}
+    for r in regions:
+        assert len(r['ids_a'])==len(r['ids_b'])==8
+        assert set(m.labels[r['ids_a']])<=set(CHAINS[r['a']])
+        assert set(m.labels[r['ids_b']])<=set(CHAINS[r['b']])
+    version=m.shape_version;dims=m.dimension_parameters.copy();dims[16]=np.log(1.15);m.set_dimensions(dims)
+    assert m.shape_version!=version and m.together_regions() is not regions
+    q=torch.zeros((1,15,3),device=m.device,requires_grad=True)
+    v,*_=m.decode(q,torch.eye(3,device=m.device)[None])
+    losses=[torch.cdist(v[:,r['ids_a']],v[:,r['ids_b']]).amin() for r in m.together_regions()]
+    torch.stack(losses).sum().backward()
+    assert torch.isfinite(q.grad).all() and q.grad.abs().sum()>0

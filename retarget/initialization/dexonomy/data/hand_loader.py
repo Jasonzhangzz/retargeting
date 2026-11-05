@@ -18,7 +18,7 @@ from retarget.initialization.dexonomy.util.np_util import (
 
 
 class HandTemplateLoader:
-    def _load_data(self, vis_env: MuJoCo_VisEnv, data_path: str):
+    def _load_data(self, vis_env, data_path: str):
         hand_data = np.load(data_path, allow_pickle=True).item()
         hand_data["grasp_qpos"] = hand_data["grasp_qpos"].squeeze()
         xmat, xpos = vis_env.forward_kinematics(hand_data["grasp_qpos"][7:])

@@ -5,7 +5,7 @@ import sys,json
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
 import torch,warp as wp,mujoco,numpy as np
 from retarget.env.grasp.mano_solver import ManoDecoder
-from retarget.env.grasp.mano_adapter import ManoCollisionGeometry
+from retarget.env.grasp.mano_collision_geometry import ManoCollisionGeometry
 from retarget.initialization.dexonomy.util.torch_util import torch_matrix_to_quaternion
 
 device=sys.argv[1] if len(sys.argv)>1 else 'cuda:0'

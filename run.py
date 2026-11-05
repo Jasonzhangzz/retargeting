@@ -21,14 +21,7 @@ def main():
 
         return run(config)
     if config.solver.type == "graspadmm":
-        module = importlib.import_module("retarget.env.grasp.grasp_admm_runner")
-    elif config.solver.type == "dexforge":
-        from retarget.dynamics.dexforge_upstream import require_environment
-
-        require_environment()
-        module = importlib.import_module(
-            "retarget.env.humanoid.dexforge_runner"
-        )
+        module = importlib.import_module("retarget.solver.graspadmm")
     else:
         module = importlib.import_module(f"retarget.env.{config.task['type']}.runner")
     module.validate(config)

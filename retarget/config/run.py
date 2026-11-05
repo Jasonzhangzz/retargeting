@@ -32,6 +32,7 @@ class Config:
             mode=self.mode,
             task=self.task,
             solver=asdict(self.solver),
+            algorithm_parameters=asdict(self.solver.parameters),
             environment=self.environment,
             output=self.output,
             visualization=self.visualization,
@@ -98,7 +99,9 @@ def load(path):
     if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
         raise ValueError("seed must be a nonnegative integer")
     environment = raw.get("environment", {}).copy()
-    solver = Settings(**raw.get("solver", {}))
+    solver_options=raw.get('solver',{})
+    if set(solver_options)-{'type'}:raise ValueError('solver accepts only type; algorithm parameters use the canonical defaults')
+    solver = Settings(**solver_options)
     if mode == "solve" and solver.type == "graspadmm":
         if task.get("type") != "grasp":
             raise ValueError("solver.type: graspadmm requires task.type: grasp")
@@ -106,18 +109,8 @@ def load(path):
             raise ValueError("The GraspADMM synthesis adapter requires hand_model: wuji2")
     if mode == "solve" and ((solver.type == "graspadmm") != (environment.get("dynamics") == "graspadmm")):
         raise ValueError("solver.type: graspadmm and environment.dynamics: graspadmm must be used together")
-    if mode == "solve" and solver.type == "scsp" and task.get("type") != "humanoid":
-        raise ValueError("solver.type: scsp requires task.type: humanoid")
-    if mode == "solve" and solver.type == "dexforge" and task.get("type") not in ("humanoid", "grasp"):
-        raise ValueError("solver.type: dexforge requires task.type: humanoid or grasp")
-    if mode == "solve" and ((solver.type == "dexforge") != (environment.get("dynamics") == "dexforge")):
-        raise ValueError("solver.type: dexforge and environment.dynamics: dexforge must be used together")
-    if environment.get("dexforge") is not None and environment.get("dynamics") != "dexforge":
-        raise ValueError("environment.dexforge requires dynamics: dexforge")
     if mode == "solve" and task.get("type") == "grasp" and solver.type != "graspadmm":
-        raise ValueError("Grasp synthesis supports GraspADMM here; use scripts/retarget_dexonomy_mano.py for CEM plus batched QP")
-    if any(environment.get(key) is not None for key in ("spider", "template_mppi")):
-        raise ValueError("Legacy grasp MPPI backends have been removed")
+        raise ValueError("Grasp synthesis supports GraspADMM here; use scripts/solve_mano_comfree.py for current MANO patch CEM")
     return Config(
         path,
         mode,

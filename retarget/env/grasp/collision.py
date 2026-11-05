@@ -36,7 +36,7 @@ def refinement_model(mesh_path, settings=None):
     """Same official hand and actual object-local mesh; no recentering/scaling."""
     tree = hand_tree("wuji2")
     if settings is None:
-        from .pose_objective import PoseObjectiveSettings
+        from .contact_geometry import PoseObjectiveSettings
 
         settings = PoseObjectiveSettings()
     tree.find("option").set("gravity", "0 0 0")

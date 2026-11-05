@@ -17,7 +17,7 @@ def scan(root=None):
         batch = manifest.parent
         try:
             for case in json.loads(manifest.read_text())["cases"]:
-                if case.get("method") not in ("cem", "mppi", "scsp", "dexforge", "graspadmm"):
+                if case.get("method") not in ("cem", "graspadmm"):
                     continue
                 if case.get("task") == "grasp" and case.get("method") not in ("cem", "graspadmm"):
                     continue
@@ -105,25 +105,10 @@ def final_summary(summary):
                     lines.append('指定接触区域仅计圆柱侧面贴合。')
         else:
             lines.append(f"模板点贴合率：{diagnostics['coverage']:.1%}")
-    if "projected_closure" in diagnostics:
-        lines.append("投影摩擦锥闭合：" + ("通过" if diagnostics["projected_closure"] else "未证实"))
     if diagnostics.get('articulation_policy'):
         error=diagnostics.get('max_finger_order_violation_m',0.)
         lines.append('手指顺序约束：' + ('通过' if error <= 1.e-5 else '未通过'))
-    if "torsional_friction_m" in diagnostics:
-        coefficient = diagnostics["torsional_friction_m"]
-        lines.append(f"扭转摩擦：开启（ComFree 投影平衡，系数 {coefficient:g} m）" if coefficient > 0 else "扭转摩擦：关闭")
-    if summary.get("success_criterion") in ("projected_soft_contact_closure_v1", "projected_soft_contact_closure_v2"):
-        lines.append("软接触闭合验收：" + ("通过" if summary.get("task_success") else "未通过"))
-        if "max_hand_object_penetration_m" in diagnostics:
-            label = "软阈值" if summary["success_criterion"].endswith("v2") else "允许"
-            lines.append(f"手物压入：{diagnostics['max_hand_object_penetration_m'] * 1000:.3f} mm"
-                         f" / {label} {diagnostics['hand_object_allowance_m'] * 1000:.3f} mm")
-        if "max_hand_hand_penetration_m" in diagnostics:
-            lines.append(f"手部自穿透：{diagnostics['max_hand_hand_penetration_m'] * 1000:.3f} mm")
-    elif summary.get("success_criterion") == "projected_template_geometry_v1":
-        lines.append("几何验收：" + ("通过" if summary.get("task_success") else "未通过"))
-    elif summary.get("native_evaluated") or "task_success" in summary:
+    if summary.get("native_evaluated") or "task_success" in summary:
         lines.append("原生物理评测：" + ("通过" if summary.get("task_success") else "未通过")
                      if summary.get("native_evaluated", True) else "原生物理评测：未运行")
     if summary.get("optimization_seconds") is not None:
@@ -346,13 +331,13 @@ def web(config):
     @server.on_client_connect
     def connect(client):
         client.scene.set_up_direction("+z")
-        method = client.gui.add_dropdown("方法", ("全部", "cem", "mppi", "scsp", "dexforge", "graspadmm"), visible=not final_only)
+        method = client.gui.add_dropdown("方法", ("全部", "cem", "graspadmm"), visible=not final_only)
         task = client.gui.add_dropdown("任务", ("全部", "grasp", "dex", "humanoid"),
             initial_value=config.visualization.get("task", "全部"), visible=not final_only)
         hand = client.gui.add_dropdown("手型", ("全部", "wuji1", "wuji2"),
             initial_value=config.visualization.get("hand", "全部"), visible=not final_only)
         grasp = client.gui.add_dropdown("抓型", ("全部",))
-        stage = client.gui.add_dropdown("阶段", ("全部", "接触建立", "静止保持", "MPPI轨迹", "CA失败预览", "失败信息", "GraspADMM评测"), visible=not final_only)
+        stage = client.gui.add_dropdown("阶段", ("全部", "接触建立", "静止保持", "失败信息", "GraspADMM评测"), visible=not final_only)
         size = client.gui.add_slider("尺寸倍率", min=.5, max=1.5, step=.25,
             initial_value=1., hint="拖动选择尺寸；提供加密数据时连续插值预览。")
         all_sizes = client.gui.add_checkbox("全部尺寸", initial_value=False)
@@ -630,14 +615,6 @@ def web(config):
                                 points=local[names == name], colors=(255,120,30), point_size=.003,
                                 visible=show_contacts.value)
                             state['points'].append((body, handle, 'contact'))
-                    projection_file = template_file.with_name("projection_force_closure.json")
-                    if projection_file.is_file() or 'cached_case' in row:
-                        projection = get_snapshot(row['batch']).diagnostics(int(row['cached_case'])) if 'cached_case' in row else json.loads(projection_file.read_text())
-                        handle = client.scene.add_point_cloud('/display/guidance/projections',
-                            points=np.asarray(projection["projected_points"], dtype=np.float32),
-                            colors=(40,160,255), point_size=.002, visible=show_contacts.value)
-                        state['points'].append((0, handle, 'contact'))
-                        if dense_grid is not None:state['projection_handle'] = handle
                 if row.get('seed_source'):
                     with np.load(Path(row['seed_source'])/'spider_seed.npz',allow_pickle=False) as seed:
                         bodies=seed['palm_bodies'];local=seed['palm_local']
@@ -659,9 +636,7 @@ def web(config):
                 play.disabled = len(qs) < 2
                 play.label = "播放 rollout" if len(qs) > 1 else "无 rollout 可播放"
                 playback_status.content = (f"时长 {times[-1]-times[0]:.3f} s，点击播放完整轨迹（0.25 倍速）。"
-                    if len(qs) > 1 else ("历史 CA 失败提议，仅展示已保存姿态。" if row.get('method')=='contactaware'
-                                       else "求解异常，仅展示已保存的有限初值。") if row.get("has_hand_pose", True)
-                    else "未保存手部姿态：仅展示该尺寸物体和错误信息。")
+                    if len(qs)>1 else ("仅展示已保存姿态。" if len(qs)==1 else "未保存手部姿态：仅展示物体和错误信息。"))
                 p = row.get("primitive")
                 if row.get('time_kind')=='optimization_iteration':
                     playback_status.content=f'固定物体的接触建立：{len(qs)} 个优化记录；橙色为原生几何接触点。'

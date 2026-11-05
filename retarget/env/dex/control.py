@@ -1,4 +1,4 @@
-"""Control-knot operations shared by ForceAware rollout paths."""
+'Control-knot operations shared by CEM rollout paths.'
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from __future__ import annotations
 import numpy as np
 
 
-SMOOTHING_PROFILE = "forceaware_si_v1"
+SMOOTHING_PROFILE = "control_delta_v1"
 CONTROL_VELOCITY_BASE_POSITION_SCALE_M_S = 10.0
 CONTROL_VELOCITY_BASE_ROTATION_SCALE_RAD_S = 3.0
 CONTROL_VELOCITY_FINGER_SCALE_RAD_S = 10.0

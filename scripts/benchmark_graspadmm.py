@@ -66,7 +66,7 @@ def direct_call(source, data, scene, directory):
     import numpy as np
     from retarget.env.grasp.graspadmm_optimizer import operation_config
 
-    cfg = operation_config(scene, directory, dict(step=50, substep=10))
+    cfg = operation_config(scene, directory)
     path = Path(cfg.init_dir) / "candidate.npy"
     path.parent.mkdir(parents=True, exist_ok=True)
     np.save(path, data)

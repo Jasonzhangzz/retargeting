@@ -32,7 +32,7 @@ print('scanned_shadow','types',len(chosen),'seconds',round(time.time()-start),fl
 # Decode only the small final selection using the restricted NumPy loader.
 import sys
 sys.path.insert(0,str(ROOT))
-from retarget.env.grasp.dexonomy_replay import load_record,write_json
+from retarget.env.grasp.dexonomy_io import load_record,write_json
 needed_scenes=set();needed_objects=set();selected=[]
 for typ,objects in chosen.items():
  for obj,files in objects.items():

@@ -16,13 +16,12 @@ def serve(root,host,port):
     def connect(client):
         client.scene.set_up_direction('+z');gui=client.gui
         gui.configure_theme(control_layout='collapsible',control_width='large')
-        gui.add_markdown(f'# {model_label} · GraspADMM\n{len(manifest['scenes'])} 个物体—尺度组合，{len(entries)} 条实际输入。{model_label} / Clarabel / MuJoCo；点击切换查看初始化与最终状态。')
+        gui.add_markdown(f'# {model_label} · GraspADMM\n{len(manifest["scenes"])} 个物体—尺度组合，{len(entries)} 条实际输入。{model_label} / Clarabel / MuJoCo；点击切换查看初始化与最终状态。')
         summary=manifest.get('summary')
-        if summary:gui.add_markdown(f"手点物面投影闭合 **{summary['projected_hand_passed']}/{len(entries)}**；目标点闭合 **{summary['projected_targets_passed']}/{len(entries)}**。目标点闭合不代表手已经贴合。")
         if summary and summary.get('penetration_tolerances_m'):
             gui.add_markdown('此配置允许手物和自穿透各 **2 mm**。原生 GSR 与新增六扭矩测试分开显示。')
         extra_categories=['六扭矩通过','六扭矩失败','碰撞超出2mm'] if any(r.get('wrench') for r in entries) else []
-        category=gui.add_dropdown('类别',options=['全部','原生 GSR 通过','原生 GSR 失败','投影闭合通过','投影闭合失败','联合覆盖失败',*extra_categories])
+        category=gui.add_dropdown('类别',options=['全部','原生 GSR 通过','原生 GSR 失败','联合覆盖失败',*extra_categories])
         scene=gui.add_dropdown('物体场景',options=['全部',*manifest['scenes']])
         choice=gui.add_dropdown('样本',options=['加载中'])
         if source_seeded:gui.add_markdown(f"来源：**{manifest['source_selected']} 条 Shadow GSR 成功抓姿**，逐条映射到 MANO。")
@@ -83,7 +82,7 @@ def serve(root,host,port):
                     if s=='final' and show_targets.value and f'{i}_target_points' in poses:
                         target=poses[f'{i}_target_points']+off;points(prefix+'/targets',target,(20,235,230));lines(prefix+'/target_gaps',np.stack((hp,target),1),(20,235,230))
             d=r.get('diagnostics') or {};yn=lambda key:'通过' if d.get(key) else ('未通过' if key in d else '未检测')
-            details.content=f"**#{i:03d} · {r['scene']}**\n\n以下指标均对应 ADMM 最终姿态。\n\n原生输出：{'有' if r['native_operation_pass'] else '被拒绝'}；六方向 GSR：{'通过' if r['native_gsr_pass'] else '未通过'}。\n\n手点投影闭合：**{yn('projected_hand')}**；物面目标闭合：{yn('projected_targets')}；联合槽覆盖：{d.get('slot_joint_coverage',float('nan')):.0%}。\n\n手物穿透 {d.get('hand_object_depth_m',float('nan'))*1000:.3f} mm；自穿透 {d.get('self_depth_m',float('nan'))*1000:.3f} mm。\n\n原生阶段：`{reason}`\n\n失败姿态显示最后取得的实际最终状态。缺失结果不会用初值替代。"
+            details.content=f"**#{i:03d} · {r['scene']}**\n\n以下指标均对应 ADMM 最终姿态。\n\n原生输出：{'有' if r['native_operation_pass'] else '被拒绝'}；六方向 GSR：{'通过' if r['native_gsr_pass'] else '未通过'}。\n\n联合槽覆盖：{d.get('slot_joint_coverage',float('nan')):.0%}。\n\n手物穿透 {d.get('hand_object_depth_m',float('nan'))*1000:.3f} mm；自穿透 {d.get('self_depth_m',float('nan'))*1000:.3f} mm。\n\n原生阶段：`{reason}`\n\n失败姿态显示最后取得的实际最终状态。缺失结果不会用初值替代。"
             if r.get('source_shadow'):
                 source=r['source_shadow'];details.content+=f"\n\nShadow 来源 **#{source['index']}：GSR 通过**。映射后接触点相对源位置最大误差 **{source['max_mapping_error_m']*1000:.3f} mm**。\n\n初值经跨模型 IK 映射；其几何可行性另行评估。"
             if r.get('wrench'):
@@ -95,7 +94,7 @@ def serve(root,host,port):
         def refresh(_=None):
             def accept(r):
                 d=r.get('diagnostics') or {};c=category.value
-                return (scene.value=='全部' or r['scene']==scene.value) and (c=='全部' or c=='原生 GSR 通过' and r['native_gsr_pass'] or c=='原生 GSR 失败' and not r['native_gsr_pass'] or c=='投影闭合通过' and d.get('projected_hand') is True or c=='投影闭合失败' and d.get('projected_hand') is False or c=='联合覆盖失败' and d.get('slot_joint_pass') is False or c=='六扭矩通过' and (r.get('wrench') or {}).get('torque_passed') is True or c=='六扭矩失败' and (r.get('wrench') or {}).get('torque_passed',False) is False or c=='碰撞超出2mm' and d.get('tolerated_collision_pass') is False)
+                return (scene.value=='全部' or r['scene']==scene.value) and (c=='全部' or c=='原生 GSR 通过' and r['native_gsr_pass'] or c=='原生 GSR 失败' and not r['native_gsr_pass'] or c=='联合覆盖失败' and d.get('slot_joint_pass') is False or c=='六扭矩通过' and (r.get('wrench') or {}).get('torque_passed') is True or c=='六扭矩失败' and (r.get('wrench') or {}).get('torque_passed',False) is False or c=='碰撞超出2mm' and d.get('tolerated_collision_pass') is False)
             state['rows']=[r for r in entries if accept(r)]
             choice.options=[f"{j} | #{r['index']:03d} · {r['scene']} · {'GSR ✓' if r['native_gsr_pass'] else 'GSR ×'}" for j,r in enumerate(state['rows'])] or ['无匹配样本']
             choice.value=choice.options[0]

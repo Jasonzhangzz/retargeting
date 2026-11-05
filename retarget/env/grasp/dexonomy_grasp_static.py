@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 import copy,gzip,hashlib,io,json,os,pickle,tarfile,time,traceback,warnings
 import numpy as np
-from .dexonomy_replay import ROOT,NumpyUnpickler,load_record,write_json,sha,relative_pose,make_env
+from .dexonomy_io import ROOT,NumpyUnpickler,load_record,write_json,sha,relative_pose,make_env
 
 STAGES=('grasp',)
 GRASP_STAGE=0

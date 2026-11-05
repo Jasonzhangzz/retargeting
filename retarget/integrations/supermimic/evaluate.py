@@ -30,11 +30,7 @@ def exact_closure(points, normals, friction, center, radius):
     if len(points) < 3:
         return dict(success=False, reason="fewer_than_three_loaded_contacts")
     import clarabel
-    from retarget.config.run import ROOT
-    package = str(ROOT / "third_party/DexForge/contactaware")
-    if package not in sys.path:
-        sys.path.insert(0, package)
-    from contactaware.contact.force_margin import solve_force_margin
+    from .force_margin import solve_force_margin
     status = []
     class Solver:
         def __init__(self, *args):
@@ -82,9 +78,7 @@ def evaluate(env, actor, *, split, repeats, output):
     env.force_scale = 1.
     trace_cases = set()
     # Pre-import before starting worker threads; all QPs use independent solvers.
-    from retarget.config.run import ROOT
-    sys.path.insert(0, str(ROOT / "third_party/DexForge/contactaware"))
-    import contactaware.contact.force_margin  # noqa: F401
+    from . import force_margin
     details = (output / "directions.jsonl").open("w")
     try:
         with ThreadPoolExecutor(max_workers=8) as workers:

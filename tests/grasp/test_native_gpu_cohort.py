@@ -19,7 +19,7 @@ def test_fixed_cohort_preserves_every_input_once_and_reuses_only_committed_rows(
     (source/'initialization.json').write_text(json.dumps(dict(inputs=inputs)))
     first=tmp_path/'first';first.mkdir()
     (first/'inputs.json').write_text(json.dumps([dict(input=r['path'],sha256=r['sha256']) for r in inputs[:3]]))
-    (first/'solve_receipt.json').write_text(json.dumps(dict(completed=3,finite=3,native_output=2,projected_closure=1)))
+    (first/'solve_receipt.json').write_text(json.dumps(dict(completed=3,finite=3,native_output=2)))
     (first/'MANIFEST.json').write_text(json.dumps(dict(source_sha256={})))
     np.savez(first/'poses.npz',final_qpos=np.zeros((3,27)))
     root=tmp_path/'cohort';root.mkdir()

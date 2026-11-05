@@ -1,21 +1,13 @@
-# MANO 批量接口
+# 当前 MANO patch CEM
 
-MANO 提供模型、几何和批量接口。几何评分调用从仓库原有 `evaluate` 提取的 `TemplatePoseObjective.score_geometry`，原几何公式和权重保留。闭合部分按用户授权改用历史 `4cc156c3^:retarget/contact_solvers.py:wrench_qp`：四条滑动摩擦射线、每接触点 10 N 上限、总压力至少 1 N，96 步 FISTA，正则项 1e-7。NumPy 原函数仅保留作测试对照；正式路径为 Torch 和 Warp 的设备适配，已对齐原函数数值。
+入口为 `scripts/solve_mano_comfree.py`（固定输入/单分片）与 `scripts/retarget_mano_comfree_campaign.py`（多抓型、多卡）。两者只允许 `patch_consistent_v5`、五步末速度目标和当前 CEM。初值来自 Shadow FK 与 MANO 骨架 bounded LM，也可精修保存的 MANO 姿态；物体模板目标始终来自原 Shadow 接触映射。
 
-同一 QP 分别处理零载荷和六个 wrench 轴的正负载荷。检查射线权重非负、单接触压力上限、总压力下限和平衡残差后，才标记离散摩擦锥下的数值投影力闭合。采用现有的 0.05 归一化残差阈值；闭合裕度为测试力乘以 `(1/sqrt(6) - 最大残差)`。它不调用 ComFree，不包含扭转摩擦，也不证明动态抓取成功。
+`mano_patch_consistent.PatchConsistentAdapter` 使用同一 patch witness 计算目标和验收：手面 patch 在中性模板点周围 10 mm，且不跨解剖区域；实际 patch 表面间距 ≤2 mm，同一物面 witness 距固定物体目标 ≤5 mm。要求整体覆盖 ≥80%，每个必要手指至少一个合格槽。掌部参与整体覆盖。
 
-采样调用 `retarget/solver/cem.py`。单条路径保持原样；批量路径沿 batch 维独立运行同样的候选采样、退火、稳定排序、精英加权均值和最优候选保留规则。第 i 行使用 seed+i，等价测试对照逐条原版调用。MANO 使用 128 个候选、24 轮；精英比例、温度和最终噪声比例沿用原版 CEM 默认值。无自定义协方差更新或 CEM 早停。
+手物与自穿透均允许 5 mm，超限继续惩罚。实际碰撞接触输入 `SpringHistoryRollout`，每个候选重置切向形变历史，在五步响应内积累并做库仑回映；默认每步 10 ms、四个子步、最多八次阻尼 Newton。Warp 与 Torch 是同一接触模型的执行/数值对照后端，不是两种抓取目标。
 
-初始化沿用仓库 MANO 的掌部对齐和 15 步 LM 骨架 IK。最终目标不包含此前的骨架、接触对应、信赖域等自定义加权组合。
+默认末线速度 ≤0.1 m/s、角速度 ≤2 rad/s，同时满足既有无接触参考改善条件。该判据表示短时近似稳定性，不能当作所有扰动下的严格力闭合证明。
 
-四卡各一个 worker，pose batch 为 2048，候选几何按 2048 个状态分块。`scripts/pack_dexonomy_batches.py` 按抓取类型跨原始分片合批，保留原始来源和顺序，不增加或重复 pose；上游完成后的尾批可小于 2048。
+唯一 CEM 实现在 `retarget/solver/cem.py`：128 候选 ×24 轮，精英加权均值、原变量范围及噪声尺度、逐 pose RNG、联合验收提前停止、可行候选独立保留。`solver.base.solve` 的通用 CEM 接口也委托这一实现；没有第二份旧 CEM 更新代码。LM 仅用于初始化/标定，不是可选的 grasp pose solver。
 
-接触点使用已审核 MANO 三角形及重心坐标，随实际蒙皮变形；物体接触点及法向逐候选重新投影。手物穿透查询完整 778 顶点。自碰撞使用按最大蒙皮权重划分的 16 个骨骼刚性凸碰撞体，排除父子骨骼对，由原有 MuJoCo-Warp 碰撞及穿透提取代码计算。这是碰撞几何近似，不是完整变形皮肤之间的碰撞；模型 XML 随运行保存以供复核。
-
-仅保存最终 wrist/hand pose、21 个关键点、物体位姿/尺度/几何引用、接触点与法向、闭合判定和最终质量指标，不保存优化历史。未通过闭合或几何验收的结果保留失败标记，不当作成功抓取。
-
-运行顺序为输入合批与 MANO 求解；待上游及 MANO 全部正常完成后，才启动 WUJI2。历史无闭合目标的 MANO/WUJI2 输出不作为本轮已完成结果复用。
-
-从输入 pose 到最终 pose 的数值计算使用 GPU：Shadow 模型 FK、掌部 SVD、MANO 解码/IK/CEM、物体投影、QP、碰撞、最终关键点/接触点和局部/世界坐标变换均为 Torch/Warp。WUJI2 初始化保留原掌部/骨骼方向残差，使用已有 bounded_lm 的 GPU 实现；不再调用 SciPy least_squares。文件读取、XML/固定模型资源构建、索引/调度与最终文件编码留在 CPU；NPZ 编解码仍使用 NumPy。
-
-调度采用 `grasp_type_round_robin_v1`：在所有可用 grasp type 间轮询，每轮每类取一个现有 pose batch；不重复抽样，不改变 batch 内来源、初值或随机种子。类型无剩余 batch 时退出轮询。通过 `--resume-from` 校验后复用既有完整分片；已完成结果不重算。不同类型计算耗时不同，因此均匀的是任务领取顺序，不保证同一时刻各类完成数完全相等。
+MANO 解码、FK/IK、patch 查询、穿透、接触响应及优化的数值运算在 GPU；Python 仍负责调度和内核启动，文件编码与固定资产构建可在 CPU。首次加载、图捕获、优化、最终验收和写盘时间分别报告。

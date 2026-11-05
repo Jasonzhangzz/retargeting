@@ -63,8 +63,7 @@ def select_grasp(case_directory, method=None, trajectory=None):
     """Select an actual method output, never an accepted seed or best eval frame.
 
     Static sampling exports its optimized pose separately from the prediction.
-    Dynamic methods contribute the final executed state. Failed MPPI acquisition
-    can still contribute its genuinely optimized final candidate.
+    Trajectory outputs contribute the final executed state.
     """
     directory = Path(case_directory)
     static = directory / "grasp.npz"
@@ -72,25 +71,6 @@ def select_grasp(case_directory, method=None, trajectory=None):
         values = _arrays(static)
         if "qpos" in values:
             return values["qpos"].reshape(-1), dict(kind="optimized_static_grasp", path=str(static))
-    acquisition = directory / "acquisition/acquisition.json"
-    if acquisition.is_file():
-        details = json.loads(acquisition.read_text())
-        if details.get("success") is False and "hand_qpos" in details:
-            return np.asarray(details["hand_qpos"], float), dict(kind="optimized_mppi_acquisition", path=str(acquisition))
-    if method == "contactaware":
-        for path in [directory/"contactaware_reference.json", directory/"contactaware.json", directory/"summary.json"]:
-            if not path.is_file():
-                continue
-            record=json.loads(path.read_text())
-            records=record if isinstance(record,list) else [record]
-            for item in records:
-                if not isinstance(item,dict):
-                    continue
-                diagnostics=item.get("contactaware",item)
-                diagnostics=diagnostics if isinstance(diagnostics,list) else [diagnostics]
-                for value in diagnostics:
-                    if isinstance(value,dict) and "reference_qpos" in value:
-                        return np.asarray(value["reference_qpos"],float),dict(kind="optimized_contactaware_grasp",path=str(path))
     trajectory = Path(trajectory) if trajectory else directory / "trajectory.npz"
     if trajectory.is_file():
         values = _arrays(trajectory)
@@ -99,17 +79,9 @@ def select_grasp(case_directory, method=None, trajectory=None):
             summary_path = directory / "summary.json"
             summary = json.loads(summary_path.read_text()) if summary_path.is_file() else {}
             reason = summary.get("reason", summary.get("failed_stage"))
-            if reason in ("initialization_failed", "contactaware_reference_failed", "no_feasible_candidate"):
+            if reason in ("initialization_failed", "no_feasible_candidate"):
                 raise ValueError(f"No solver output: {reason}")
             return np.asarray(values["qpos"][-1], float), dict(kind="final_executed_state", path=str(trajectory))
-    for filename in ("contactaware_reference.json", "contactaware.json"):
-        path = directory / filename
-        if path.is_file():
-            records = json.loads(path.read_text())
-            records = records if isinstance(records, list) else [records]
-            for record in records:
-                if "reference_qpos" in record:
-                    return np.asarray(record["reference_qpos"], float), dict(kind="optimized_contactaware_grasp", path=str(path))
     raise ValueError(f"No final optimized grasp in {directory}")
 
 

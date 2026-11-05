@@ -1,6 +1,6 @@
-import copy,math,tempfile,unittest
+import copy,math,tempfile,unittest,json
 from pathlib import Path
-from moxian_web.hand_model import pair_mechanics,positive_gain,material_config,aligned_frame,fusion_state,validate_hand_output,HandModelBridge,HandInputSynchronizer,confirmed_contact_points
+from moxian_web.hand_model import pair_mechanics,positive_gain,material_config,aligned_frame,fusion_state,validate_hand_output,HandModelBridge,HandInputSynchronizer,confirmed_contact_points,persist_calibrated_profile
 from moxian_web.hand_capture import HandCapture
 from moxian_web.contact import PATCHES
 
@@ -52,6 +52,38 @@ class HandContractTests(unittest.TestCase):
         for key,value in [('hand_side','right'),('vertices_m',[[1,1,1]]*778),('joints_m',[[0,0,0]]*20)]:
             q=copy.deepcopy(p);q[key]=value
             with self.assertRaises(ValueError):validate_hand_output(q)
+    def test_offline_audit_reports_actual_applied_profile_not_stale_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);home=root/'hand_model'/'device';home.mkdir(parents=True)
+            audit={'dimensions_applied':False,'active_dimensions_mm':{'index':{'surface_length_mm':80}},'capture_complete':True,'candidate_report':{'accepted':False}}
+            (home/'calibration-audit.json').write_text(json.dumps(audit))
+            (home/'candidate.json').write_text(json.dumps({'report':{'accepted':True,'dimensions_after_mm':{'index':{'surface_length_mm':85}}}}))
+            b=HandModelBridge(root,root);state=b.snapshot(False)
+            self.assertFalse(state['ready']);self.assertFalse(state['calibrated']);self.assertTrue(state['fit']['accepted'])
+            self.assertEqual(state['dimensions_mm']['index']['surface_length_mm'],80)
+            (home/'current.json').write_text(json.dumps({'calibrated':True,'revision':'applied','dimension_parameters':[.1]*20,'report':{'dimensions_after_mm':{'index':{'surface_length_mm':85}}}}))
+            b.audit_checked=0;state=b.snapshot(False)
+            self.assertTrue(state['calibrated']);self.assertTrue(state['calibration_process']['dimensions_applied'])
+            self.assertEqual(state['dimensions_mm']['index']['surface_length_mm'],85)
+            self.assertEqual(state['calibration_audit']['applied_revision'],'applied')
+
+    def test_auto_application_persists_calibrated_version_and_restore_backup(self):
+        report=dict(accepted=True,validation_pose_source='runtime_emf_only',contact_validation_passed=True,together_validation_passed=True,approach_validation_passed=True)
+        candidate={'report':report,'dimension_parameters':[.02]*20,'calibrated':False}
+        with tempfile.TemporaryDirectory() as tmp:
+            home=Path(tmp);old={'calibrated':False,'dimension_parameters':[0]*20}
+            applied=persist_calibrated_profile(home,candidate,True,old)
+            self.assertTrue(applied['calibrated']);self.assertTrue(applied['automatic_application']);self.assertTrue(applied['revision'])
+            self.assertEqual(json.loads((home/'current.json').read_text()),applied)
+            self.assertEqual(json.loads((home/'previous.json').read_text()),old)
+            self.assertFalse(candidate['calibrated'])
+            newer=persist_calibrated_profile(home,candidate,True)
+            self.assertNotEqual(newer['revision'],applied['revision'])
+            self.assertEqual(json.loads((home/'previous.json').read_text()),applied)
+            invalid=copy.deepcopy(candidate);invalid['report']['together_validation_passed']=False
+            with self.assertRaises(ValueError):persist_calibrated_profile(home,invalid,True)
+            self.assertEqual(json.loads((home/'current.json').read_text()),newer)
+
     def test_missing_gpu_interpreter_does_not_block_sdk(self):
         with tempfile.TemporaryDirectory() as tmp:
             b=HandModelBridge(Path(tmp),Path(tmp));b.start('test');self.assertEqual(b.snapshot()['status'],'unavailable')

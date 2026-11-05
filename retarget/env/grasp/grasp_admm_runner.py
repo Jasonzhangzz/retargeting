@@ -11,7 +11,7 @@ from retarget.common.results import write_json
 from .graspadmm_source import require_upstream
 from .graspadmm_scene import write_scene, from_upstream_qpos
 from .graspadmm_inputs import fixed_template, initialize_one, seed_trial
-from .graspadmm_optimizer import optimize
+from retarget.solver.graspadmm import solve,NativeProblem
 
 
 def arguments(config):
@@ -27,11 +27,6 @@ def arguments(config):
         radius_scales=config.task.get("radius_scales", [1.]),
         height_scales=config.task.get("height_scales", [1.]),
         primary_shape_only=options.get("primary_shape_only", True),
-        primitive_seed_policy=options.get("primitive_seed_policy", "taxonomy"),
-        contact_center_weight=options.get("contact_center_weight", .25),
-        primitive_reference_root=options.get("primitive_reference_root"),
-        gesture_policy=options.get("gesture_policy", "whole_hand_v1"),
-        gesture_reference_root=options.get("gesture_reference_root"),
         primitive_grid_explicit=any(k in options for k in ("radius", "height")) or
             "radius_scales" in config.task or "height_scales" in config.task,
     )
@@ -54,12 +49,6 @@ def validate(config):
         raise ValueError("GraspADMM currently supports only wuji2")
     if not str(config.device).startswith("cuda"):
         raise ValueError("Native GraspADMM initialization requires a CUDA environment device")
-    if args.primitive_seed_policy not in ("taxonomy", "upstream"):
-        raise ValueError("primitive_seed_policy must be taxonomy or upstream")
-    if args.gesture_policy not in ("whole_hand_v1","legacy"):
-        raise ValueError("gesture_policy must be whole_hand_v1 or legacy")
-    if isinstance(args.contact_center_weight, bool) or not np.isfinite(args.contact_center_weight) or args.contact_center_weight < 0:
-        raise ValueError("contact_center_weight must be finite and nonnegative")
     for key, value in (("scale", args.scale), ("radius", args.radius), ("height", args.height)):
         if value is not None and (not np.isfinite(value) or value <= 0):
             raise ValueError(f"GraspADMM {key} must be finite and positive")
@@ -87,11 +76,6 @@ def run(config, output):
     output.mkdir(parents=True, exist_ok=True)
     torch.set_num_threads(1)
     settings = dict(config.solver.graspadmm)
-    from .graspadmm_gesture import enabled, snapshot_type12
-    if args.gesture_reference_root is None and any(enabled(args,name) and name.startswith("12_") for name in args.templates):
-        from retarget.config.run import ROOT
-        args.gesture_reference_root=str(output/"gesture_references")
-        snapshot_type12(ROOT/"output/graspadmm_mppi_best",Path(args.gesture_reference_root)/"type12.json")
     if config.task.get("object"):
         tasks = [(Path(config.task["object"]), name, None) for name in args.templates]
         skipped = []
@@ -122,41 +106,15 @@ def run(config, output):
             scene = write_scene(case / "native_scene", object_mesh)
             stage = "native_initialization"
             init_started = time.perf_counter()
-            reference, reference_info = None, None
-            gesture_enabled=enabled(args,name)
-            args.primitive_spec=primitive
-            if not gesture_enabled and name.partition("_")[0] == "9" and primitive is not None and primitive["kind"] == "cylinder" and args.primitive_seed_policy == "taxonomy":
-                from .graspadmm_inputs import type9_reference_seed
-                reference, reference_info = type9_reference_seed(
-                    args, name, settings, args.primitive_reference_root or output / "type9_seed_references")
-                initial = copy.deepcopy(reference)
-                initial["scene_path"] = str(scene.scene_path)
-                import trimesh
-                initial["ext_center"] = np.asarray(trimesh.load_mesh(scene.mesh_path, process=False).center_mass, np.float32)
-                init_info = dict(reference_info["initialization"], reference_seed=reference_info)
-            else:
-                initial, init_info = initialize_one(hand, template_q, template, template_path, args, scene,
-                                                  seed=config.seed, settings=settings)
+            initial, init_info = initialize_one(hand, template_q, template, template_path, args, scene,
+                                                seed=config.seed, settings=settings)
             init_info["seconds"] = time.perf_counter() - init_started
             write_json(case / "initialization.json", init_info)
             np.save(case / "initial_grasp_raw.npy", initial)
-            if gesture_enabled:
-                from .graspadmm_gesture_init import initialize_gesture
-                initial,seed_geometry=initialize_gesture(hand,template_q,template,initial,args,scene,case)
-                init_info["whole_hand"]=seed_geometry
-                write_json(case/"initialization.json",init_info)
-            else:
-                from .graspadmm_seed_geometry import adapt_primitive_seed
-                initial, seed_geometry = adapt_primitive_seed(
-                    initial, scene, primitive, name, policy=args.primitive_seed_policy,
-                    reference_seed=reference, reference_info=reference_info)
-            write_json(case / "primitive_seed_geometry.json", seed_geometry)
-            summary.update(primitive_seed_policy=args.primitive_seed_policy,
-                           primitive_seed_geometry=seed_geometry)
             np.save(case / "initial_grasp.npy", initial)
             stage = "native_grasp_optimization"
             solve_started = time.perf_counter()
-            result, status, trace = optimize(initial, scene, case, settings)
+            result, status, trace = solve(NativeProblem(initial, scene, case))
             from .orientation import primitive_contact_diagnostics
             number = name.partition("_")[0]
             if primitive is not None and number.isdigit():
@@ -175,7 +133,7 @@ def run(config, output):
             candidate_info = dict(mesh_path=str(scene.mesh_path), template=name,
                                   required_cbody=initial["required_cbody"], primitive=primitive,
                                   hand="wuji2", method="graspadmm", seed=config.seed)
-            for key in ("contact_regions", "reference_orientation_wxyz", "gesture_reference"):
+            for key in ("contact_regions",):
                 if key in initial:
                     candidate_info[key] = initial[key]
             write_json(case / "native_candidate.json", candidate_info)
@@ -205,12 +163,6 @@ def run(config, output):
             import traceback
             summary.update(reason="native_pipeline_exception", failure_stage=stage,
                            error_type=type(error).__name__, error=str(error))
-            from .graspadmm_gesture_init import InitializationFailure
-            if isinstance(error,InitializationFailure):
-                summary.update(reason="no_valid_initialization",failure_stage="initialization_validity",
-                               gesture_initialization=error.info)
-                init_info["whole_hand"]=error.info
-                write_json(case/"initialization.json",init_info)
             (case / "error.txt").write_text(traceback.format_exc())
             print(f"[graspadmm] failed {name}: {type(error).__name__}: {error}", flush=True)
         summary["total_wall_seconds"] = time.perf_counter() - started

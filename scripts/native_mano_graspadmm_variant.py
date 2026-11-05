@@ -135,9 +135,9 @@ def diagnostics(root,source,production):
     for r in d['rows']:
         r['zero_penetration_pass']=r.get('native_collision_pass',False)
         r['tolerated_collision_pass']=(r.get('valid_final_state',False) and r.get('hand_object_depth_m',np.inf)<=SETTINGS.hand_object_penetration_m and r.get('self_depth_m',np.inf)<=SETTINGS.self_penetration_m)
-        r['diagnostic_joint_pass']=r['projected_hand'] and r['slot_joint_pass'] and r['tolerated_collision_pass'] and r.get('native_contact_count',0)>0
+        r['geometry_joint_pass']=r['slot_joint_pass'] and r['tolerated_collision_pass'] and r.get('native_contact_count',0)>0
     d.update(tolerated_collision_passed=sum(r['tolerated_collision_pass'] for r in d['rows']),
-        diagnostic_joint_passed=sum(r['diagnostic_joint_pass'] for r in d['rows']),penetration_tolerances_m=dict(hand_object=.002,self=.002))
+        geometry_joint_passed=sum(r['geometry_joint_pass'] for r in d['rows']),penetration_tolerances_m=dict(hand_object=.002,self=.002))
     runner.write(root/'diagnostics.json',d)
 
 
@@ -150,8 +150,8 @@ def report(root):
     runner.write(root/'per_input_results.json',entries)
     measured=[r['operation_seconds'] for r in lat['rows'] if not r['warmup']]
     summary=dict(complete=True,model='Upstream rigid MANO (20 joints)',inputs=n,native_outputs=e['native_operation_outputs'],gsr_passed=e['native_gsr_passed'],
-        projected_hand_passed=d['projected_hand_passed'],projected_targets_passed=d['projected_targets_passed'],slot_joint_passed=d['slot_joint_passed'],
-        tolerated_collision_passed=d['tolerated_collision_passed'],diagnostic_joint_passed=d['diagnostic_joint_passed'],
+        slot_joint_passed=d['slot_joint_passed'],
+        tolerated_collision_passed=d['tolerated_collision_passed'],geometry_joint_passed=d['geometry_joint_passed'],
         extended_force_passed=w['force_passed'],torque_passed=w['torque_passed'],combined_wrench_passed=w['combined_passed'],
         latency_median_seconds=statistics.median(measured),throughput_median=statistics.median(r['samples_per_second'] for r in tp['records']))
     runner.write(root/'summary.json',summary)
@@ -162,15 +162,15 @@ def report(root):
         '接触物理响应未通过 margin 或 solref 调软；2 mm 是允许的验收深度，完整深度仍逐条记录。未新增目标函数。','',
         f'16 个固定物体尺度组合，初始化与实际送入样本共 {n} 条；以下通过率分母为全部输入。','',
         '| 指标 | 通过数 |','|---|---:|']
-    labels={'native_outputs':'原 operation 输出','gsr_passed':'原生六方向外力 GSR','projected_hand_passed':'最终手点投影闭合','projected_targets_passed':'ADMM 目标点投影闭合',
-        'slot_joint_passed':'距离/法向联合覆盖≥80%','tolerated_collision_passed':'手物/自穿透均≤2 mm','diagnostic_joint_passed':'闭合+覆盖+2 mm碰撞验收',
+    labels={'native_outputs':'原 operation 输出','gsr_passed':'原生六方向外力 GSR',
+        'slot_joint_passed':'距离/法向联合覆盖≥80%','tolerated_collision_passed':'手物/自穿透均≤2 mm','geometry_joint_passed':'覆盖+2 mm碰撞验收',
         'extended_force_passed':'新增框架六方向纯外力','torque_passed':'新增六方向纯扭矩','combined_wrench_passed':'12 工况全部通过'}
     lines += [f'| {label} | {summary[key]}/{n} ({summary[key]/n:.2%}) |' for key,label in labels.items()]
     lines += ['',f'独立单条完整 operation，预热一次、测五次，中位数 {summary["latency_median_seconds"]:.6f} s；范围 {min(measured):.6f}–{max(measured):.6f} s。',
         f'32 worker 固定128条三轮吞吐中位数 {summary["throughput_median"]:.4f} 条/s。主计时无 profiler；加载与原 operation 文件保存包含其中；扭矩评测单独计时。',
         f'新增12工况评测 wall time {w["wall_seconds"]:.3f} s，异常 {w["exceptions"]} 条。每方向独立复位并执行原接近/抓握/挤压轨迹，然后施加500步扰动，每50步检查，仍用5 cm/15°阈值。',
         '纯扭矩为世界坐标 ±XYZ；大小采用 m·9.8·r（r为物体网格相对质心的最大半径），每条实际 N·m 保存在 wrench_evaluation.json；这是本实验尺度约定，不宣称来自论文标准。纯扭矩不附加净外力，也不加入 pose 求解目标。',
-        '全部方向保留最终 qpos 供回放，不保存完整仿真历史。目标点闭合不表示手已贴合；投影闭合不替代动力学稳定性。新旧手模型与初始化不同，不能据此宣称同初值质量提升。','',
+        '全部方向保留最终 qpos 供回放，不保存完整仿真历史。接触覆盖不替代动力学稳定性。新旧手模型与初始化不同，不能据此宣称同初值质量提升。','',
         '四卡生产 CEM 及原生 Shadow 基线不变。来源、依赖、适配资产与脚本指纹在 MANIFEST.json / asset_adapter.json；逐条诊断与失败见 per_input_results.json。']
     (root/'report.md').write_text('\n'.join(lines)+'\n')
 

@@ -113,7 +113,7 @@ class Runtime:
             result["contact"] = copy.deepcopy(result.get("contact", {"ready": False, "status": "needs_tare"}))
             contact_time = result["contact"].get("timestamp_monotonic")
             if not result["connected"] or contact_time is not None and time.monotonic() - contact_time >= .25:
-                result["contact"].update(ready=False, status="unknown", count=None, active_patches=[], normalized=[0.] * 460)
+                result["contact"].update(ready=False, status="unknown", count=None, active_patches=[], normalized=[0.] * 460, cell_contact=[None] * 460)
                 for patch in result["contact"].get("patches", []):
                     patch.update(contact=None, response=None)
         result["skeleton"] = self.ik.snapshot(result["connected"])
@@ -287,6 +287,20 @@ class Runtime:
             with self.hand.lock:
                 self.hand.state.update(status="error", error=str(exc))
 
+    def dispatch_hand_input(self):
+        # Poll completed IK independently of receiving another serial packet.
+        # The synchronizer suppresses duplicate skeleton stamps and preserves
+        # the original raw/tactile observation instead of substituting latest.
+        bone=self.ik.snapshot();skeleton=bone.get('pose') if bone.get('ready') else None
+        hand_input=self.hand_inputs.match(skeleton,time.time()*1000)
+        if hand_input:
+            self.last_mano_send=time.monotonic()
+            hand_input.update(mapping=self.contact.mapping(),tare_profile=copy.deepcopy(self.contact.profile.get('tare')),
+                              skeleton_targets=bone.get('targets'),calibration_fingerprint=bone.get('calibration_fingerprint'),
+                              skeleton_runtime_revision=(bone.get('runtime_policy') or {}).get('runtime_policy_sha256'),dispatch_timestamp_ms=time.time()*1000)
+            self.hand.send(hand_input)
+        return hand_input
+
     def update(self):
         self.sdk.update()
         for _ in range(1024):
@@ -330,17 +344,7 @@ class Runtime:
             self.hand_inputs.push({**ik_frame, "hand_side": "left", "raw": list(raw),
                                    "tactile_timestamp_ms": contact_state.get("timestamp_ms", 0),
                                    "contact": contact_state})
-        hand_input = None
-        if ik_frame and now - self.last_mano_send >= 1/60:
-            bone = self.ik.snapshot()
-            skeleton = bone.get("pose") if bone.get("ready") else None
-            hand_input = self.hand_inputs.match(skeleton, time.time()*1000)
-            if hand_input:
-                self.last_mano_send = now
-                hand_input.update(mapping=self.contact.mapping(),
-                                  tare_profile=copy.deepcopy(self.contact.profile.get("tare")),
-                                  skeleton_targets=bone.get('targets'),calibration_fingerprint=bone.get('calibration_fingerprint'))
-                self.hand.send(hand_input)
+        hand_input = self.dispatch_hand_input()
         state = {"status": "streaming", "error": None, "device": self.device,
                  "side": tactile["hand_side"], "side_mismatch": tactile["hand_side"] != self.device["usb_side"],
                  "sequence": telemetry.meta.sequence, "frames": self.parser.frames,
@@ -392,6 +396,7 @@ class Runtime:
                         connected_at = time.monotonic()
                     if self.sdk:
                         self.update()
+                        self.dispatch_hand_input()
                         if time.monotonic() - (self.last_frame or connected_at) > 3:
                             raise ValueError("数据流中断，正在重新连接")
                 except Exception as exc:
@@ -401,7 +406,7 @@ class Runtime:
                     with self.lock:
                         self.state.update(status="connecting" if self.wanted else "disconnected", error=str(exc))
                     next_retry = time.monotonic() + 2
-                self.stop.wait(0.01)
+                self.stop.wait(0.005)
         finally:
             self.stop_recording()
             self.disconnect()
@@ -449,7 +454,7 @@ def handler(runtime):
                              "/gestures/together.png": "gestures/together.png",
                              "/gestures/spread.png": "gestures/spread.png",
                              "/gestures/knuckle-and-fist.png": "gestures/knuckle-and-fist.png"}.get(route, "__missing__")
-            extra = {"/mano-view.js": "mano-view.js", "/vendor/three.module.min.js": "vendor/three.module.min.js",
+            extra = {"/mano-view.js": "mano-view.js", "/taxel-view.js": "taxel-view.js", "/vendor/three.module.min.js": "vendor/three.module.min.js",
                      "/vendor/OrbitControls.js": "vendor/OrbitControls.js"}
             if route in extra:
                 file = STATIC / extra[route]

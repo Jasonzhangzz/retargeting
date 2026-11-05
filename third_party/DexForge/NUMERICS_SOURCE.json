@@ -1,0 +1,7 @@
+{
+  "upstream_commit": "fa6d671948ef03d18514062748b94e445b63cd49",
+  "scope": "Only an independent numerical evaluation utility was copied to retarget/integrations/supermimic/force_margin.py; no pose solver remains",
+  "sha256": {
+    "retarget/integrations/supermimic/force_margin.py": "b9ab3e582d60e6ff53824473eb196600040c62d85d5d7138eb96a054c3283f46"
+  }
+}

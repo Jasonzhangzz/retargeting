@@ -59,20 +59,18 @@ def run(root,source,cfg,production,initial=False):
     with mp.Pool(32,initializer=runner.worker_init,initargs=(str(source.root),source.OmegaConf.to_container(cfg))) as pool:
         output=list(pool.imap(job,jobs,chunksize=1))
     rows=[r for r,_ in output];packets=[p for _,p in output];geometry_seconds=time.perf_counter()-start;start=time.perf_counter()
-    original.closure_batches(rows,packets,production)
     for row in rows:
         row['tolerated_collision_pass']=row.get('valid_final_state',False) and row.get('hand_object_depth_m',np.inf)<=.002 and row.get('self_depth_m',np.inf)<=.002
-        row['diagnostic_joint_pass']=row['projected_hand'] and row['slot_joint_pass'] and row['tolerated_collision_pass'] and row.get('native_contact_count',0)>0
+        row['geometry_joint_pass']=row['slot_joint_pass'] and row['tolerated_collision_pass'] and row.get('native_contact_count',0)>0
     counts=dict(denominator=len(rows),valid_final_states=sum(r['valid_final_state'] for r in rows),
-        projected_hand_passed=sum(r['projected_hand'] for r in rows),projected_targets_passed=sum(r['projected_targets'] for r in rows),
         distance_passed=sum(r['slot_distance_pass'] for r in rows),normal_passed=sum(r['slot_normal_pass'] for r in rows),
         slot_joint_passed=sum(r['slot_joint_pass'] for r in rows),tolerated_collision_passed=sum(r['tolerated_collision_pass'] for r in rows),
-        diagnostic_joint_passed=sum(r['diagnostic_joint_pass'] for r in rows),required_groups_passed=sum(r['required_groups_pass'] for r in rows),
+        geometry_joint_passed=sum(r['geometry_joint_pass'] for r in rows),required_groups_passed=sum(r['required_groups_pass'] for r in rows),
         pooled_slots=sum(r.get('slot_count',0) for r in rows),pooled_distance=sum(r.get('slot_distance_count',0) for r in rows),
         pooled_normals=sum(r.get('slot_normal_count',0) for r in rows),pooled_joint=sum(r.get('slot_joint_count',0) for r in rows),
-        geometry_seconds=geometry_seconds,closure_seconds=time.perf_counter()-start,rows=rows,
+        geometry_seconds=geometry_seconds,rows=rows,
         complete=not any(r.get('failure')=='diagnostic_exception' for r in rows),normal_version='actual_hand_surface_v2',
-        penetration_tolerances_m=dict(hand_object=.002,self=.002),thresholds=dict(distance_m=.002,angle_deg=30,coverage=.8,friction=.6,load_cases=13,qp_iterations=96,certificate_tolerance=.05),
+        penetration_tolerances_m=dict(hand_object=.002,self=.002),thresholds=dict(distance_m=.002,angle_deg=30,coverage=.8),
         optimizer_updates=0,stage='mapped_initial' if initial else 'ADMM_final')
     runner.write(root/('initial_diagnostics.json' if initial else 'diagnostics.json'),counts)
     if not counts['complete']:raise RuntimeError('Geometry diagnostic exception; not a zero quality score')

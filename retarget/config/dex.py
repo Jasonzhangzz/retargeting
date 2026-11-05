@@ -158,7 +158,7 @@ def object_xml_stem(seq_dir: Path) -> str:
     return rest if prefix.isdigit() and rest else object_name
 
 
-def contactaware_last_frame(contact_guidance_npz: Path, hand: str) -> int:
+def prepared_last_frame(contact_guidance_npz: Path, hand: str) -> int:
     output_dir = contact_guidance_npz.parent
     hand_path = output_dir / f"{hand}_qpos.npy"
     object_path = output_dir / "object_pose_7.npy"
@@ -169,7 +169,7 @@ def contactaware_last_frame(contact_guidance_npz: Path, hand: str) -> int:
     ):
         if path.exists():
             continue
-        raise FileNotFoundError(f"Missing ContactAware {label}: {path}")
+        raise FileNotFoundError(f"Missing prepared {label}: {path}")
 
     hand_trajectory = np.load(hand_path, mmap_mode="r", allow_pickle=False)
     object_trajectory = np.load(object_path, mmap_mode="r", allow_pickle=False)
@@ -182,23 +182,23 @@ def contactaware_last_frame(contact_guidance_npz: Path, hand: str) -> int:
 
     if hand_trajectory.ndim != 2:
         raise ValueError(
-            f"ContactAware hand trajectory must be rank-2: {hand_path} "
+            f"prepared hand trajectory must be rank-2: {hand_path} "
             f"shape={hand_trajectory.shape}"
         )
     frame_count = int(hand_trajectory.shape[0])
     if frame_count < MIN_TRAJECTORY_FRAMES:
         raise ValueError(
-            "ContactAware trajectory must contain at least two frames: "
+            "prepared trajectory must contain at least two frames: "
             f"{hand_path} shape={hand_trajectory.shape}"
         )
     if object_trajectory.shape != (frame_count, OBJECT_POSE_DIM):
         raise ValueError(
-            "ContactAware hand/object frame counts must match: "
+            "prepared hand/object frame counts must match: "
             f"hand={hand_trajectory.shape}, object={object_trajectory.shape}"
         )
     if contact_mask.ndim != 2 or contact_mask.shape[0] != frame_count:
         raise ValueError(
-            "ContactAware hand/contact frame counts must match: "
+            "prepared hand/contact frame counts must match: "
             f"hand={hand_trajectory.shape}, contact={contact_mask.shape}"
         )
     return frame_count - 1
@@ -222,12 +222,12 @@ def _read_sequence(
     scene = cfg_str(config, "sequence.scene")
     xml = seq_dir / "scene" / hand / f"{object_xml_stem(seq_dir)}_{scene}.xml"
     start = cfg_int(config, "sequence.start")
-    last_frame = contactaware_last_frame(contact_npz, hand)
+    last_frame = prepared_last_frame(contact_npz, hand)
     hold_frame = cfg_int(config, "sequence.hold_frame")
     hold_seconds = cfg_float(config, "sequence.hold_seconds")
     if hold_frame > last_frame:
         raise ValueError(
-            "sequence.hold_frame exceeds ContactAware last frame: "
+            "sequence.hold_frame exceeds prepared last frame: "
             f"hold_frame={hold_frame}, last_frame={last_frame}"
         )
     return SeqConfig(

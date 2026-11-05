@@ -75,11 +75,4 @@ def record(config, cases, output):
     if config.solver.type == "graspadmm":
         result["evaluation_protocol"] = "graspadmm_native_v1"
         result["evaluation_runtime"] = str(ROOT / ".venv-graspadmm/bin/python")
-    if config.solver.type == "dexforge":
-        from retarget.dynamics.dexforge_upstream import verify_upstream
-
-        result["dexforge"] = verify_upstream()
-        result["cost_environment_scope"] = (
-            "Pinned upstream DexForge native ForceAware planning and execution; G1 objective/scene adapters"
-        )
     return result

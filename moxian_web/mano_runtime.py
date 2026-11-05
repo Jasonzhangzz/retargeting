@@ -21,7 +21,10 @@ from scripts.calibrate_wuji_mano import PersonalizedMANO, CHAINS, TIPS, rotmat, 
 from .contact import PATCHES, PATCH_IDS, FINGERS
 from .hand_model import DEFAULT_MATERIAL, pair_mechanics, fusion_state, positive_gain
 from .hand_anatomy import AnatomicalJoints,GEOMETRY_REVISION,closed_surface_parts
-from .hand_dimensions import scale_segments,DIMENSION_MODE,DIMENSION_COUNT
+from .hand_dimensions import scale_segments,scale_proximal_width,PROXIMAL_WIDTH_POLICY,DIMENSION_MODE,DIMENSION_COUNT
+from .pose_filter import SensorPoseFilter
+from .official_fk import OfficialSkeletonFK,TRACKING_SOURCE,BINDING_POLICY
+from .tactile_surface import bind_grid, BINDING_POLICY as TAXEL_BINDING_POLICY
 
 @wp.kernel(enable_backward=False)
 def inside_queries(solids:wp.array(dtype=wp.uint64),points:wp.array(dtype=wp.vec3),
@@ -40,7 +43,9 @@ def triangle_queries(meshes:wp.array(dtype=wp.uint64), points:wp.array(dtype=wp.
                      normals:wp.array(dtype=wp.vec3), gap:wp.array2d(dtype=float),
                      facing:wp.array2d(dtype=float), nearest:wp.array2d(dtype=wp.vec3)):
     sid,p=wp.tid()
-    hit=wp.mesh_query_point_no_sign(meshes[p],points[sid],.04)
+    # Fitting must also measure separated fingers. A 4 cm search returned the
+    # 1 m missing-query sentinel and corrupted the reported contact gap.
+    hit=wp.mesh_query_point_no_sign(meshes[p],points[sid],.4)
     gap[sid,p]=1.0
     facing[sid,p]=1.0
     if hit.result:
@@ -95,6 +100,7 @@ def blend_rotations(previous,current,alpha):
 
 class ManoSurface:
     def __init__(self,path,device='cuda:0'):
+        self.official_fk=None;self.last_base_offsets=None;self.last_joint_centres=None
         self.device=torch.device(device);self.model=PersonalizedMANO(path,'left').to(device=self.device,dtype=torch.float32)
         self.weights_hash=hashlib.sha256(Path(path).read_bytes()).hexdigest()
         self.faces=self.model.faces.astype(np.int32);self.face_t=torch.tensor(self.faces.astype(np.int64),device=self.device)
@@ -105,6 +111,7 @@ class ManoSurface:
         self.ordered=[0]+[j for f,c in enumerate(CHAINS) for j in (*c,16+f)]
         self.shape=np.zeros(41,dtype=np.float64);self.labels=None;self.mapping=None;self.geometry=None
         self.dimension_parameters=None;self.bone_reference=None
+        self.proximal_lateral_scales=np.zeros(4)
         self.raw_rotation=np.eye(3);self.raw_translation=np.zeros(3);self.raw_aligned=False
         self.sensor_joint_position=None;self.mount_pos=np.zeros((5,3));self.mount_rot=np.tile(np.eye(3),(5,1,1))
         self.last_pose=np.zeros((15,3),np.float32);self.last_root=np.eye(3);self.last_frame=None
@@ -112,7 +119,8 @@ class ManoSurface:
         self.tracking_q=None;self.tracking_optimizer=None
         self.anatomy=None
         self.thumb_quality=None
-        self.mounting_calibrated=False
+        self.mounting_calibrated=False;self.mounting_estimated=False
+        self.sensor_filter=SensorPoseFilter();self.input_quality={};self.tracking_orientations=None
         self.has_wrist_targets=False;self.tracking_root=None;self.alignment_quality=None;self.tracking_tip_offset=np.zeros((5,3));self.tracking_bone_root=None;self.tracking_observed=None;self.tracking_stable_ms=0.;self.reference_translation=np.zeros(3);self.reference_root=None;self.flat_reference=None
         self.material=dict(DEFAULT_MATERIAL);self.response_gains={};self.binding_overrides={}
         self.compression=np.zeros((778,3),np.float32);self.last_time=None
@@ -145,12 +153,14 @@ class ManoSurface:
         v=rest.cpu().numpy();jn=j.cpu().numpy()
         if self.dimension_parameters is not None:
             v,jn=scale_segments(v,jn,self.model.weights.cpu().numpy(),CHAINS,TIPS,self.dimension_parameters)
+            v=scale_proximal_width(v,jn,self.model.weights.cpu().numpy(),CHAINS,self.model.palm_normal.cpu().numpy(),self.proximal_lateral_scales)
             self.rest_j=torch.as_tensor(jn,dtype=torch.float32,device=self.device);self.rest_j_np=jn
             self.tip_anchors=v[list(TIPS)].copy()
             self.anatomy=AnatomicalJoints(jn,v,CHAINS,TIPS,self.model.palm_normal.cpu().numpy(),self.model.pose_mean.cpu().numpy())
             if self.labels is None:self._anatomy(v)
             self.rest=t(v);self.rest_np=v.astype(np.float32);self.rest_normals=vertex_normals(v,self.faces)
             self.shape_version=hashlib.sha256((GEOMETRY_REVISION+DIMENSION_MODE).encode()+np.round(value[:16],9).tobytes()+np.round(self.dimension_parameters,9).tobytes()+np.array(self.bone_reference if self.bone_reference is not None else [],dtype=np.float64).tobytes()).hexdigest()[:16]
+            if np.any(self.proximal_lateral_scales):self.shape_version=hashlib.sha256(self.shape_version.encode()+PROXIMAL_WIDTH_POLICY.encode()+np.round(self.proximal_lateral_scales,9).tobytes()).hexdigest()[:16]
             self.geometry=None
             if self.mapping:self.build_binding(self.mapping)
             return
@@ -188,6 +198,12 @@ class ManoSurface:
         if self.mapping:self.build_binding(self.mapping)
 
     def _anatomy(self,v):
+        self.binding_reference=np.array(v,copy=True)
+        self.binding_axes=[]
+        for f,c in enumerate(CHAINS):
+            axis=v[TIPS[f]]-self.rest_j_np[c[0]];axis/=np.linalg.norm(axis)
+            lateral=np.cross(axis,self.model.palm_normal.cpu().numpy());lateral/=np.linalg.norm(lateral)
+            self.binding_axes.append((axis,lateral))
         weights=self.model.weights.cpu().numpy();self.labels=weights.argmax(-1)
         fw=np.stack([weights[:,list(c)].sum(-1) for c in CHAINS],axis=1)
         finger=fw.argmax(-1);palm=fw.max(-1)<.55
@@ -227,22 +243,22 @@ class ManoSurface:
         self.mapping=mapping
         assignments=np.array(mapping['assignments'],dtype=int)
         self.sid_faces=np.zeros(460,dtype=np.int32);self.sid_bary=np.zeros((460,3),np.float32)
+        cache=getattr(self,'_taxel_binding_cache',None)
+        cache_key=assignments.tobytes()
         self.cell_area=np.zeros(460,np.float32)
         tri=self.rest_np[self.faces];areas=np.linalg.norm(np.cross(tri[:,1]-tri[:,0],tri[:,2]-tri[:,0]),axis=1)*.5
         for p in range(20):
-            ids=np.flatnonzero(assignments==p);faces=self.binding_faces[p];centers=tri[faces].mean(1)
+            ids=np.flatnonzero(assignments==p);faces=self.binding_faces[p]
             if not len(ids):raise ValueError('每个 patch 须有 SID')
             if p<14:
-                f=FINGERS.index(PATCH_IDS[p].split('_')[0]);axis=self.rest_np[TIPS[f]]-self.rest_j_np[CHAINS[f][0]];axis/=np.linalg.norm(axis)
-                lateral=np.cross(axis,self.model.palm_normal.cpu().numpy());lateral/=max(np.linalg.norm(lateral),1e-9)
+                f=FINGERS.index(PATCH_IDS[p].split('_')[0]);axis,lateral=self.binding_axes[f]
             else:axis,lateral=self.palm_axes
-            uv=np.stack((centers@lateral,centers@axis),1)
-            rows=ids//20;cols=ids%20
-            u=(cols-cols.min()+.5)/(np.ptp(cols)+1);w=(rows-rows.min()+.5)/(np.ptp(rows)+1)
-            lo=uv.min(0);span=np.maximum(np.ptp(uv,axis=0),1e-6);target=lo+np.stack((u,w),1)*span
-            chosen=((target[:,None]-uv[None])**2).sum(-1).argmin(1)
-            self.sid_faces[ids]=faces[chosen];self.sid_bary[ids]=1/3
+            if cache is None or cache[0]!=cache_key:
+                chosen,bary=bind_grid(self.binding_reference[self.faces[faces]],ids,axis,lateral)
+                self.sid_faces[ids]=faces[chosen];self.sid_bary[ids]=bary
             self.cell_area[ids]=max(float(areas[faces].sum())/len(ids),1e-8)
+        if cache is not None and cache[0]==cache_key:self.sid_faces=cache[1].copy();self.sid_bary=cache[2].copy()
+        else:self._taxel_binding_cache=(cache_key,self.sid_faces.copy(),self.sid_bary.copy())
         for sid,record in self.binding_overrides.items():
             if 0<=int(sid)<460 and self.face_patches[int(record['face'])]==assignments[int(sid)]:
                 self.sid_faces[int(sid)]=record['face'];self.sid_bary[int(sid)]=record['barycentric']
@@ -250,22 +266,37 @@ class ManoSurface:
 
     def topology(self):
         if not self.mapping:return {'ready':False}
-        return {'ready':True,'hand_side':'left','coordinate_frame':'wrist_local','units':'m',
+        official_binding=None
+        if self.official_fk is not None:
+            self.official_fk.bind(self,CHAINS);d=self.official_fk
+            official_binding={'source':TRACKING_SOURCE,'policy':BINDING_POLICY,'asset_sha256':d.asset_hash,'binding_hash':d.binding_hash,'wrist_sdk_to_mano':d.sdk_to_mano.tolist(),'link_rotation_offsets':d.corrections.tolist(),'link_translation_offsets_m':d.translations.tolist(),'source_link_names':{str(j):d.reference['names'][i] for j,i in d.indices.items()},'length_policy':'official_link_origins_with_personalized_MCP_SE3_offsets','metacarpal_motion':'official_links_with_fixed_calibrated_offsets','dimension_note':'尺寸表为静息局部几何；动态关节由官方骨架与固定 SE3 偏移驱动，保留标定手型的局部尺寸。'}
+        return {'ready':True,'hand_side':'left','coordinate_frame':'mano_wrist_local' if self.official_fk is not None else 'wrist_local','units':'m','official_binding':official_binding,
                 'weights_hash':self.weights_hash,'geometry_version':self.shape_version,'binding_version':self.binding_version,
                 'faces':self.faces.tolist(),'face_patches':self.face_patches.tolist(),'patches':PATCHES,
                 'sid_face_ids':self.sid_faces.tolist(),'sid_barycentric':self.sid_bary.tolist(),
+                'sid_patch_indices':list(self.mapping['assignments']),'tactile_binding_policy':TAXEL_BINDING_POLICY,
+                'palm_view':{'normal':self.anatomy.palmar_normal.tolist(),'forward':self.palm_axes[0].tolist()},
                 'mapping_confirmed':self.mapping.get('confirmed',[]),'mapping_note':'初始 SID 曲面位置为解剖插值；未逐点核验不是精确传感器定位。',
                 'joint_chains':[[0]+list(range(1+4*f,5+4*f)) for f in range(5)]}
 
-    def decode(self,pose,root):
+    def decode(self,pose,root,base_offsets=None,joint_centres=None):
         local=rotmat(pose.reshape(-1,15,3));batch=len(local);eye=torch.eye(3,device=self.device,dtype=local.dtype)
         rr=[None]*16;pp=[None]*16;rr[0]=eye.expand(batch,3,3);pp[0]=self.rest_j[0].expand(batch,3)
         for level in self.levels:
             pr=torch.stack([rr[self.parents[j]] for j in level],1);pos=torch.stack([pp[self.parents[j]] for j in level],1)
             relative=torch.stack([self.rest_j[j]-self.rest_j[self.parents[j]] for j in level])
-            r=pr@local[:,np.array(level)-1];p=pos+(pr@relative[None,:,:,None]).squeeze(-1)
+            rel=relative[None].expand(batch,-1,-1)
+            if base_offsets is not None:
+                rel=rel.clone()
+                for k,j in enumerate(level):
+                    if self.parents[j]==0:rel[:,k]+=base_offsets[:,next(f for f,c in enumerate(CHAINS) if c[0]==j)]
+            r=pr@local[:,np.array(level)-1];p=pos+(pr@rel[:,:,:,None]).squeeze(-1)
             for k,j in enumerate(level):rr[j]=r[:,k];pp[j]=p[:,k]
         rotations=torch.stack(rr,1);joints=torch.stack(pp,1)
+        if joint_centres is not None:
+            # Use the same official link origins as the skeleton view. LBS still
+            # rotates fixed rest vertices around their own rest joint anchors.
+            joints=joint_centres+self.rest_j[0]
         feature=(local-eye).reshape(batch,135)
         posed=self.rest[None].expand(batch,-1,-1) if self.dimension_parameters is not None else self.rest[None]+torch.einsum('bp,vcp->bvc',feature,self.model.posedirs)*math.exp(self.shape[10])
         offset=joints-(rotations@self.rest_j[None,:,:,None]).squeeze(-1)
@@ -371,13 +402,35 @@ class ManoSurface:
         self.mount_pos=prior.astype(np.float32);self.sensor_joint_position=(offsets+prior).astype(np.float32);self.mount_rot=distal.swapaxes(-2,-1)@raw_rotation@rotations
         self.reference_translation=np.zeros(3);self.reference_root=np.eye(3,dtype=np.float32);self.flat_reference=reference.copy();self.flat_seed=zeros.astype(np.float32)
         self.flat_reference['flat_seed']=zeros.tolist();self.flat_reference['initial_sensor_prior_mm']=8.;self.flat_reference['registration_rmse_mm']=rms*1000
-        self.tracking_time=None;self.raw_aligned=True;self.has_wrist_targets=True;self.mounting_calibrated=False
+        self.tracking_time=None;self.raw_aligned=True;self.has_wrist_targets=True;self.mounting_calibrated=False;self.mounting_estimated=False
         return {'registration_rmse_mm':rms*1000,'sensor_position_status':'prior_requires_multi_pose_fit','changes_shape':False}
 
     def sensor_offsets(self):
         """Distal-joint to EMF origin, in the distal bone frame, metres."""
         if self.flat_reference is not None and self.sensor_joint_position is not None:return self.sensor_joint_position.copy()
         return self.tip_anchors-self.rest_j_np[[c[-1] for c in CHAINS]]+self.mount_pos
+
+    def dimension_summary(self):
+        """Actual rest-mesh dimensions, not SDK bone lengths or slider values."""
+        result={}
+        for f,chain in enumerate(CHAINS):
+            points=np.concatenate((self.rest_j_np[list(chain)],self.tip_anchors[f:f+1]))
+            segments=np.linalg.norm(np.diff(points,axis=0),axis=1)*1000
+            root=chain[1] if f==0 else chain[0]
+            axis=self.tip_anchors[f]-self.rest_j_np[root];axis/=np.linalg.norm(axis)
+            side=np.cross(axis,self.anatomy.palmar_normal);side/=np.linalg.norm(side)
+            depth=np.cross(side,axis)
+            section=self.rest_np[getattr(self.model,f'section_{f}').cpu().numpy()]
+            result[FINGERS[f]]={'segment_lengths_mm':segments.tolist(),
+                'surface_length_mm':float(segments[1:].sum() if f==0 else segments.sum()),
+                'proximal_width_mm':float(np.ptp(section@side)*1000),
+                'proximal_depth_mm':float(np.ptp(section@depth)*1000),
+                'length_definition':'MCP_to_surface_tip_along_chain',
+                'runtime_joint_spacing':'official_sdk_plus_fixed_mcp_offsets' if self.official_fk is not None else 'MANO_rest',
+                'measurement_space':'calibrated_rest_local_surface',
+                'cross_section_source':'fixed_MANO_proximal_vertex_section',
+                'cross_section_confidence':'contact_and_prior_only'}
+        return result
 
     def project_sensor_mount_(self,mount):
         """Known attachment: EMF is behind the tip, on the distal segment."""
@@ -401,8 +454,9 @@ class ManoSurface:
 
         The SDK pose can be a poor seed. One tiny Adam step per display frame
         otherwise makes the model slowly chase even an immediately available
-        6DoF observation. A warm, small CPU solve initializes each finger from
-        the current target; GPU skinning then refines the actual surface.
+        6DoF observation. A warm, small CPU solve follows the current target.
+        Registered EMF uses exact distal FK and GPU skinning, without SGD;
+        the legacy target path retains its surface refinement.
         """
         out=pose.copy();all_angles=self.anatomy.angles(pose)
         warm=self.anatomy.angles(previous) if previous is not None else all_angles
@@ -419,6 +473,12 @@ class ManoSurface:
             base=self.rest_j_np[chain[0]]-self.rest_j_np[0]
             destination=observed[f]@root
             desired_rotation=root.T@orientations[f]@self.mount_rot[f].T if self.flat_reference is not None and orientations is not None else None
+            temporal_sigma=None
+            if self.flat_reference is not None and previous is not None and self.tracking_observed is not None and self.tracking_orientations is not None and orientations is not None:
+                distance=np.linalg.norm(observed[f]-self.tracking_observed[f])
+                turn=Rotation.from_matrix(self.tracking_orientations[f].T@orientations[f]).magnitude()
+                length=max(.04,np.linalg.norm(self.tip_anchors[f]-self.rest_j_np[chain[0]]))
+                temporal_sigma=.10+2*turn+3*distance/length
             def endpoint(a):
                 rotations=basis@Rotation.from_euler('XYZ',a).as_matrix()@basis.swapaxes(-2,-1)
                 r=np.eye(3);point=base.copy()
@@ -430,20 +490,55 @@ class ManoSurface:
                 a=initial.copy();a[free]=x
                 point,rotation=endpoint(a)
                 direction=Rotation.from_matrix(rotation.T@desired_rotation).as_rotvec()/.12 if desired_rotation is not None else np.zeros(0)
-                scale=.012 if self.flat_reference is not None and not self.mounting_calibrated else .003
+                scale=.012 if self.flat_reference is not None and not (self.mounting_calibrated or self.mounting_estimated) else .003
                 coupling=np.array([.4*(a[2,0]-.65*a[1,0])]) if self.flat_reference is not None and f else np.zeros(0)
-                return np.concatenate(((point-destination)/scale,direction,coupling,.15*(x-initial[free])))
+                continuity=(x-initial[free])/temporal_sigma if temporal_sigma is not None else .15*(x-initial[free])
+                return np.concatenate(((point-destination)/scale,direction,coupling,continuity))
             if previous is not None and np.linalg.norm(endpoint(initial)[0]-destination)<.00015 and (desired_rotation is None or Rotation.from_matrix(endpoint(initial)[1].T@desired_rotation).magnitude()<.005):
                 angles=initial
             else:
-                solved=least_squares(residual,initial[free],bounds=(lower[free],upper[free]),max_nfev=8,ftol=1e-4,xtol=1e-4,gtol=1e-4)
+                # TRF starts 1e-10 from an active bound, so a short solve can
+                # remain stuck at straight PIP/DIP. Start just inside the box.
+                inset=np.minimum(.01,.02*(upper[free]-lower[free]))
+                x0=np.clip(initial[free],lower[free]+inset,upper[free]-inset)
+                solved=least_squares(residual,x0,bounds=(lower[free],upper[free]),max_nfev=12,ftol=1e-4,xtol=1e-4,gtol=1e-4)
                 angles=initial.copy()
                 if np.linalg.norm(residual(solved.x))<=np.linalg.norm(residual(initial[free])):angles[free]=solved.x
             out[ids]=Rotation.from_matrix(basis@Rotation.from_euler('XYZ',angles).as_matrix()@basis.swapaxes(-2,-1)).as_rotvec()
         return out.astype(np.float32)
 
+    def distal_pad_landmarks(self):
+        """Fixed distal palmar anchors relative to each distal bone."""
+        offsets=[];normals=[]
+        for finger,chain in enumerate(CHAINS):
+            axis=self.tip_anchors[finger]-self.rest_j_np[chain[-1]];axis/=np.linalg.norm(axis)
+            target=self.tip_anchors[finger]-.005*axis
+            faces=self.binding_faces[PATCH_IDS.index(FINGERS[finger]+'_distal')]
+            centers=self.rest_np[self.faces[faces]].mean(1);face=faces[np.argmin(np.linalg.norm(centers-target,axis=1))]
+            tri=self.rest_np[self.faces[face]];normal=np.cross(tri[1]-tri[0],tri[2]-tri[0]);normal/=np.linalg.norm(normal)
+            offsets.append(tri.mean(0)-self.rest_j_np[chain[-1]]);normals.append(normal)
+        return np.array(offsets),np.array(normals)
+
+    def together_regions(self):
+        """Opposing side strips at shared longitudinal levels, never tip pairs."""
+        cached=getattr(self,'_together_cache',None)
+        if cached and cached[0]==self.shape_version:return cached[1]
+        roots=self.rest_j_np[[c[0] for c in CHAINS]]
+        forward=self.tip_anchors[1:].mean(0)-roots[1:].mean(0);forward/=np.linalg.norm(forward)
+        u=self.rest_np@forward;regions=[]
+        for a in range(1,4):
+            b=a+1;side=roots[b]-roots[a];side-=forward*(side@forward);side/=np.linalg.norm(side)
+            ia=np.flatnonzero(np.isin(self.labels,CHAINS[a])&(self.rest_normals@side>.1))
+            ib=np.flatnonzero(np.isin(self.labels,CHAINS[b])&(self.rest_normals@side<-.1))
+            lo=max(roots[a]@forward,roots[b]@forward)+.015
+            hi=min(self.tip_anchors[a]@forward,self.tip_anchors[b]@forward)-.008
+            for level in np.linspace(lo,max(lo+.002,hi),3):
+                regions.append({'a':a,'b':b,'ids_a':ia[np.argsort(abs(u[ia]-level))[:8]],'ids_b':ib[np.argsort(abs(u[ib]-level))[:8]]})
+        self._together_cache=(self.shape_version,regions)
+        return regions
+
     def fit_sensor_supported_pinch(self,pose,root,observed,orientations,frame):
-        """Soft kinematic pad constraint; no forces, collision response or resizing.
+        """Training-only pad initializer; never used by runtime or held-out IK.
 
         02 never consumes this result. Raw tactile agreement only supplies a
         self-contact hint to the independent pose solver.
@@ -454,20 +549,16 @@ class ManoSurface:
         patches={p['id']:p for p in contact.get('patches',[])}
         if not patches.get('thumb_distal',{}).get('contact'):return pose
         pairs=[f for f in range(1,5) if patches.get(FINGERS[f]+'_distal',{}).get('contact') and np.linalg.norm(observed[f]-observed[0])<.045]
+        guided=frame.get('stage','')
+        if guided.startswith('pinch_'):pairs=[f for f in pairs if FINGERS[f]==guided[6:]]
         if not pairs:return pose
         f=min(pairs,key=lambda f:np.linalg.norm(observed[f]-observed[0]));fingers=(0,f)
         all_angles=self.anatomy.angles(pose);ids=np.array([j-1 for finger in fingers for j in CHAINS[finger]])
         initial=all_angles[ids].copy();lower=self.anatomy.lower[ids].copy();upper=self.anatomy.upper[ids]
         lower[3,0]=max(lower[3,0],np.deg2rad(-3));free=upper-lower>1e-8
         initial=np.clip(initial,lower,upper);basis=self.anatomy.basis[ids]
-        pad_offsets=[];pad_normals=[]
-        for finger in fingers:
-            chain=CHAINS[finger];axis=self.tip_anchors[finger]-self.rest_j_np[chain[-1]];axis/=np.linalg.norm(axis)
-            target=self.tip_anchors[finger]-.005*axis
-            faces=self.binding_faces[PATCH_IDS.index(FINGERS[finger]+'_distal')]
-            centers=self.rest_np[self.faces[faces]].mean(1);face=faces[np.argmin(np.linalg.norm(centers-target,axis=1))]
-            tri=self.rest_np[self.faces[face]];normal=np.cross(tri[1]-tri[0],tri[2]-tri[0]);normal/=np.linalg.norm(normal)
-            pad_offsets.append(tri.mean(0)-self.rest_j_np[chain[-1]]);pad_normals.append(normal)
+        all_offsets,all_normals=self.distal_pad_landmarks()
+        pad_offsets=all_offsets[list(fingers)];pad_normals=all_normals[list(fingers)]
         def forward(angles):
             local=basis@Rotation.from_euler('XYZ',angles).as_matrix()@basis.swapaxes(-2,-1);out=[]
             for k,finger in enumerate(fingers):
@@ -478,7 +569,9 @@ class ManoSurface:
                 out.append((root@(point+r@self.sensor_offsets()[finger]),root@r,root@(point+r@pad_offsets[k]),root@r@pad_normals[k]))
             return out
         start=forward(initial)
-        if start[0][3]@start[1][3]>.5:return pose  # Same-facing flat pads are not a pinch.
+        if start[0][3]@start[1][3]>.5 and np.linalg.norm(observed[0]-observed[f])>.035:return pose
+        # A close, bilaterally sensed contact can correct an uncertain mounting
+        # orientation; do not veto it solely using the current model's normals.
         initial_gap=np.linalg.norm(start[0][2]-start[1][2])
         def residual(x):
             a=initial.copy();a[free]=x;out=forward(a);res=[]
@@ -573,11 +666,44 @@ class ManoSurface:
             self.mount_rot=dr.transpose(0,2,1)@self.raw_rotation@r
         return p@self.raw_rotation.T+self.raw_translation,self.raw_rotation@r,target
 
+    def enable_official_fk(self):
+        self.official_fk=OfficialSkeletonFK()
+
+    def official_parameters(self,rows):
+        values=[self.official_fk.parameters(self,row,CHAINS) for row in rows]
+        t=lambda x:torch.tensor(np.array(x),device=self.device,dtype=torch.float32)
+        return t([v[0] for v in values]),t([v[1] for v in values]),t([v[2] for v in values]),t([v[4] for v in values])
+
+    def track_official(self,frame):
+        if self.bone_reference is None:
+            target=skeleton_targets(frame.get('skeleton'))
+            if target is None:raise ValueError('等待完整官方骨架')
+            self.bone_reference=np.array([[np.linalg.norm(target[2+4*f+k]-target[1+4*f+k]) for k in range(3)] for f in range(5)])
+            self.set_shape(self.shape)
+        pose,root,offsets,expected,centres=self.official_fk.parameters(self,frame,CHAINS)
+        t=lambda x:torch.tensor(x,device=self.device,dtype=torch.float32)
+        with torch.no_grad():v,j,r,o=self.decode(t(pose[None]),t(root[None]),joint_centres=t(centres[None]))
+        v,j,r,o=[x[0].cpu().numpy() for x in (v,j,r,o)]
+        self.last_pose=pose;self.last_root=root;self.last_base_offsets=offsets;self.last_joint_centres=j;self.last_frame=frame;self.tracking_time=frame['timestamp_ms'];self.retarget_contacts=[]
+        self.sensor_predictions=j[[c[-1] for c in CHAINS]]+(r[[c[-1] for c in CHAINS]]@self.sensor_offsets()[:,:,None]).squeeze(-1)
+        observed=np.array([frame['fingers'][f]['position'] for f in FINGERS])@self.raw_rotation.T+self.raw_translation
+        errors=np.linalg.norm(self.sensor_predictions-observed,axis=-1)*1000 if self.flat_reference else np.zeros(5)
+        rmse=float(np.sqrt(np.mean(errors**2)))
+        orientation_error=float(np.rad2deg(Rotation.from_matrix(r.swapaxes(-2,-1)@expected).magnitude()).max())
+        self.alignment_quality={'tracking_mode':TRACKING_SOURCE,'binding_policy':BINDING_POLICY,'solver':'official_qnbot_ik_then_fk_lbs','additional_ik':False,'additional_smoothing':False,'joint_projection':False,'sensor_errors_mm':dict(zip(FINGERS,map(float,errors))),'error_metric':'emf_mount_diagnostic_only' if self.flat_reference else 'unregistered','binding_hash':self.official_fk.binding_hash,'official_asset_sha256':self.official_fk.asset_hash,'max_link_rotation_error_deg':orientation_error,'timestamp_ms':frame['skeleton']['timestamp_ms'],'joint_smoothing_max_ms':0,'error_landmark':'emf_sensor_origin','retarget_contacts':[],'geometry_fixed':True}
+        self.thumb_quality={'source':'official_skeleton_rotation','additional_ik':False};self.input_quality={}
+        return v,j,r,o,rmse
+
     def track(self,frame,steps=2):
+        if self.official_fk is not None:return self.track_official(frame)
         observed,orientations,target=self.observations(frame);self.retarget_contacts=[]
         if not self.raw_aligned:raise ValueError('首次显示手部模型需要新鲜官方骨架作为坐标初始化')
         stamp=frame['timestamp_ms'];dt=(stamp-self.tracking_time)/1000 if self.tracking_time is not None else 0.
         reset=self.tracking_time is None or dt<=0 or dt>.25 or self.tracking_version!=self.shape_version
+        raw_observed=observed.copy();raw_orientations=orientations.copy()
+        if self.flat_reference is not None:
+            if reset:self.sensor_filter=SensorPoseFilter()
+            observed,orientations,self.input_quality=self.sensor_filter.update(observed,orientations,stamp)
         if self.flat_reference is not None:
             bone_pose=self.flat_seed.copy() if reset else self.last_pose.copy();root=np.eye(3,dtype=np.float32)
             seed=Rotation.from_rotvec(bone_pose).as_matrix()
@@ -609,14 +735,20 @@ class ManoSurface:
                 thumb_pose=self.fit_thumb_directions(Rotation.from_matrix(seed).as_rotvec().astype(np.float32),root,target,tip_target=observed[0])
                 seed=Rotation.from_rotvec(thumb_pose).as_matrix()
             current=self.fit_fingertip_positions(Rotation.from_matrix(seed).as_rotvec().astype(np.float32),root,observed,previous=None if reset else self.last_pose,orientations=orientations)
-            if self.flat_reference is not None:current=self.fit_sensor_supported_pinch(current,root,observed,orientations,frame)
+            # Tactile readings describe contact; they must not close a gap in
+            # the rendered pose. Runtime IK is driven only by EMF observations.
             if self.flat_reference is None and self.tracking_stable_ms>=120:root=self.fit_palm_correction(current,root,observed)
             seed=Rotation.from_rotvec(current).as_matrix()
         if not reset:
             # Current-frame IK follows motion; a short adaptive SO(3) filter
             # damps measurement noise. Legacy replay retains its old correction.
             speed=np.max(Rotation.from_matrix(np.swapaxes(self.tracking_seed,-2,-1)@seed).magnitude())/max(dt,.001)
-            tau=(.012/(1+speed/2.)) if self.has_wrist_targets else (.045/(1+speed/3.))
+            if self.flat_reference is not None:
+                # Solver jitter must not be interpreted as real motion and
+                # shorten its own smoothing time constant.
+                sensed_speed=np.max(np.linalg.norm(observed-self.tracking_observed,axis=1))/max(dt,.001)/.1
+                tau=.008/(1+sensed_speed)
+            else:tau=(.012/(1+speed/2.)) if self.has_wrist_targets else (.045/(1+speed/3.))
             seed=blend_rotations(self.tracking_seed,seed,-math.expm1(-dt/tau))
             root_speed=Rotation.from_matrix(self.last_root.T@root).magnitude()/max(dt,.001)
             root_tau=.010/(1+root_speed/2.) if self.has_wrist_targets else .035
@@ -638,13 +770,16 @@ class ManoSurface:
         p_t=torch.tensor(observed[None],device=self.device);r_t=torch.tensor(orientations[None],dtype=torch.float32,device=self.device)
         mount=torch.tensor(self.mount_pos,device=self.device,dtype=torch.float32);mr=torch.tensor(self.mount_rot,device=self.device,dtype=torch.float32)
         seed_t=torch.tensor(seed[None],device=self.device,dtype=torch.float32)
-        for _ in range(steps):
+        # With a fixed distal-to-EMF transform, the CPU FK is already exact.
+        # A second SGD objective used different weights and perturbed the IK
+        # solution every frame, especially in underconstrained grasp poses.
+        for _ in range(steps if self.flat_reference is None else 0):
             if self.has_wrist_targets:root_t=rotmat(self.tracking_root)
             optimizer.zero_grad();v,j,rr,ordered=self.decode(q,root_t)
             dr=rr[:,[c[-1] for c in CHAINS]]
             offsets=torch.tensor(self.sensor_offsets(),device=self.device,dtype=torch.float32)
             pred=j[:,[c[-1] for c in CHAINS]]+(dr@offsets[None,:,:,None]).squeeze(-1) if self.flat_reference is not None else v[:,list(TIPS)]+(dr@mount[None,:,:,None]).squeeze(-1)
-            position_scale=.012 if self.flat_reference is not None and not self.mounting_calibrated else .003
+            position_scale=.012 if self.flat_reference is not None and not (self.mounting_calibrated or self.mounting_estimated) else .003
             loss=torch.nn.functional.smooth_l1_loss((pred-p_t)/position_scale,torch.zeros_like(pred))
             prior_weight=.01 if self.has_wrist_targets else .2
             loss=loss+(.5 if self.flat_reference is not None else .012)*((dr@mr-r_t)**2).mean()+prior_weight*(((rotmat(q)-seed_t)/.3)**2).mean()
@@ -661,14 +796,16 @@ class ManoSurface:
         self.tracking_tip_offset=np.zeros((5,3)) if self.flat_reference is not None else (v[0,list(TIPS)].cpu().numpy()-ordered[0,[4,8,12,16,20]].cpu().numpy())@root
         self.last_pose=q.detach().cpu().numpy()[0];self.last_root=root.astype(np.float32)
         self.tracking_seed=seed;self.tracking_time=stamp;self.tracking_version=self.shape_version;self.tracking_bone_root=bone_root;self.tracking_observed=observed.copy()
+        self.tracking_orientations=orientations.copy()
         self.last_frame=frame
         dr_np=rr[0,[c[-1] for c in CHAINS]].cpu().numpy()
         self.sensor_predictions=j[0,[c[-1] for c in CHAINS]].cpu().numpy()+(dr_np@self.sensor_offsets()[:,:,None]).squeeze(-1) if self.flat_reference is not None else v[0,list(TIPS)].cpu().numpy()+(dr_np@self.mount_pos[:,:,None]).squeeze(-1)
-        errors=np.linalg.norm(self.sensor_predictions-observed,axis=1)*1000
+        filtered_errors=np.linalg.norm(self.sensor_predictions-observed,axis=1)*1000
+        errors=np.linalg.norm(self.sensor_predictions-raw_observed,axis=1)*1000
         self.alignment_quality={'observation_space':'raw_emf_sensor' if self.flat_reference is not None else 'sdk_wrist_targets' if self.has_wrist_targets else 'legacy_rigid_fit',
                                 'tip_errors_mm':dict(zip(FINGERS,map(float,errors))),
-                                'sensor_errors_mm':dict(zip(FINGERS,map(float,errors))),'orientation_errors_deg':dict(zip(FINGERS,map(float,np.rad2deg(Rotation.from_matrix((dr_np@self.mount_rot).swapaxes(-2,-1)@orientations).magnitude())))),'calibration_fingerprint':frame.get('calibration_fingerprint'),
-                                'tracking_mode':'responsive_current_frame_ik','joint_smoothing_max_ms':12 if self.has_wrist_targets else 45,'root_smoothing_max_ms':10 if self.has_wrist_targets else 35,'flat_reference_id':self.flat_reference.get('reference_id') if self.flat_reference else None,'retarget_contacts':self.retarget_contacts,'geometry_fixed':self.dimension_parameters is not None,'error_landmark':'emf_sensor_origin','sensor_mounting_status':'multi_pose_calibrated' if self.mounting_calibrated else 'orientation_reference_position_prior' if self.flat_reference else 'unregistered'}
+                                'sensor_errors_mm':dict(zip(FINGERS,map(float,errors))),'filtered_sensor_errors_mm':dict(zip(FINGERS,map(float,filtered_errors))),'input_conditioning':self.input_quality,'solver':'scipy_least_squares_trf' if self.flat_reference is not None else 'legacy_ik_sgd','orientation_errors_deg':dict(zip(FINGERS,map(float,np.rad2deg(Rotation.from_matrix((dr_np@self.mount_rot).swapaxes(-2,-1)@raw_orientations).magnitude())))),'calibration_fingerprint':frame.get('calibration_fingerprint'),
+                                'tracking_mode':'responsive_current_frame_ik','joint_smoothing_max_ms':8 if self.flat_reference is not None else 12 if self.has_wrist_targets else 45,'root_smoothing_max_ms':10 if self.has_wrist_targets else 35,'flat_reference_id':self.flat_reference.get('reference_id') if self.flat_reference else None,'retarget_contacts':self.retarget_contacts,'geometry_fixed':self.dimension_parameters is not None,'error_landmark':'emf_sensor_origin','sensor_mounting_status':'multi_pose_calibrated' if self.mounting_calibrated else 'orientation_reference_position_prior' if self.flat_reference else 'unregistered'}
         self.thumb_quality={'axes':'left_thumb_incoming_v1','source':'raw_emf_sensor' if self.flat_reference is not None else 'sdk_wrist_target' if self.has_wrist_targets else 'sdk_reference','mounting_calibrated':self.mounting_calibrated,'max_joint_correction_deg':None if self.has_wrist_targets else (20. if self.mounting_calibrated else 8.),'mapped_target_gap_mm':None if self.flat_reference is not None else float(errors[0]),'sensor_origin_gap_mm':float(errors[0]) if self.flat_reference is not None else None}
         if target is not None and self.flat_reference is None:
             points=ordered[0,1:5].detach().cpu().numpy()

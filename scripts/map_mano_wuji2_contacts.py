@@ -7,7 +7,7 @@ import numpy as np
 import mujoco
 from retarget.task.grasp.dexonomy import load_template,map_contacts,wuji_body
 from retarget.env.grasp.hand import hand_tree,query_path
-from scripts.retarget_dexonomy_mano import read,write,sha
+from scripts.mano_campaign_inputs import read,write,sha
 
 
 def prepare(source,output):

@@ -1,4 +1,4 @@
-"""Backend-independent ForceAware time-grid and solve-request contract."""
+'Backend-independent CEM time-grid and solve-request contract.'
 
 from __future__ import annotations
 

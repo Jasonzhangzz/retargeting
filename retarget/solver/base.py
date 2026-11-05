@@ -8,113 +8,28 @@ import torch
 
 @dataclass(frozen=True)
 class Settings:
-    type: str = "cem"
-    population: int = 1024
-    iterations: int = 16
-    worlds: int = 128
-    elite_fraction: float = 0.05
-    temperature: float | None = None
-    final_noise: float | None = None
-    improvement_threshold: float = 0.01
-    improvement_check_steps: int = 1
-    exploit_ratio: float = 0.01
-    exploit_noise: float = 0.01
-    gradient_steps: int = 0
-    gradient_step_size: float = 1.0
-    gradient_backtracks: int = 6
-    scsp: object = None
-    dexforge: object = None
-    graspadmm: object = None
+    type: str = 'cem'
 
     def __post_init__(self):
-        if self.type not in ("cem", "mppi", "scsp", "dexforge", "graspadmm"):
-            raise ValueError("Unknown solver.type")
-        if self.type == "graspadmm":
-            from .graspadmm import settings
-            object.__setattr__(self, "graspadmm", settings(self.graspadmm))
-        elif self.graspadmm is not None:
-            raise ValueError("solver.graspadmm requires solver.type: graspadmm")
-        if self.type == "dexforge":
-            from .dexforge import DexForgeSettings
-
-            values = self.dexforge
-            if values is None or isinstance(values, dict):
-                try:
-                    values = DexForgeSettings(**(values or {}))
-                except TypeError as exc:
-                    raise ValueError(f"Invalid solver.dexforge: {exc}") from exc
-            if not isinstance(values, DexForgeSettings):
-                raise ValueError("solver.dexforge must be a mapping")
-            object.__setattr__(self, "dexforge", values)
-        elif self.dexforge is not None:
-            raise ValueError("solver.dexforge requires solver.type: dexforge")
-        if self.type == "scsp":
-            from .scsp import SCSPSettings
-
-            values = self.scsp
-            if values is None or isinstance(values, dict):
-                try:
-                    values = SCSPSettings(**(values or {}))
-                except TypeError as exc:
-                    raise ValueError(f"Invalid solver.scsp: {exc}") from exc
-            if not isinstance(values, SCSPSettings):
-                raise ValueError("solver.scsp must be a mapping")
-            object.__setattr__(self, "scsp", values)
-        elif self.scsp is not None:
-            raise ValueError("solver.scsp requires solver.type: scsp")
-        if (
-            self.population < (20 if self.type == "mppi" else 2)
-            or min(self.iterations, self.worlds, self.improvement_check_steps) < 1
-        ):
-            raise ValueError("Invalid sampling budget")
-        for key, value in [
-            ("elite_fraction", self.elite_fraction),
-            ("final_noise", self.noise_ratio),
-        ]:
-            if not math.isfinite(value) or not 0 < value <= 1:
-                raise ValueError(f"{key} must lie in (0,1]")
-        if not math.isfinite(self.temp) or self.temp <= 0:
-            raise ValueError("temperature must be positive")
-        if (
-            not 0 <= self.exploit_ratio < 1
-            or not math.isfinite(self.exploit_noise)
-            or self.exploit_noise < 0
-        ):
-            raise ValueError("Invalid MPPI exploitation settings")
-        if (
-            not math.isfinite(self.improvement_threshold)
-            or self.improvement_threshold < 0
-        ):
-            raise ValueError("Invalid stopping threshold")
-        if (
-            isinstance(self.gradient_steps, bool)
-            or not isinstance(self.gradient_steps, int)
-            or self.gradient_steps < 0
-            or isinstance(self.gradient_backtracks, bool)
-            or not isinstance(self.gradient_backtracks, int)
-            or self.gradient_backtracks < 1
-            or not math.isfinite(self.gradient_step_size)
-            or self.gradient_step_size <= 0
-        ):
-            raise ValueError("Invalid gradient refinement settings")
-        if self.gradient_steps and self.type != "mppi":
-            raise ValueError("gradient_steps requires solver.type: mppi")
+        if self.type not in ('cem','graspadmm'):raise ValueError('solver.type must be cem or graspadmm')
 
     @property
-    def temp(self):
-        return (
-            self.temperature
-            if self.temperature is not None
-            else (0.1 if self.type == "cem" else 1.0)
-        )
+    def parameters(self):
+        if self.type=='graspadmm':
+            from .graspadmm import DEFAULTS
+        else:
+            from .cem import DEFAULTS
+        return DEFAULTS
 
     @property
-    def noise_ratio(self):
-        return (
-            self.final_noise
-            if self.final_noise is not None
-            else (0.2 if self.type == "cem" else 0.1)
-        )
+    def worlds(self):
+        from .cem import DEFAULTS
+        return DEFAULTS.sampling.worlds
+
+    @property
+    def graspadmm(self):
+        from .graspadmm import settings
+        return settings() if self.type=='graspadmm' else None
 
 
 @dataclass
@@ -163,16 +78,11 @@ def evaluate(problem, values):
     return result if isinstance(result, Evaluation) else Evaluation(result)
 
 
-def solve(problem, settings, seed=0):
-    if settings.type == "graspadmm":
-        raise ValueError("GraspADMM requires its dedicated native grasp runner")
-    if settings.type == "dexforge":
-        from .dexforge import solve as implementation
-    elif settings.type == "scsp":
-        from .scsp import solve as implementation
-    elif settings.type == "cem":
-        from .cem import solve as implementation
-    else:
-        from .mppi import solve as implementation
+def solve(problem, settings=Settings(), seed=0):
+    if getattr(settings,'type','cem')=='graspadmm':
+        from .graspadmm import solve as implementation
+        return implementation(problem)
+    from .cem import solve as implementation, DEFAULTS
+    if not isinstance(settings,Settings):raise TypeError('Pass a method selector; algorithm parameters use the canonical defaults')
     with torch.no_grad():
-        return implementation(problem, settings, seed)
+        return implementation(problem,seed=seed)

@@ -1,9 +1,4 @@
-"""MANO model and IK adapters for the shared grasp objective and CEM.
-
-One algorithm preset; immutable anatomical contact mapping, object/size-gated
-warm starts, bounded mesh caches, per-row early exits and deferred CPU export.
-Distances are metres. Scoring and closure certification use the shared grasp objective.
-"""
+"""GPU MANO decoding, Shadow initialization IK, immutable contacts and CEM bounds."""
 
 from __future__ import annotations
 from dataclasses import dataclass
@@ -16,94 +11,13 @@ from scipy.spatial.transform import Rotation
 from scripts.calibrate_wuji_mano import PersonalizedMANO, rotmat, CHAINS, TIPS
 
 
-@dataclass(frozen=True)
-class Settings:
-    solver: str = "cem"
-    batch_size: int = 2048
-    population: int = 128
-    iterations: int = 24
-    ik_steps: int = 15
-    pca_components: int = 24
-    candidate_chunk: int = 2048
-    seed: int = 7
-    contact_tolerance_m: float = 0.002
-    penetration_tolerance_m: float = 0.002
-    pos_noise_m: float = 0.005
-    rot_noise_rad: float = 0.05
-    pca_noise: float = 0.1
-    max_root_delta_m: float = 0.1
-    max_root_delta_rad: float = 1.0
-    memory_budget_gb: float = 28.0
-    early_stop: bool = True
-    search_min_iterations: int = 16
-    search_check_every: int = 4
-    search_patience: int = 4
-    stop_relative_tol: float = 1.0e-4
-    stop_absolute_tol: float = 1.0e-5
-    warm_start: bool = False
-    warm_capacity: int = 64
-    warm_object_capacity: int = 128
-    warm_size_ratio: float = 1.2
-    lm_damping: float = 0.01
-    lm_max_step: float = 5.0
-    lm_relative_tol: float = 1.0e-4
-    lm_gradient_tol: float = 1.0e-5
-
-    def __post_init__(self):
-        if self.solver != "cem":
-            raise ValueError("Unknown MANO solver")
-        for key, value in vars(self).items():
-            if isinstance(value, (int, float)) and not math.isfinite(value):
-                raise ValueError(key + " must be finite")
-        for key in (
-            "batch_size",
-            "population",
-            "iterations",
-            "pca_components",
-            "candidate_chunk",
-            "search_check_every",
-            "search_patience",
-            "warm_capacity",
-            "warm_object_capacity",
-        ):
-            if getattr(self, key) < 1:
-                raise ValueError(key + " must be positive")
-        if (
-            self.population < 2
-            or not 1 <= self.pca_components <= 45
-            or self.ik_steps < 0
-        ):
-            raise ValueError("Invalid solver dimensions")
-        if (
-            self.search_min_iterations < 0
-            or self.stop_relative_tol < 0
-            or self.stop_absolute_tol < 0
-        ):
-            raise ValueError("Invalid stopping settings")
-        if self.warm_size_ratio < 1:
-            raise ValueError("Invalid warm-start size ratio")
-        for key in (
-            "contact_tolerance_m",
-            "penetration_tolerance_m",
-            "memory_budget_gb",
-            "pos_noise_m",
-            "rot_noise_rad",
-            "pca_noise",
-            "max_root_delta_m",
-            "max_root_delta_rad",
-            "lm_damping",
-            "lm_max_step",
-        ):
-            if getattr(self, key) <= 0:
-                raise ValueError(key + " must be positive")
-        if self.lm_relative_tol < 0 or self.lm_gradient_tol < 0:
-            raise ValueError("Invalid LM tolerances")
+from retarget.solver.cem import InitializationSettings as Settings,DEFAULTS
 
 
 class ManoDecoder(torch.nn.Module):
     """Exact MANO with parallel finger chains and a five-tip subset for LM IK."""
 
-    def __init__(self, path, device="cpu", components=24):
+    def __init__(self, path, device="cpu", components=DEFAULTS.initialization.pca_components):
         super().__init__()
         self.base = PersonalizedMANO(path).to(device=device, dtype=torch.float32)
         b = self.base
@@ -138,6 +52,8 @@ class ManoDecoder(torch.nn.Module):
         self.levels = [
             [j for j in range(1, 16) if depth[j] == d] for d in range(1, max(depth) + 1)
         ]
+        for index, level in enumerate(self.levels):
+            self.register_buffer('level_indices_' + str(index), torch.tensor(level, device=device))
         self.register_buffer("ik_tip_ids", torch.tensor(TIPS, device=self.device))
         order = [0]
         for finger, chain in enumerate(CHAINS):
@@ -186,12 +102,13 @@ class ManoDecoder(torch.nn.Module):
         positions = [None] * 16
         rotations[0] = local[:, 0]
         positions[0] = self.joints_rest[0].expand(b, -1)
-        for level in self.levels:
+        for level_index, level in enumerate(self.levels):
+            level_ids = getattr(self, 'level_indices_' + str(level_index))
             parent_r = torch.stack([rotations[self.base.parents[j]] for j in level], 1)
             parent_p = torch.stack([positions[self.base.parents[j]] for j in level], 1)
-            rr = parent_r @ local[:, level]
+            rr = parent_r @ local[:, level_ids]
             pp = parent_p + (
-                parent_r @ self.relative_joints[level][None, :, :, None]
+                parent_r @ self.relative_joints[level_ids][None, :, :, None]
             ).squeeze(-1)
             for k, j in enumerate(level):
                 rotations[j] = rr[:, k]
@@ -481,91 +398,6 @@ class SurfaceBatch:
         )
 
 
-class WarmStartBank:
-    """Bounded GPU cache of solved poses in canonical object coordinates."""
-
-    def __init__(self, device, settings):
-        self.device = torch.device(device)
-        self.settings = settings
-        self.entries = collections.OrderedDict()
-
-    def lookup(self, keys, target, surfaces):
-        target = torch.as_tensor(target, dtype=torch.float32, device=self.device)
-        n = len(target)
-        variables = torch.zeros(
-            (n, 6 + self.settings.pca_components), device=self.device
-        )
-        valid = torch.zeros(n, dtype=torch.bool, device=self.device)
-        feature = (
-            (target - surfaces.origin[:, None]) @ surfaces.rotation
-        ) / surfaces.scale[:, None, None]
-        for key in dict.fromkeys(keys):
-            if key not in self.entries:
-                continue
-            self.entries.move_to_end(key)
-            entry = self.entries[key]
-            ids = torch.tensor(
-                [i for i, k in enumerate(keys) if k == key], device=self.device
-            )
-            distance = torch.cdist(feature[ids].flatten(1), entry["feature"].flatten(1))
-            ratio = surfaces.scale[ids, None] / entry["scale"][None]
-            eligible = (ratio >= 1 / self.settings.warm_size_ratio) & (
-                ratio <= self.settings.warm_size_ratio
-            )
-            distance = distance.masked_fill(~eligible, torch.inf)
-            minimum, nearest = distance.min(-1)
-            v = entry["variables"][nearest].clone()
-            v[:, :3] = (
-                torch.einsum(
-                    "bij,bj->bi",
-                    surfaces.rotation[ids],
-                    v[:, :3] * surfaces.scale[ids, None],
-                )
-                + surfaces.origin[ids]
-            )
-            rotation = surfaces.rotation[ids] @ entry["rotation"][nearest]
-            # Small batched SO(3) log, no CPU transfer.
-            v[:, 3:6] = matrix_to_rotvec(rotation)
-            variables[ids] = v
-            valid[ids] = torch.isfinite(minimum)
-        return variables, valid, feature
-
-    def add(self, keys, variables, feature, surfaces):
-        local = variables.detach().clone()
-        local[:, :3] = (
-            torch.einsum(
-                "bij,bj->bi",
-                surfaces.rotation.transpose(-1, -2),
-                local[:, :3] - surfaces.origin,
-            )
-            / surfaces.scale[:, None]
-        )
-        rotation = surfaces.rotation.transpose(-1, -2) @ rotmat(variables[:, 3:6])
-        for key in dict.fromkeys(keys):
-            ids = torch.tensor(
-                [i for i, k in enumerate(keys) if k == key], device=self.device
-            )
-            values = dict(
-                variables=local[ids].clone(),
-                rotation=rotation[ids].clone(),
-                feature=feature[ids].clone(),
-                scale=surfaces.scale[ids].clone(),
-            )
-            if key in self.entries:
-                old = self.entries.pop(key)
-                values = {
-                    k: torch.cat((old[k], v), 0)[-self.settings.warm_capacity :]
-                    for k, v in values.items()
-                }
-            else:
-                values = {
-                    k: v[-self.settings.warm_capacity :] for k, v in values.items()
-                }
-            self.entries[key] = values
-            if len(self.entries) > self.settings.warm_object_capacity:
-                self.entries.popitem(last=False)
-
-
 def matrix_to_rotvec(matrix):
     """Stable SO(3) logarithm including rotations close to pi."""
     # Quaternion from the largest diagonal element avoids division by sin(theta).
@@ -841,94 +673,3 @@ def pose_problem(mean, adapter):
 
     problem = Problem(mean, sigma, evaluate, project)
     return problem
-
-
-def optimize(
-    decoder,
-    target,
-    surfaces,
-    settings,
-    seed,
-    fixed_contacts,
-    source_contacts,
-    source_normals,
-    warm_start=None,
-    warm_available=None,
-    on_solved=None,
-):
-    from retarget.env.grasp.mano_adapter import ManoModelAdapter
-    from retarget.solver.base import Problem, Settings as SamplerSettings, solve
-
-    s = settings
-    device = decoder.device
-    target = torch.as_tensor(target, dtype=torch.float32, device=device)
-    initial = initialize(decoder, target)
-    mean, ik_iterations, _ = lm_ik(decoder, initial, target, s)
-    adapter = ManoModelAdapter(decoder, fixed_contacts, surfaces, s.candidate_chunk)
-    problem = pose_problem(mean, adapter)
-    sampler = SamplerSettings(
-        type="cem", population=s.population, iterations=s.iterations
-    )
-    rows = torch.arange(len(mean), device=device)
-    with torch.no_grad():
-        start_cost = problem.evaluate(mean[:, None])[:, 0]
-        result = solve(problem, sampler, seed)
-        best = result.parameters
-        final_cost = adapter.evaluate(best, rows, collect=True)
-        vertices, joints, frames = decoder(best, full=True)
-        p, norm, d, face, bary = surfaces.query(vertices, rows)
-        mapped, hn = fixed_contacts.evaluate(vertices, full=True)
-        mp, mn, md, mf, mb = surfaces.query(mapped, rows)
-        source_contacts = torch.as_tensor(
-            source_contacts, device=device, dtype=torch.float32
-        )
-        source_normals = torch.as_tensor(
-            source_normals, device=device, dtype=torch.float32
-        )
-        source_projection = surfaces.query(source_contacts, rows)[0]
-        zeros = torch.zeros(len(best), device=device, dtype=torch.int32)
-        history = (
-            torch.stack([h["best_cost"] for h in result.history])
-            if result.history
-            else start_cost[None]
-        )
-        tensors = dict(
-            variables=best,
-            angles=decoder.angles(best),
-            vertices=vertices,
-            joints=joints,
-            frames=frames,
-            projected=p,
-            object_normals=norm,
-            distance=d,
-            object_face=face,
-            object_bary=bary,
-            mapped_hand_points=mapped,
-            mapped_hand_normals=hn,
-            mapped_object_points=mp,
-            mapped_object_normals=mn,
-            mapped_distance=md,
-            mapped_object_face_ids=mf,
-            mapped_object_barycentric=mb,
-            source_annotation_points=source_contacts,
-            source_annotation_normals=source_normals,
-            source_annotation_object_projection=source_projection,
-            initial_cost=start_cost,
-            final_cost=final_cost,
-            history=history,
-            ik_iterations=ik_iterations,
-            cem_iterations=zeros + s.iterations,
-            stop_reason=zeros,
-            warm_start_used=zeros.bool(),
-            warm_start_variables=torch.zeros_like(best),
-            candidate_evaluations=(zeros + s.population * s.iterations + 1),
-            projected_closure=adapter.last["closure_certified"],
-            closure_margin=adapter.last["closure_margin"],
-            closure_cost=adapter.last["closure"],
-            closure_valid=adapter.last["valid"],
-            collision_depth=adapter.last["penetration_depth_m"],
-            coverage=adapter.last["coverage"],
-        )
-        if not all(torch.isfinite(t).all() for t in (best, final_cost, vertices, d)):
-            raise RuntimeError("Nonfinite original-objective MANO result")
-    return {k: v.detach() for k, v in tensors.items()}

@@ -28,7 +28,7 @@ def test_manifest_scanning_and_filters(tmp_path):
 
 def test_final_results_exclude_process_and_native_replays(tmp_path):
     from retarget.viewer.runtime import final_result_rows
-    common = dict(batch=tmp_path, task="grasp", case_id="same", method="mppi")
+    common = dict(batch=tmp_path, task="grasp", case_id="same", method="cem")
     rows = [dict(common, name=phase, phase=phase)
             for phase in ("acquisition", "hold", "refinement", "native_test")]
     result = final_result_rows(rows)
@@ -50,20 +50,19 @@ def test_final_view_loads_only_the_optimized_pose(tmp_path):
     assert load_case(tmp_path, case)[1].shape == (3, 1)
 
 
-def test_final_summary_keeps_projected_and_native_results_distinct():
+def test_final_summary_keeps_coverage_and_native_results_distinct():
     from retarget.viewer.runtime import final_summary
-    result = final_summary(dict(geometry_diagnostics=dict(coverage=.8, projected_closure=True),
+    result = final_summary(dict(geometry_diagnostics=dict(coverage=.8),
         native_evaluated=True, task_success=False, optimization_seconds=5.))
-    assert "80.0%" in result and "投影摩擦锥闭合：通过" in result
+    assert "80.0%" in result
     assert "原生物理评测：未通过" in result and "5.00 s" in result
 
 
-def test_template_only_summary_uses_geometric_criterion():
+def test_patch_summary_does_not_claim_unrun_native_physics():
     from retarget.viewer.runtime import final_summary
-    result = final_summary(dict(success_criterion="projected_template_geometry_v1",
+    result = final_summary(dict(success_criterion="patch_consistent_terminal_velocity_h5_v5",
         task_success=True, native_evaluated=False))
-    assert "几何验收：通过" in result
-    assert "原生物理评测" not in result
+    assert "原生物理评测：未运行" in result
 
 
 @pytest.mark.parametrize('version', ['v1', 'v2'])
@@ -71,10 +70,9 @@ def test_patch_summary_distinguishes_new_metric_from_original_points(version):
     from retarget.viewer.runtime import final_summary
     result = final_summary(dict(geometry_diagnostics=dict(coverage=1.,
         coverage_definition='anatomical_patch_interior_'+version, covered_patch_count=2,
-        required_patch_count=2, template_point_coverage=.5, torsional_friction_m=.02)))
+        required_patch_count=2, template_point_coverage=.5)))
     assert 'patch 内部贴合率：100.0%（2/2）' in result
     assert '原模板点贴合率：50.0%' in result
-    assert '扭转摩擦：开启（ComFree 投影平衡，系数 0.02 m）' in result
 
 
 def test_patch_viewer_reads_metric_sidecar_without_moving_source_artifacts(tmp_path):

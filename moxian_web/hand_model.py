@@ -25,6 +25,20 @@ STAGES = [
     ('open_repeat','再次自然张开，保持 1.5 秒；本组只作留出验证。')]
 DEFAULT_MATERIAL = {'young_pa':30000.,'thickness_m':.003,'max_compression_m':.002}
 
+def persist_calibrated_profile(home,candidate,automatic=False,previous_profile=None):
+    """Commit an accepted model and preserve the previously applied version."""
+    report=candidate.get('report',{})
+    if not (report.get('accepted') and report.get('validation_pose_source') in ('runtime_emf_only','official_skeleton_fk') and report.get('contact_validation_passed') and report.get('together_validation_passed') and report.get('approach_validation_passed')):
+        raise ValueError('标定结果未通过独立动作检查，当前模型保留')
+    home=Path(home);home.mkdir(parents=True,exist_ok=True)
+    profile=copy.deepcopy(candidate);profile.update(calibrated=True,applied_at_ms=time.time()*1000,revision=uuid.uuid4().hex,automatic_application=bool(automatic))
+    def write(path,value):
+        temp=path.with_suffix('.tmp');temp.write_text(json.dumps(value,ensure_ascii=False,allow_nan=False,indent=2));temp.replace(path)
+    if (home/'current.json').exists():write(home/'previous.json',json.loads((home/'current.json').read_text()))
+    elif previous_profile is not None:write(home/'previous.json',previous_profile)
+    write(home/'current.json',profile)
+    return profile
+
 def material_config(value):
     result={**DEFAULT_MATERIAL, **value}
     limits={'young_pa':(1000.,1000000.),'thickness_m':(.0005,.02),'max_compression_m':(0.,.002)}
@@ -109,10 +123,11 @@ class HandModelBridge(SkeletonBridge):
         self.model_path=Path(os.environ.get('MOXIAN_MANO_MODEL',str(DEFAULT_MANO)))
         self.topology=None
         self.last_sent=0.
+        self.audit_checked=0.;self.audit_cache=None
 
     def start(self,serial):
         if self.proc and self.proc.poll() is None and self.serial==serial:return
-        self.stop();self.serial=serial;self.topology=None
+        self.stop();self.serial=serial;self.topology=None;self.audit_checked=0.;self.audit_cache=None
         if not self.python.is_file() or not self.model_path.is_file():
             with self.lock:self.state.update(status='unavailable',error='缺少 MANO_LEFT.pkl 或 CUDA 环境，请执行 setup_moxian_mano.sh')
             return
@@ -169,6 +184,27 @@ class HandModelBridge(SkeletonBridge):
     def model(self):
         with self.lock:return copy.deepcopy(self.topology) or {'ready':False}
 
+    def calibration_audit(self):
+        now=time.monotonic()
+        if now-self.audit_checked>=1:
+            self.audit_checked=now
+            paths=list((self.folder/'hand_model').glob('*/calibration-audit.json'))
+            if self.serial:
+                key=hashlib.sha256(self.serial.encode()).hexdigest()[:16]
+                paths=[p for p in paths if p.parent.name==key]
+            try:
+                if paths:
+                    path=max(paths,key=lambda p:p.stat().st_mtime);audit=json.loads(path.read_text())
+                    candidate=path.parent/'candidate.json';current=path.parent/'current.json'
+                    if candidate.exists():
+                        p=json.loads(candidate.read_text());audit['candidate_report']=p.get('report');audit['candidate_dimensions_mm']=p.get('report',{}).get('dimensions_after_mm',audit.get('candidate_dimensions_mm'))
+                    if current.exists():
+                        p=json.loads(current.read_text());audit.update(dimensions_applied=bool(p.get('calibrated')),applied_revision=p.get('revision'),
+                            active_dimension_parameters=p.get('dimension_parameters'),active_dimensions_mm=p.get('report',{}).get('dimensions_after_mm',audit.get('active_dimensions_mm')))
+                    self.audit_cache=audit
+            except (OSError,ValueError):pass
+        return copy.deepcopy(self.audit_cache)
+
     def snapshot(self,connected=True):
         with self.lock:
             r=copy.deepcopy(self.state);age=(time.monotonic()-self.pose_at)*1000 if self.pose_at else None
@@ -178,6 +214,14 @@ class HandModelBridge(SkeletonBridge):
         if not r['ready']:
             r['vertices_m']=None;r['joints_m']=None
             r['fusion']={'ready':False,'status':'unknown','pairs':[],'patches':[]}
+        audit=self.calibration_audit()
+        if audit:
+            r['calibration_audit']=audit
+            if not self.proc or self.proc.poll() is not None:
+                r.update(fit=audit.get('candidate_report'),calibrated=audit['dimensions_applied'],
+                         dimensions_mm=audit['active_dimensions_mm'],penetration_policy='soft_penalty_only')
+                r['calibration_process']={'capture_complete':audit['capture_complete'],'dimensions_applied':audit['dimensions_applied'],
+                                          'fit_accepted':bool((audit.get('candidate_report') or {}).get('accepted'))}
         return r
 
 

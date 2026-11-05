@@ -11,6 +11,9 @@ import argparse,copy,datetime,fcntl,hashlib,importlib,importlib.metadata,inspect
 import random,signal,statistics,subprocess,sys,time,traceback
 from types import SimpleNamespace
 
+REPOSITORY_ROOT=Path(__file__).resolve().parents[1]
+if (REPOSITORY_ROOT/'retarget/solver/graspadmm.py').is_file():sys.path.insert(0,str(REPOSITORY_ROOT))
+
 COMMIT='d561ff9df8545deef7a3f9e7cfb4045ef66f6913'
 MENAGERIE='bf04290ac7911fa7a39339c7e507792fd464c438'
 TYPE='7_Prismatic_3_Finger'
@@ -66,6 +69,16 @@ def configuration(source,root,stage,output=None,workers=32):
     base.n_worker=workers;base.debug_view=False;base.debug_render=False;base.debug_name=None
     if stage=='init':
         base.op.object.cfg_path=str(root/'scenes/*.npy');base.op.object.n_cfg=16;base.init_gpu=[1]
+    from retarget.solver.graspadmm import DEFAULTS,settings
+    if stage=='grasp_admm':
+        for key,value in settings().items():
+            if not key.startswith('init_'):base.op.grasp[key]=value
+    if stage=='init':
+        base.op.epoch=DEFAULTS.init_epoch
+        base.op.object.n_init_point=DEFAULTS.init_points
+        base.op.object.n_init_inplane=DEFAULTS.init_inplane
+        base.op.matcher.opt_step=DEFAULTS.init_iterations
+        base.op.filter.general.n_final=DEFAULTS.init_n_final
     return O.create(O.to_container(base,resolve=True))
 
 
@@ -113,13 +126,14 @@ def prepare(root,production,source_manifest,upstream):
     script_names=['native_graspadmm_retest.py','launch_native_graspadmm_retest.py','diagnose_native_graspadmm.py','profile_native_graspadmm.py','report_native_graspadmm.py',
         'setup_native_graspadmm.sh','fetch_graspadmm_torch.py','fetch_graspadmm_dependencies.py','requirements-graspadmm.txt']
     scripts={name:sha(root/name) for name in script_names}
+    from retarget.solver.graspadmm import DEFAULTS as parameters
     write(root/'MANIFEST.json',dict(commit=COMMIT,menagerie_commit=MENAGERIE,
         authorization='User approved full original Shadow retest',source_manifest_sha256=sha(source_manifest),
         assets_sha256=assets,sources_sha256=sources,input_assets_sha256=input_assets,official_files_sha256=official,
         source_manifest=json.loads((Path(upstream)/'GRASPADMM_UPSTREAM.json').read_text()),
-        seed=20261104,type=TYPE,scene_count=16,max_initialization_outputs=800,
-        init_budget=dict(epoch=5,n_init_point=1024,n_init_inplane=8,matcher_steps=100,n_final=10),
-        grasp_budget=dict(step=50,substep=10),timing=dict(latency_warmup=1,latency_repeats=5,throughput_max_inputs=128,workers=[1,32],repeats=3),
+        seed=20261104,type=TYPE,scene_count=16,max_initialization_outputs=len(scenes)*parameters.init_epoch*parameters.init_n_final,
+        init_budget=dict(epoch=parameters.init_epoch,n_init_point=parameters.init_points,n_init_inplane=parameters.init_inplane,matcher_steps=parameters.init_iterations,n_final=parameters.init_n_final),
+        grasp_budget=dict(step=parameters.step,substep=parameters.substep),timing=dict(latency_warmup=1,latency_repeats=5,throughput_max_inputs=128,workers=[1,32],repeats=3),
         callback_required=False,created_utc=stamp(),script_sha256=sha(__file__),runner_scripts_sha256=scripts,production_solver='cem'))
 
 
@@ -303,30 +317,15 @@ def stage_init(root,source,production):
     def probe(label):
         result=subprocess.run(['nvidia-smi','--query-gpu=index,name,memory.used,memory.total,utilization.gpu','--format=csv,noheader'],capture_output=True,text=True)
         probes.append(dict(label=label,utc=stamp(),gpu=result.stdout))
-    probe('before_pause')
-    state=json.loads((production/'results/dexonomy_mano_gpu_qp_b2048_20261104/status.json').read_text())
-    worker=next(w for w in state['workers'] if w['device']=='cuda:1')
-    pid=worker['pid'];proc=Path('/proc',str(pid))
-    if not proc.exists() or b'spawn_main' not in (proc/'cmdline').read_bytes():raise RuntimeError('Cannot verify owned test-card worker')
-    stat=(proc/'stat').read_text().split()
-    if stat[2] in ('T','t'):raise RuntimeError('Test-card worker was already stopped; refusing to take ownership of its pause')
-    parent_command=Path('/proc',stat[3],'cmdline').read_bytes()
-    if b'retarget_dexonomy_mano.py' not in parent_command or b'dexonomy_mano_gpu_qp_b2048_20261104' not in parent_command:
-        raise RuntimeError('Test-card worker parent does not match this production campaign')
-    value=dict(pid=pid,identity=(proc/'stat').read_text().split()[21],paused=True,deadline=time.monotonic()+900)
-    lease=Path('/tmp')/f'native_graspadmm_{os.getpid()}.json';write(lease,value)
-    guard=subprocess.Popen([sys.executable,__file__,'--root',str(root),'--upstream',str(source.root),'--guardian',str(lease),'--owner',str(os.getpid())],start_new_session=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    os.kill(pid,signal.SIGSTOP);probe('after_pause');start=time.perf_counter()
+    probe('before_initialize');start=time.perf_counter()
     try:source.init.operate_init(cfg);torch.cuda.synchronize(1)
     finally:
-        resume_worker(value);current=json.loads(lease.read_text());write(lease,dict(current,paused=False,resumed_utc=stamp()))
-        guard.terminate();guard.wait(timeout=10)
-        probe('resumed');write(root/'initialization_resources.json',dict(lease=value,probes=probes,restored=current))
-    if current.get('expired'):raise RuntimeError('GPU isolation lease expired')
+        probe('after_initialize')
+        write(root/'initialization_resources.json',dict(probes=probes,production_workers_paused=False))
     paths=list_inputs(root);counts={p.stem:0 for p in (root/'scenes').glob('*.npy')}
     for path in paths:counts[Path(path).parent.name]+=1
     write(root/'initialization.json',dict(seconds=time.perf_counter()-start,samples=len(paths),scene_counts=counts,
-        inputs=[dict(path=p,sha256=sha(p)) for p in paths],worker_resumed=True))
+        inputs=[dict(path=p,sha256=sha(p)) for p in paths],production_workers_paused=False))
     if not paths:raise RuntimeError('Original initialization emitted zero candidates; no fallback inputs permitted')
 
 
@@ -412,7 +411,8 @@ def main():
     p.add_argument('--production',type=Path);p.add_argument('--source-manifest',type=Path)
     p.add_argument('--stage',choices=['prepare','template','initialize','quality','timing','consistency','diagnostics','profile','report','all'],default='all')
     p.add_argument('--guardian',type=Path);p.add_argument('--owner',type=int)
-    a=p.parse_args();a.root=a.root.resolve();a.upstream=a.upstream.resolve()
+    a=p.parse_args()
+    if getattr(a,'production',None):sys.path.insert(0,str(a.production));a.root=a.root.resolve();a.upstream=a.upstream.resolve()
     if a.guardian:guardian(a.guardian,a.owner);return
     if a.stage in ('quality','timing','consistency','diagnostics'):
         mp.set_start_method('spawn',force=True)

@@ -1,4 +1,4 @@
-"""Backend-neutral ForceAware target loading and interpolation."""
+'Backend-neutral CEM target loading and interpolation.'
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ class SequenceData:
     object_pose_xyzw: np.ndarray
     contact: ContactGuidance
     hand_index_per_frame: float = 1.0
-    hand_source: str = "contactaware"
+    hand_source: str = "prepared"
 
 
 @dataclass(frozen=True)
@@ -94,7 +94,7 @@ def load_sequence(
             surface_offset=0.0,
         )
     hand_trajectory = _load_array(output / f"{hand}_qpos.npy")
-    hand_index_per_frame, hand_source = 1.0, "contactaware"
+    hand_index_per_frame, hand_source = 1.0, "prepared"
     sequence = SequenceData(
         hand_trajectory,
         _load_array(output / "object_pose_7.npy"),
@@ -108,7 +108,7 @@ def load_sequence(
 
 def _load_array(path: Path) -> np.ndarray:
     if not path.exists():
-        raise FileNotFoundError(f"Missing contactaware trajectory: {path}")
+        raise FileNotFoundError(f"Missing prepared hand trajectory: {path}")
     return np.load(path, allow_pickle=False).astype(np.float32)
 
 

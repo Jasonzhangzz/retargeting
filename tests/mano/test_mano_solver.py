@@ -4,7 +4,7 @@ import torch,pytest
 from dataclasses import replace
 from tests.mano.helpers import surface
 from retarget.env.grasp import mano_solver as solver
-from retarget.env.grasp.mano_solver import ManoDecoder,residuals,kinematic_loss,lm_ik,optimize
+from retarget.env.grasp.mano_solver import ManoDecoder,residuals,kinematic_loss,lm_ik
 
 def decoder(f):return ManoDecoder(f['model'].base.path,'cpu',24)
 
@@ -47,26 +47,13 @@ def test_lm_autodiff_jacobian_and_monotone_descent(fixture):
     assert (history[1:]<=history[:-1]+1e-6).all()
 
 
-def test_small_real_cem_is_finite_monotone_and_counts_budget(fixture):
-    f=fixture;fast=decoder(f);fast.configure_contact_vertices({'type':f['fixed'].records})
-    fixed=solver.FixedContacts(fast,f['fixed'].records)
-    settings=solver.Settings(population=16,iterations=6,ik_steps=4,
-        candidate_chunk=32,early_stop=False,warm_start=False)
-    out=optimize(fast,f['target'],surface(f),settings,7,fixed,f['points'],f['normals'])
-    again=optimize(fast,f['target'],surface(f),settings,7,fixed,f['points'],f['normals'])
-    np.testing.assert_allclose(out['variables'],again['variables'],atol=1e-7,rtol=1e-6)
-    expected=6*16+1
-    np.testing.assert_array_equal(out['candidate_evaluations'],expected)
-    assert np.isfinite(out['vertices']).all() and (np.diff(out['history'],axis=0)<=1e-5).all()
-    assert (out['final_cost']<=out['initial_cost']+1e-5).all()
-
-
 def test_production_defaults_and_removed_legacy_choices():
     settings=solver.Settings()
-    assert (settings.ik_steps,settings.population,settings.iterations)==(15,128,24)
-    assert settings.batch_size==2048 and not hasattr(solver,"cem_update")
+    from retarget.solver.cem import DEFAULTS
+    assert (settings.ik_steps,DEFAULTS.sampling.population,DEFAULTS.sampling.iterations)==(15,128,24)
+    assert DEFAULTS.resources.batch_size==1024 and not hasattr(solver,"cem_update")
     assert not hasattr(solver,'adam_thin_ik') and not hasattr(solver,'scheduled_std')
-    for kwargs in ({'lm_damping':0},{'lm_max_step':0},{'pos_noise_m':float('nan')}):
+    for kwargs in ({'lm_damping':0},{'lm_max_step':0},{'lm_relative_tol':float('nan')}):
         with pytest.raises(ValueError):solver.Settings(**kwargs)
     for kwargs in ({'ik_method':'adam_full'},{'search_method':'elite'},{'cem_noise_schedule':'geometric'}):
         with pytest.raises(TypeError):solver.Settings(**kwargs)

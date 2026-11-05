@@ -13,7 +13,7 @@ from scipy.spatial.transform import Rotation
 from retarget.env.grasp.mano_solver import ManoDecoder,ShadowSkeleton,Settings,lm_ik,initialize,vertex_normals,sha
 from retarget.task.grasp.dexonomy import load_template
 from retarget.env.geometry import closest_triangles
-from scripts.retarget_dexonomy_mano import GeometryLoader,write
+from scripts.mano_campaign_inputs import GeometryLoader,write
 
 FINGERS=('thumb','index','middle','ring','pinky','palm')
 COLORS=np.array([[209,85,189],[47,151,245],[236,167,32],[40,186,135],[240,91,92],[160,133,89]],np.uint8)

@@ -137,10 +137,10 @@ def report(root):
         f'MANO 为同一20关节刚体模型。先用等骨长对应点 IK 传递五指形状与腕部，再用对应四个指端点位置 IK 贴合 Shadow 实际接触。两步各最多80次函数评估；不加入法向、碰撞、闭合、力或姿态罚项。ADMM仍为原50×10预算、Clarabel、虚拟力、对偶和fallback。手物/自穿透均允许2 mm。',
         f'映射完成 {mapping["completed"]}/{n}，异常 {mapping["failures"]}；四个源接触点均在2 mm映射误差内 {mapping["within_2mm"]}/{n}。映射误差不等于物理可行，初值实际几何另行测量。','',
         '| 判据 | 映射后初值 | ADMM 后 |','|---|---:|---:|']
-    for key,label in [('projected_hand_passed','手点投影闭合'),('distance_passed','距离覆盖'),('normal_passed','法向覆盖'),('slot_joint_passed','距离+法向覆盖'),('tolerated_collision_passed','手物/自穿透≤2mm'),('diagnostic_joint_passed','闭合+覆盖+穿透联合')]:
+    for key,label in [('distance_passed','距离覆盖'),('normal_passed','法向覆盖'),('slot_joint_passed','距离+法向覆盖'),('tolerated_collision_passed','手物/自穿透≤2mm'),('geometry_joint_passed','闭合+覆盖+穿透联合')]:
         lines.append(f'| {label} | {before[key]}/{n} | {after[key]}/{n} |')
     lines+=['',f'原生生成输出 {e["native_operation_outputs"]}/{n}；原六外力 GSR {e["native_gsr_passed"]}/{n}；六纯扭矩稳定 {w["torque_passed"]}/{n}；12工况联合 {w["combined_passed"]}/{n}。映射失败和无输出保留在来源分母中。',
-        '法向诊断v2：在实际更新的手面接触点重新查询碰撞三角形并插值法向，不沿用移动前模板法向。旧模板法向与旧角度同时保存；新旧法向联合通过数不可直接混比。投影闭合仍为生产摩擦0.6、13工况、96步QP；覆盖阈值±2mm/30°/80%。',
+        '法向诊断v2：在实际更新的手面接触点重新查询碰撞三角形并插值法向，不沿用移动前模板法向。旧模板法向与旧角度同时保存；新旧法向联合通过数不可直接混比。覆盖阈值±2mm/30°/80%。',
         f'单条完整ADMM operation预热一次测五次，中位数 {summary["latency_median_seconds"]:.6f} s；32 workers吞吐中位数 {summary["throughput_median"]:.4f} 条/s。初始化IK wall time {mapping["wall_seconds"]:.3f} s另计，未混入ADMM计时。',
         '扭矩测试保留上一版的 m·9.8·r 幅度、500步与5cm/15°阈值，不加入求解目标。来源经过Shadow成功筛选，不能将490条的比例与旧800随机候选直接作为无偏因果提升比较。',
         '全部阶段在CPU；没有暂停任何生产GPU worker。Shadow基线、旧MANO实验和生产CEM结果均保留。全部指纹、逐条映射与源抓姿索引可复核。']

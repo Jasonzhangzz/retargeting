@@ -1,4 +1,4 @@
-"""Shared contact scheduling for ForceAware targets and metrics."""
+'Shared contact scheduling for CEM targets and metrics.'
 
 from __future__ import annotations
 

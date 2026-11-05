@@ -5,6 +5,7 @@ Struct definitions follow the installed qnbot_hand/c/api.h, not SDK internals.
 """
 from __future__ import annotations
 import ctypes as C
+import json
 import math
 from pathlib import Path
 
@@ -20,6 +21,8 @@ class GloveFrame(C.Structure):
               ('local_mask',C.c_uint32),('world_mask',C.c_uint32),('root',Pose),('local',Pose*5),('world',Pose*5)]
 class EngineOptions(C.Structure):
     _fields_=[('size',C.c_uint32),('abi',C.c_uint32),('config',View),('bone_config',View),('algo_config',View)]
+class SdkOptions(C.Structure):
+    _fields_=[('size',C.c_uint32),('abi',C.c_uint32),('resource_root',View)]
 class JointBuffer(C.Structure):
     _fields_=[('size',C.c_uint32),('abi',C.c_uint32),('timestamp',C.c_double),('side',C.c_int),('count',C.c_size_t),('capacity',C.c_size_t),('positions',C.POINTER(C.c_double))]
 class SkeletonPose(C.Structure):
@@ -48,13 +51,16 @@ def matrix_quaternion(m):
 
 class NativeSkeleton:
     def __init__(self,package_root,config_path):
-        self.lib=C.CDLL(str(Path(package_root)/'lib/libqnbot_hand.so'));lib=self.lib;self.handle=C.c_void_p()
+        self.lib=C.CDLL(str(Path(package_root)/'lib/libqnbot_hand.so'));lib=self.lib;self.handle=C.c_void_p();self.sdk_context=C.c_void_p()
         def sig(name,args,result):
             f=getattr(lib,name);f.argtypes=args;f.restype=result;return f
         ptr=C.c_void_p
         sig('qh_abi_version_major',[],C.c_uint32)
         if lib.qh_abi_version_major()!=2:raise ValueError('Unsupported QnBot hand ABI')
         sig('qh_engine_create',[C.POINTER(EngineOptions),C.POINTER(ptr)],C.c_int)
+        sig('qh_sdk_create',[C.POINTER(SdkOptions),C.POINTER(ptr)],C.c_int)
+        sig('qh_sdk_create_engine',[ptr,View,View,View,C.POINTER(ptr)],C.c_int)
+        sig('qh_sdk_destroy',[ptr],None);sig('qh_sdk_last_error',[ptr],C.c_char_p)
         sig('qh_engine_destroy',[ptr],None);sig('qh_engine_last_error',[ptr],C.c_char_p)
         sig('qh_last_error',[],C.c_char_p)
         for name in ['joint_count','skeleton_node_count','physics_step_count']:
@@ -62,15 +68,34 @@ class NativeSkeleton:
         for name in ['physics_enabled','physics_contact_count','physics_actuator_count','physics_collision_geom_count']:
             sig('qh_engine_'+name,[ptr],C.c_int)
         sig('qh_engine_skeleton_node_name',[ptr,C.c_size_t],C.c_char_p)
+        sig('qh_engine_joint_name',[ptr,C.c_size_t],C.c_char_p)
         sig('qh_engine_step',[ptr,C.POINTER(GloveFrame),C.POINTER(JointBuffer)],C.c_int)
         sig('qh_engine_get_last_target',[ptr,C.POINTER(Target)],C.c_int)
         sig('qh_engine_get_last_skeleton_pose',[ptr,C.POINTER(SkeletonBuffer)],C.c_int)
-        options=EngineOptions(C.sizeof(EngineOptions),2,View.text(config_path),View(),View())
-        status=lib.qh_engine_create(C.byref(options),C.byref(self.handle))
-        if status:raise RuntimeError((lib.qh_last_error() or b'Native engine creation failed').decode())
+        resource_root=None
+        for line in Path(config_path).read_text().splitlines():
+            if line.startswith('__resource_root__:'):
+                value=line.split(':',1)[1].strip()
+                resource_root=json.loads(value) if value.startswith('"') else value
+        if resource_root:
+            # A prior SDK session can retain its default resource context. Use
+            # an explicit C ABI context so this engine owns the derived limits.
+            options=SdkOptions(C.sizeof(SdkOptions),2,View.text(resource_root))
+            status=lib.qh_sdk_create(C.byref(options),C.byref(self.sdk_context))
+            if status:raise RuntimeError((lib.qh_last_error() or b'Native SDK context creation failed').decode())
+            config=View.text(Path(config_path).resolve())
+            status=lib.qh_sdk_create_engine(self.sdk_context,View.text('dynamic_openxr_hand'),config,config,C.byref(self.handle))
+        else:
+            options=EngineOptions(C.sizeof(EngineOptions),2,View.text(config_path),View(),View())
+            status=lib.qh_engine_create(C.byref(options),C.byref(self.handle))
+        if status:
+            error=lib.qh_sdk_last_error(self.sdk_context) if self.sdk_context else lib.qh_last_error()
+            self.close();raise RuntimeError((error or b'Native engine creation failed').decode())
         self.joint_count=lib.qh_engine_joint_count(self.handle);self.node_count=lib.qh_engine_skeleton_node_count(self.handle)
         self.positions=(C.c_double*self.joint_count)();self.nodes=(SkeletonPose*self.node_count)()
         self.names=[lib.qh_engine_skeleton_node_name(self.handle,i).decode() for i in range(self.node_count)]
+        self.joint_names=[lib.qh_engine_joint_name(self.handle,i).decode() for i in range(self.joint_count)]
+        self.joint_side_initialized=False
 
     def check(self,status):
         if status:raise RuntimeError((self.lib.qh_engine_last_error(self.handle) or b'Native hand error').decode())
@@ -86,12 +111,18 @@ class NativeSkeleton:
             node=frame['fingers'][name];f.local[i].position[:]=node['position'];f.local[i].rotation[:]=quaternion_matrix(node['quaternion_xyzw'])
         output=JointBuffer(C.sizeof(JointBuffer),2,0,1,0,self.joint_count,self.positions)
         self.check(self.lib.qh_engine_step(self.handle,C.byref(f),C.byref(output)))
+        if not self.joint_side_initialized:
+            # The package defaults to right; first left frame selects the actual
+            # hand. Query names after that switch so diagnostics name left DOFs.
+            self.joint_names=[self.lib.qh_engine_joint_name(self.handle,i).decode() for i in range(self.joint_count)]
+            if not all(n.startswith('left_') for n in self.joint_names):raise ValueError('原生引擎未切换到左手')
+            self.joint_side_initialized=True
         target=Target();target.size=C.sizeof(target);target.abi=2
         self.check(self.lib.qh_engine_get_last_target(self.handle,C.byref(target)))
         bones=SkeletonBuffer(C.sizeof(SkeletonBuffer),2,0,1,0,self.node_count,self.nodes)
         self.check(self.lib.qh_engine_get_last_skeleton_pose(self.handle,C.byref(bones)))
         return {'pose':{'timestamp_ms':frame['timestamp_ms'],'hand_side':'left','coordinate_frame':'wrist_local','names':self.names,
-                        'positions_local':[list(n.position) for n in self.nodes],'orientations_local_xyzw':[list(n.quaternion) for n in self.nodes]},
+                        'joint_names':self.joint_names,'joint_positions_rad':list(self.positions),'positions_local':[list(n.position) for n in self.nodes],'orientations_local_xyzw':[list(n.quaternion) for n in self.nodes]},
                 'targets':{'timestamp_ms':frame['timestamp_ms'],'hand_side':'left','coordinate_frame':'wrist_local',
                            'names':['thumb','index','middle','ring','pinky'],
                            'positions_local':[list(n.position) for n in target.tips_local],
@@ -106,3 +137,4 @@ class NativeSkeleton:
 
     def close(self):
         if self.handle:self.lib.qh_engine_destroy(self.handle);self.handle=C.c_void_p()
+        if self.sdk_context:self.lib.qh_sdk_destroy(self.sdk_context);self.sdk_context=C.c_void_p()

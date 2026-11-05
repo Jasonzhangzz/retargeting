@@ -4,7 +4,7 @@ import numpy as np
 import torch,pytest
 from tests._paths import ROOT
 from retarget.env.grasp.mano_solver import ManoDecoder,ShadowSkeleton,FixedContacts,SurfaceBatch
-from scripts.retarget_dexonomy_mano import GeometryLoader
+from scripts.mano_campaign_inputs import GeometryLoader
 
 @pytest.fixture(scope='module')
 def fixture():

@@ -2,16 +2,16 @@
 import math
 import importlib
 import torch
-from .native_admm import ContactQP,Settings
+from .native_admm import ContactQP
+from retarget.solver.graspadmm import DEFAULTS
 from .graspadmm_source import require_upstream
 
 
 class NativeBatchedQP(ContactQP):
-    def __init__(self,contacts,device,*,mode='optimization',miu_coef=None,
-                 tolerance=1e-8,max_steps=10000):
+    def __init__(self,contacts,device,*,mode='optimization'):
         if mode not in ('optimization','filter'):raise ValueError(mode)
-        friction=tuple(miu_coef or ((.1,0.) if mode=='optimization' else (.6,0.)))
-        settings=Settings(opt_miu_coef=friction,qp_tolerance=tolerance,qp_max_steps=max_steps)
+        friction=DEFAULTS.opt_miu_coef if mode=='optimization' else DEFAULTS.filter_miu_coef
+        settings=DEFAULTS
         self.source=require_upstream();self.settings=settings;self.mode=mode
         self.backend=importlib.import_module('dexonomy.qp.qp_batched');self.solvers={}
         nx=6*contacts;nc=nx+contacts+1

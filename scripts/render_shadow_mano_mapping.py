@@ -61,13 +61,13 @@ def main(folder):
             draw.text((width+16,43),'MANO: same IDs / anatomical triangle mapping',font=small,fill='#e4c5a6')
             for side,(m,d,key,nkey) in enumerate([(shadow,data,'shadow_contacts','shadow_normals'),(human,hd,'mano_contacts','mano_normals')]):
                 pair.paste(render_side(m,d,np.array(row[key]),np.array(row[nkey]),row['contact_mapping'],center,eye,basis[:,1],width,height),(width*side,72))
-            draw.text((16,height+79),'Template annotations, not per-sample contact truth. MANO bone IK only; object MPPI not applied.',font=small,fill='#d3deea')
+            draw.text((16,height+79),'Template annotations, not per-sample contact truth. MANO bone initialization.',font=small,fill='#d3deea')
             p=previews/(row['name']+'_'+view+'.png');pair.save(p);results.append(p.name);print('RENDERED',p.name,flush=True)
     thumbs=[Image.open(previews/f).resize((640,360)) for f in results if f.endswith('_palm.png')]
     sheet=Image.new('RGB',(1280,360*((len(thumbs)+1)//2)),'#15212e')
     for i,im in enumerate(thumbs):sheet.paste(im,((i%2)*640,(i//2)*360))
     sheet.save(folder/'mapping_overview.jpg',quality=94)
-    index='<html><meta charset="utf-8"><title>Shadow → MANO 接触映射</title><style>body{background:#14202d;color:white;font:16px system-ui;padding:20px}img{max-width:100%}a{color:#83c8ff}</style><h1>Shadow → MANO 接触映射检查</h1><p>同编号、同颜色对应同一模板标注点。左：Shadow；右：MANO。短箭头为表面法向。MANO 是骨架初始化，尚未执行物体 MPPI。</p><p>这里展示模板标注映射，不是原始数据集逐样本接触真值。</p><p><a href="http://192.168.0.32:8099/">交互 3D：31 个抓型、模板／真实缓存姿态、逐点筛选</a></p><img src="mapping_overview.jpg">'
+    index='<html><meta charset="utf-8"><title>Shadow → MANO 接触映射</title><style>body{background:#14202d;color:white;font:16px system-ui;padding:20px}img{max-width:100%}a{color:#83c8ff}</style><h1>Shadow → MANO 接触映射检查</h1><p>同编号、同颜色对应同一模板标注点。左：Shadow；右：MANO。短箭头为表面法向。MANO 为骨架初始化。</p><p>这里展示模板标注映射，不是原始数据集逐样本接触真值。</p><p><a href="http://192.168.0.32:8099/">交互 3D：31 个抓型、模板／真实缓存姿态、逐点筛选</a></p><img src="mapping_overview.jpg">'
     for f in results:index+='<h3>'+f+'</h3><a href="previews/'+f+'"><img loading="lazy" src="previews/'+f+'"></a>'
     (folder/'index.html').write_text(index+'</html>')
 if __name__=='__main__':

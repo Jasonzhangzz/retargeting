@@ -1,4 +1,4 @@
-"""Complete ForceAware-Warp MPC objective and analytic gradients."""
+'Complete CEM-Warp MPC objective and analytic gradients.'
 
 from __future__ import annotations
 from dataclasses import dataclass
@@ -1112,7 +1112,7 @@ def _grouped_values(
 ) -> np.ndarray:
     if action_dim <= BASE_ACTION_DIM:
         raise ValueError(
-            f"ForceAware smoothing requires finger actions, got {action_dim} DOFs"
+            f"Control smoothing requires finger actions, got {action_dim} DOFs"
         )
     values = np.full(action_dim, finger, np.float32)
     values[:3] = base_position

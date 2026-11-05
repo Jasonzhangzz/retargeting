@@ -4,6 +4,26 @@ import numpy as np
 DIMENSION_MODE='fixed_segment_scales_v1'
 DIMENSION_COUNT=20  # 5 fingers x 3 axial scales, then 5 radial scales
 PENETRATION_TOLERANCE_M=.005
+PROXIMAL_WIDTH_POLICY='fixed_proximal_lateral_scales_v1'
+
+def scale_proximal_width(vertices,joints,weights,chains,palm_normal,log_scales):
+    """Independent proximal breadth, without inflating depth or moving joints.
+
+    A smooth static rest-shape scale; never depends on live pose or touch.
+    """
+    x=np.asarray(log_scales,dtype=float)
+    if x.shape!=(4,) or not np.isfinite(x).all() or np.max(abs(x))>np.log(1.8)+1e-8:
+        raise ValueError('四指近端宽度比例须在 1/1.8–1.8 内')
+    v=np.asarray(vertices);out=v.copy()
+    smooth=lambda t:np.clip(t,0,1)**2*(3-2*np.clip(t,0,1))
+    for f,c in enumerate(chains[1:]):
+        axis=joints[c[1]]-joints[c[0]];length=np.linalg.norm(axis);axis/=length
+        side=np.cross(axis,palm_normal);side/=np.linalg.norm(side)
+        offset=v-joints[c[0]];u=offset@axis/length
+        envelope=smooth((u+.2)/.3)*(1-smooth((u-.7)/.65))
+        membership=weights[:,list(c)].sum(1)
+        out+=side[None]*(offset@side*np.expm1(x[f])*envelope*membership)[:,None]
+    return out
 
 def scale_segments(vertices,joints,weights,chains,tips,parameters):
     x=np.asarray(parameters,dtype=float)

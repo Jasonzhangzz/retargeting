@@ -70,7 +70,7 @@ def discover_cases(source, excluded=None):
             continue
         if not isinstance(document,dict) or document.get("historical_reevaluation"):
             continue
-        if document.get("method") not in ("dexforge","mppi","cem","contactaware"):
+        if document.get("method") not in ("cem","graspadmm"):
             continue
         if not document.get("failed_stage") or document.get("solver_completed") is not False:
             continue

@@ -1,0 +1,12 @@
+mode: web
+output:
+  name: viewer
+visualization:
+  host: 10.136.26.252
+  port: 8110
+  batch: grasp_current_20261103
+  task: grasp
+  hand: wuji2
+  initial_case: 0008_1_Large_Diameter
+  primary_shape_only: true
+  final_only: true

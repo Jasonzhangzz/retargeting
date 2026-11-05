@@ -58,15 +58,7 @@ def _compile_step(
 
 
 def setup_mj_model(config: Config) -> mujoco.MjModel:
-    if config.point_contact_sites:
-        from .point_model import make_point_contact_model
-
-        model_cpu = make_point_contact_model(
-            config.model_path, config.point_contact_sites[:2], config.point_contact_sites[2:],
-            radius=config.point_contact_radius, friction=config.point_contact_friction,
-        )
-    else:
-        model_cpu = mujoco.MjModel.from_xml_path(config.model_path)
+    model_cpu = mujoco.MjModel.from_xml_path(config.model_path)
     model_cpu.opt.timestep = float(config.sim_dt)
     if config.embodiment_type in ["left", "right", "bimanual"]:
         # setup for hand

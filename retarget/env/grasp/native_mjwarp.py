@@ -4,6 +4,7 @@ This module uses the native mjwarp constraint solver. It does not use the
 ComFree replacement environment or the quasi-static MANO hand adapter.
 """
 from contextlib import contextmanager
+from retarget.solver.graspadmm import DEFAULTS
 import numpy as np
 import torch
 import warp as wp
@@ -147,10 +148,10 @@ class NativePhysics:
     def apply_forces(self,bodies,local,targets,*,normal=None,mask=None):
         previous=self.snapshot() if mask is not None else None
         points=self.positions(bodies,local);delta=targets-points
-        if normal is None:force=500.*delta
+        if normal is None:force=DEFAULTS.spring_stiffness*delta
         else:
             perpendicular=(delta*normal).sum(-1,keepdim=True)*normal
-            force=500.*perpendicular+100.*(delta-perpendicular)
+            force=DEFAULTS.spring_stiffness*perpendicular+DEFAULTS.alignment_stiffness*(delta-perpendicular)
         if mask is not None:force=force*mask[:,None,None]
         self.apply_point_forces(bodies,points,force)
         self.set_ctrl(self.tensor('qpos')[:,:self.hand_qpos],skip_mocap=True)
@@ -168,32 +169,6 @@ class NativePhysics:
         if self.object_geom_mask is None:raise ValueError('Native object geom ownership is required')
         values=wp.to_torch(self.model.geom_margin)
         values[...,self.object_geom_mask]=margin
-
-    def projected_closure(self,solver,points,outward,signed_distance,hand_geom,object_geom):
-        """Margin-aware diagnostic of projected slots, using current model geoms.
-
-        Geom IDs must identify the actual surfaces used by the slot projection.
-        Calling the solver without this method still gives all-slot hypothetical
-        closure. Neither result replaces native filter QP or dynamic GSR.
-        """
-        shape=points.shape[:2]
-        if shape[0]!=self.worlds:raise ValueError('Expected one slot row per physics world')
-        h=torch.as_tensor(hand_geom,device=self.device,dtype=torch.long).expand(shape)
-        o=torch.as_tensor(object_geom,device=self.device,dtype=torch.long).expand(shape)
-        valid=(h>=0)&(h<self.cpu.ngeom)&(o>=0)&(o<self.cpu.ngeom)
-        h=h.clamp(0,self.cpu.ngeom-1);o=o.clamp(0,self.cpu.ngeom-1)
-        if self.object_geom_mask is not None:valid&=self.object_geom_mask[o]&~self.object_geom_mask[h]
-        def gather(name,ids):
-            values=wp.to_torch(getattr(self.model,name))
-            return values.reshape(-1,self.cpu.ngeom).expand(self.worlds,-1).gather(1,ids)
-        hm,om=gather('geom_margin',h),gather('geom_margin',o)
-        hg,og=gather('geom_gap',h),gather('geom_gap',o)
-        pm,pg=self.pair_margin[h,o],self.pair_gap[h,o]
-        margin=torch.where(torch.isfinite(pm),pm,torch.maximum(hm,om))
-        gap=torch.where(torch.isfinite(pg),pg,torch.maximum(hg,og))
-        distance=torch.where(valid,signed_distance,torch.nan)
-        return solver.solve_with_geom_margins(points,outward,signed_distance=distance,
-            hand_margin=hm,object_margin=om,pair_margin=margin,pair_gap=gap)
 
     def overflow(self):
         if not hasattr(self.data,'overflow'):raise RuntimeError('mjwarp overflow flag is required')
@@ -279,57 +254,6 @@ class NativeHandSurfaces:
         return local,face>=0
 
 
-def native_admm(physics,q,hand_bodies,hand_local,object_cpn,surfaces,qp,external,center,
-                *,settings,hand_body_count,progress=None):
-    """Native object search, virtual-force hand integration, then dual update.
-
-    Post-ADMM native filter/squeeze/pregrasp are deliberately separate stages.
-    An ADMM state alone is not advertised as a successful native grasp.
-    """
-    from .native_admm import object_step,update_dual
-    physics.reset(q);initial_state=physics.snapshot();local=hand_local.clone()
-    cp_h=physics.positions(hand_bodies,local).detach();cp_o=object_cpn[...,:3].clone();lam=torch.zeros_like(cp_h)
-    hand_surfaces=NativeHandSurfaces(physics.cpu,hand_bodies.detach().cpu().tolist(),physics.device,physics.frozen_mesh_arrays)
-    active=torch.ones(len(q),device=q.device,dtype=torch.bool);fallback=torch.zeros_like(active)
-    numerical_failure=torch.zeros_like(active);steps=torch.zeros(len(q),device=q.device,dtype=torch.int32)
-    for iteration in range(settings.step):
-        for _ in range(settings.step_obj):
-            updated,audit,gradient,finite=object_step(cp_o,cp_h,lam,surfaces,qp,external,center,settings)
-            failed=active&(~audit['valid']|~finite)
-            fallback|=failed;active&=~failed
-            cp_o=torch.where(active[:,None,None],updated,cp_o)
-        target=cp_o-lam
-        if not settings.fix_hand_local_cp:
-            new_local,valid=hand_surfaces.project(physics,hand_bodies,target)
-            numerical_failure|=active&~valid.all(-1);active&=valid.all(-1)
-            local[...,:3]=torch.where(active[:,None,None],new_local,local[...,:3])
-        for _ in range(settings.step_hand):
-            physics.apply_forces(hand_bodies,local,target,mask=active)
-            physics.advance(settings.substep,mask=active)
-        cp_h=physics.positions(hand_bodies,local).detach()
-        next_lam=update_dual(lam,cp_h,cp_o)
-        lam=torch.where(active[:,None,None],next_lam,lam)
-        finite=torch.isfinite(physics.tensor('qpos')).all(-1)&torch.isfinite(lam).all((1,2))&~physics.overflow()
-        numerical_failure|=active&~finite;active&=finite;steps+=active.to(steps.dtype)
-        if progress is not None:progress(iteration+1,steps,fallback,numerical_failure)
-    fallback_active=fallback&~numerical_failure
-    physics.restore(initial_state,fallback_active);physics.forward()
-    local=torch.where(fallback_active[:,None,None],hand_local,local)
-    previous_diff=torch.zeros_like(cp_h[...,0])
-    for i in range(20):
-        if not bool(fallback_active.any()):break
-        current=physics.apply_forces(hand_bodies,local,object_cpn[...,:3],normal=object_cpn[...,3:],mask=fallback_active)
-        physics.advance(10,mask=fallback_active)
-        improved=((previous_diff-current).amax(-1)>1e-4) if i else torch.ones_like(fallback_active)
-        previous_diff=current
-        packet=physics.native_contacts(hand_body_count,.002)
-        stable=physics.collision_pass(packet,-.002,-.002)
-        fallback_active&=~(~improved&stable)
-    finite=torch.isfinite(physics.tensor('qpos')).all(-1)&~physics.overflow()
-    numerical_failure|=~finite
-    return dict(qpos=physics.tensor('qpos').clone(),hand_cpn_b=local,cp_o=cp_o,cp_h=cp_h,lam=lam,
-                active=~numerical_failure,fallback_used=fallback,numerical_failure=numerical_failure,
-                steps=steps,initial_state=initial_state,hand_bodies=hand_bodies)
 
 
 def native_filter_squeeze_pregrasp(physics,admm,required_groups,external,center,*,hand_body_count):

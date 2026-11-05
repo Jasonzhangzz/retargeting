@@ -11,7 +11,7 @@ def _geometry_job(job):
     source=runner.SOURCE
     record,case_dir=job
     case_dir=Path(case_dir)
-    result=dict(input=record['input'],valid_final_state=False,projected_targets=False,projected_hand=False,
+    result=dict(input=record['input'],valid_final_state=False,
                 slot_distance_pass=False,slot_normal_pass=False,slot_joint_pass=False,required_groups_pass=False,
                 native_operation_output=record['native_operation_output'])
     if not record['captured_final_state']:
@@ -80,39 +80,9 @@ def geometry_job(job):
     except Exception:
         import traceback
         record,_=job
-        return dict(input=record['input'],valid_final_state=False,projected_targets=False,projected_hand=False,
+        return dict(input=record['input'],valid_final_state=False,
             slot_distance_pass=False,slot_normal_pass=False,slot_joint_pass=False,required_groups_pass=False,
             failure='diagnostic_exception',exception=traceback.format_exc(),native_operation_output=record['native_operation_output']),None
-
-
-def closure_batches(rows,packets,production):
-    # Import the identical production diagnostic, with no changes to its formulas.
-    import torch
-    sys.path.insert(0,str(production))
-    from retarget.env.grasp.projected_qp import ProjectedQPClosure,ClosureSettings
-    groups={}
-    for i,p in enumerate(packets):
-        if p is not None:groups.setdefault(len(p['points']),[]).append(i)
-    for count,indices in groups.items():
-        if not count:continue
-        for start in range(0,len(indices),64):
-            selected=indices[start:start+64]
-            for name,pkey,nkey in [('hand','points','normals'),('targets','target','target_normals')]:
-                ids=[i for i in selected if packets[i][pkey] is not None]
-                if not ids:continue
-                stack=lambda key:torch.tensor(np.stack([packets[i][key] for i in ids]),dtype=torch.float32)
-                solver=ProjectedQPClosure(ClosureSettings(friction=.6,cuda_graph=False),center=stack('center')[0],
-                    radius=packets[ids[0]]['radius'],object_mass=.1)
-                solver.set_object_batch(stack('center'),stack('radius'))
-                output=solver.solve(stack(pkey),stack(nkey))
-                for k,i in enumerate(ids):
-                    rows[i]['projected_'+name]=bool(output.certified[k])
-                    rows[i]['projected_'+name+'_valid']=bool(output.valid[k])
-                    rows[i]['projected_'+name+'_max_error']=float(output.scenario_rms[k,1:].max())
-                    rows[i]['projected_'+name+'_margin']=float(output.certified_margin[k])
-                    rows[i]['projected_'+name+'_cost']=float(output.cost[k])
-    for row in rows:
-        row['diagnostic_joint_pass']=row['projected_hand'] and row['slot_joint_pass'] and row.get('native_collision_pass',False) and row.get('native_contact_count',0)>0
 
 
 def run(root,upstream,production):
@@ -126,17 +96,16 @@ def run(root,upstream,production):
         output=list(pool.imap(geometry_job,jobs,chunksize=1))
     rows=[x[0] for x in output];packets=[x[1] for x in output]
     geometry_seconds=time.perf_counter()-start;start=time.perf_counter()
-    closure_batches(rows,packets,production)
+    for row in rows:row['geometry_joint_pass']=row['slot_joint_pass'] and row.get('native_collision_pass',False) and row.get('native_contact_count',0)>0
     result=dict(denominator=len(rows),valid_final_states=sum(r['valid_final_state'] for r in rows),
-        projected_hand_passed=sum(r['projected_hand'] for r in rows),projected_targets_passed=sum(r['projected_targets'] for r in rows),
         distance_passed=sum(r['slot_distance_pass'] for r in rows),normal_passed=sum(r['slot_normal_pass'] for r in rows),
         slot_joint_passed=sum(r['slot_joint_pass'] for r in rows),required_groups_passed=sum(r['required_groups_pass'] for r in rows),
-        diagnostic_joint_passed=sum(r['diagnostic_joint_pass'] for r in rows),geometry_seconds=geometry_seconds,
+        geometry_joint_passed=sum(r['geometry_joint_pass'] for r in rows),geometry_seconds=geometry_seconds,
         pooled_slots=sum(r.get('slot_count',0) for r in rows),pooled_distance=sum(r.get('slot_distance_count',0) for r in rows),
         pooled_normals=sum(r.get('slot_normal_count',0) for r in rows),pooled_joint=sum(r.get('slot_joint_count',0) for r in rows),
-        closure_seconds=time.perf_counter()-start,rows=rows,
-        thresholds=dict(distance_m=.002,angle_deg=30.,coverage=.8,friction=.6,qp_iterations=96,load_cases=13,certificate_tolerance=.05),
-        caveat='Posthoc diagnostics; projected target closure is not actual contact or native six-direction GSR')
+        rows=rows,
+        thresholds=dict(distance_m=.002,angle_deg=30.,coverage=.8),
+        caveat='Posthoc contact geometry only; native GSR is reported separately')
     errors=[r for r in rows if r.get('failure')=='diagnostic_exception']
     result['complete']=not errors
     runner.write(root/'diagnostics.json',result);runner.verify_assets(root,source)

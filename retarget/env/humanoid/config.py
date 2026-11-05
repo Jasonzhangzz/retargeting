@@ -60,7 +60,3 @@ class PhysicsConfig:
 
     nq: int = -1
     contact_site_ids: list = field(default_factory=list)
-    # Opt-in SCSP execution model: exactly two palms and two soles.
-    point_contact_sites: tuple[str, ...] = ()
-    point_contact_radius: float = 1e-4
-    point_contact_friction: float = 0.8

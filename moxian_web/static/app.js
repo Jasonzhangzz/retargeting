@@ -391,21 +391,24 @@ $('manoMaterial').onclick=()=>manoControl('material',{material:{young_pa:Number(
 $('showTipTargets').onchange=()=>{updateUI();drawPose();};
 $('bindSid').onclick=()=>{if(!selectedSids.size)return toast('先在 02 矩阵选中 SID，再在模型曲面点选位置。');$('poseMode').value=poseMode='mano';updateUI();window.startManoBinding?.();toast('在 MANO 曲面点击对应位置；必须属于同一解剖 patch。');};
 window.bindManoPoint=async(face,barycentric)=>{const r=await manoControl('bind_sid',{sids:[...selectedSids],face,barycentric});if(r?.ok)toast('SID 曲面位置已保存；请再次触碰核对。');};
-let shownManoGesture=null;
+let shownManoGesture=null,shownManoDimensions=null;
 function updateHandUI(live){
  $('showTipTargets').parentElement.lastChild.textContent=poseMode==='mano'?' EMF 安装匹配检查':' 指尖匹配检查';
  const mano=poseMode==='mano',h=state?.hand_model||{},cap=h.capture||{},fit=h.fit||{},working=fit.state==='running';
+ const officialFk=h.tracking_source==='official_qnbot_skeleton_fk_v1';
  $('manoCanvas').hidden=!mano;$('poseCanvas').hidden=mano;$('manoGuide').hidden=!mano;$('ikGuide').hidden=mano;
  if(mano){
-  $('poseTitle').textContent='MANO 手部模型';$('coordinateLabel').textContent=h.sensor_mounting?.flat_reference_id?'MANO WRIST · EMF REGISTERED':'WRIST LOCAL · 778 VERTICES';$('poseSource').textContent='PERSONALIZED MANO';$('frameLabel').textContent=h.sensor_mounting?.flat_reference_id?'MANO 腕部参考 · EMF 刚性配准':'腕部局部坐标系';
-  $('poseLegend').textContent=$('showTipTargets').checked?'绿色：接触点 · 空心：EMF 原点 · 虚线：安装残差':'绿色亮点：确认接触 · 动力学关闭';$('skeletonAge').textContent=h.ready?`EMF 残差 ${h.quality?.position_rmse_mm?.toFixed(1)||'—'} mm · ${Math.round(h.age_ms)} ms`:'独立 GPU worker';
-  $('poseEmpty').hidden=!!(live&&h.ready);$('poseEmptyText').textContent=h.error||'等待 MANO 与新鲜骨架输入';$('poseStatus').textContent=h.ready?(Math.max(...Object.values(h.quality?.alignment?.tip_errors_mm||{}))>15?'目标残差较大 · 待核对':h.calibrated?'个性化手型在线':'默认固定尺寸 · 未应用拟合'):h.error||'模型初始化中';
+  $('poseTitle').textContent='MANO 手部模型';$('coordinateLabel').textContent=h.sensor_mounting?.flat_reference_id?'MANO WRIST · EMF REGISTERED':'WRIST LOCAL · 778 VERTICES';$('poseSource').textContent=officialFk?'QNBOT IK → MANO FK':'PERSONALIZED MANO';$('frameLabel').textContent=h.sensor_mounting?.flat_reference_id?'MANO 腕部参考 · EMF 刚性配准':'腕部局部坐标系';
+  $('poseLegend').textContent=$('showTipTargets').checked?'紫色：触觉点阵 · 黄色：传感器接触 · 空心：EMF 原点':'紫色：触觉点阵 · 黄色：传感器接触 · 动力学关闭';$('skeletonAge').textContent=h.ready?`EMF 残差 ${h.quality?.position_rmse_mm?.toFixed(1)||'—'} mm · ${Math.round(h.age_ms)} ms`:'独立 GPU worker';
+  if(officialFk){$('coordinateLabel').textContent='MANO WRIST · QNBOT FK';$('frameLabel').textContent='MANO 腕部参考 · 官方骨架驱动';$('skeletonAge').textContent=h.ready?`官方骨架同帧 · ${Math.round(h.age_ms)} ms`:'等待官方骨架';}
+  $('poseEmpty').hidden=!!(live&&h.ready);$('poseEmptyText').textContent=h.error||'等待 MANO 与新鲜骨架输入';$('poseStatus').textContent=h.ready?(Math.max(...Object.values(h.quality?.alignment?.tip_errors_mm||{}))>15?(h.calibrated?'已标定 · 输入残差较大':'输入残差较大 · 未标定'):h.calibrated?'已标定 · 个性化手型在线':'未标定 · 默认手型'):h.error||'模型初始化中';
  }
- $('manoBadge').textContent=h.preview?'候选预览':h.calibrated?'尺寸已应用':working?'尺寸拟合中':fit.accepted?'候选通过 · 待应用':cap.state==='complete'?'采集完成 · 尺寸未应用':'默认固定尺寸';
+ $('manoBadge').textContent=working?'标定计算中':h.preview?'候选预览':h.calibrated?'已标定 ✓':fit.accepted?'候选通过 · 待应用':cap.state==='complete'?'采集完成 · 尺寸未应用':'默认固定尺寸';
  $('manoPenetration').disabled=working;$('manoFitOptions').disabled=working;
  if(document.activeElement!==$('manoPenetration'))$('manoPenetration').value=(h.penetration_tolerance_m??.005)*1000;
  $('manoFlatReference').disabled=!live||!h.ready||working||cap.state==='collecting';
- const q=h.quality||{};$('manoStatus').textContent=h.error||(!live?'手套离线':h.ready?`${h.calibrated?'已标定':'默认'} · ${q.processing_ms?.toFixed(0)||'—'} ms/帧 · EMF 残差 ${q.position_rmse_mm?.toFixed(1)||'—'} mm · ${h.sensor_mounting?.status==='position_prior'?'安装位置为先验，待多动作标定':h.sensor_mounting?.status==='multi_pose_calibrated'?'安装位置已多动作标定':'EMF 参考未建立'} · 接触点 ${h.contact_points?.length||0} · 无接触力反馈`:'正在初始化 MANO / MuJoCo Warp');
+ const q=h.quality||{};$('manoStatus').textContent=h.error||(!live?'手套离线':h.ready?`${h.calibrated?'已标定':'默认'} · ${q.processing_ms?.toFixed(0)||'—'} ms/帧 · EMF 残差 ${q.position_rmse_mm?.toFixed(1)||'—'} mm · ${h.sensor_mounting?.status==='position_prior'?'安装位置为先验，待多动作标定':h.sensor_mounting?.status==='multi_pose_calibrated'?'安装位置已多动作标定':h.sensor_mounting?.status==='multi_pose_candidate'?'候选安装位置，尚未应用':'EMF 参考未建立'} · 触觉接触单元 ${state.contact?.ready?(state.contact.cell_contact||[]).filter(x=>x===true).length:'未知'} · 无接触力反馈`:'正在初始化 MANO / MuJoCo Warp');
+ if(officialFk&&h.ready){$('manoStatus').textContent=`${h.calibrated?'已标定尺寸':'默认尺寸'} · 官方 IK → 固定 TF → 蒙皮 · ${q.processing_ms?.toFixed(0)||'—'} ms/帧 · 无额外 IK/平滑 · 无接触力反馈`;if(mano)$('poseStatus').textContent=h.calibrated?'已标定尺寸 · 官方骨架驱动':'默认尺寸 · 官方骨架驱动';}
  $('manoCapture').hidden=!cap.stage_id||cap.state==='idle';$('manoStep').textContent=`${(cap.index||0)+1} / 10 · ${cap.stage_id||''}`;$('manoCycles').textContent=cap.stage_id?.startsWith('pinch_')?`${cap.cycles||0} / 2 次接触释放`:'';
  $('manoPrompt').textContent=cap.prompt||'';$('manoQuality').textContent=cap.error||`状态：${cap.state||'等待'} · ${cap.samples||0} 帧；未核对分区不能用于强尺寸约束。`;
  $('manoProgress').value=cap.progress||0;
@@ -415,9 +418,19 @@ function updateHandUI(live){
  if(!patchChecked&&!cap.error)$('manoQuality').textContent='先在 02 的触觉矩阵核对拇指和当前手指末端，再点击确认当前接触分区；位置不符请先修正 SID。';
  $('manoVerify').disabled=!live||cap.state==='collecting'||patchChecked;$('manoVerify').textContent=patchChecked?'当前接触分区已核对 ✓':'确认当前接触分区';$('manoRetry').disabled=!live||!['awaiting_confirmation','collecting','failed'].includes(cap.state);$('manoCancel').disabled=!live||!['collecting','awaiting_confirmation','failed'].includes(cap.state);
  $('manoVerify').hidden=!cap.expected_patches?.length;$('manoStart').disabled=!live||!h.ready||working;$('manoResume').disabled=!live||!cap.completed_groups?.length||cap.state==='complete';
- $('manoFit').disabled=cap.state!=='complete'||working;$('manoFitCancel').disabled=!working;$('manoApply').disabled=!fit.accepted||working;$('manoPreview').disabled=fit.state!=='preview';$('manoPreview').textContent=h.preview?'结束预览':'预览候选';
+ $('manoFit').disabled=cap.state!=='complete'||working||!live||!h.ready;$('manoFitCancel').disabled=!working;$('manoApply').disabled=!fit.accepted||working||!live||!h.ready||!!fit.applied;$('manoPreview').disabled=fit.state!=='preview'||!live||!h.ready;$('manoPreview').textContent=h.preview?'结束预览':'预览候选';
  $('manoFitProgress').hidden=!working;$('manoFitProgress').value=fit.progress||0;
- $('manoFitStatus').textContent=fit.error||fit.message||(fit.state==='preview'?`${fit.reason} · 留出定位 ${fit.position_rmse_mm.toFixed(2)} mm · 接触间隙 ${fit.contact_gap_mm.toFixed(2)} mm · 非接触穿透 ${fit.noncontact_penetration_mm.toFixed(2)} mm`:cap.state==='complete'?'十动作采集已完成；请拟合并应用候选，当前仍使用默认尺寸。':'采集完成后仍需拟合与应用；实时几何保持固定。');
+ $('manoCalibrationWarnings').textContent=(h.calibrated?h.calibration_warnings||[]:fit.quality_warnings||[]).join('；');
+ if(h.surface_refinement&&$('manoCalibrationWarnings').textContent)$('manoCalibrationWarnings').textContent='历史完整标定提示：'+$('manoCalibrationWarnings').textContent;
+ const refined=h.surface_refinement?.validation?.repaired;const togetherGaps=refined?.together_pair_gaps_mm||fit.together_pair_gaps_mm||h.calibration_pair_gaps_mm;$('manoTogetherStatus').textContent=togetherGaps?(refined?'已应用近端修正 · 三截面留出误差：':'留出并拢侧面间隙：')+Object.entries(togetherGaps).map(([pair,gap])=>`${({index_middle:'食指—中指',middle_ring:'中指—无名指',ring_pinky:'无名指—小指'})[pair]||pair} ${gap.toFixed(2)} mm`).join(' · '):'';
+ $('manoFitStatus').textContent=(fit.error||fit.message||fit.reason||(cap.state==='complete'?'十动作采集已完成；重新拟合后将自动应用。':'采集完成后自动拟合并应用；实时几何保持固定。'))+(Number.isFinite(fit.position_rmse_mm)?` · 留出定位 ${fit.position_rmse_mm.toFixed(2)} mm · 并拢侧面间隙 ${Number.isFinite(fit.together_gap_mm)?fit.together_gap_mm.toFixed(2):'—'} mm · 法向筛选间隙 ${fit.contact_gap_mm?.toFixed(2)||'—'} mm · 非接触穿透 ${fit.noncontact_penetration_mm?.toFixed(2)||'—'} mm`:'');
+ if(officialFk&&h.calibrated&&!h.calibration_matches_tracking&&!working)$('manoFitStatus').textContent='历史独立 IK 验收（不代表当前 FK 驱动质量）：'+$('manoFitStatus').textContent;
+ const audit=h.calibration_audit||{},appliedComparison=!!(h.calibrated&&fit.applied&&fit.dimensions_before_mm),current=appliedComparison?fit.dimensions_before_mm:h.preview?(audit.active_dimensions_mm||fit.dimensions_before_mm):(h.dimensions_mm||audit.active_dimensions_mm),candidate=appliedComparison?h.dimensions_mm:fit.dimensions_after_mm||audit.candidate_dimensions_mm;
+ $('manoDimensionsTitle').textContent=appliedComparison?'标定前与已应用尺寸':'当前尺寸与候选尺寸';document.querySelectorAll('.mano-dimension-direction').forEach(e=>e.textContent=appliedComparison?'标定前 → 已应用':'当前 → 候选');
+ $('manoApplicationStatus').textContent=`当前：${h.calibrated?'已标定，尺寸已生效 '+(h.applied_revision||'').slice(0,8):'默认尺寸，未应用候选'}；候选：${fit.applied?'已自动应用':fit.accepted?'等待自动应用':fit.state==='preview'?'未通过检查，可预览':'尚未拟合'}${h.preview?'；正在预览候选':''}。`;
+ const num=x=>Number.isFinite(x)?x.toFixed(1):'—';const segments=a=>a?.segment_lengths_mm?.map(num).join(' / ')||'—';
+ const dimensionKey=JSON.stringify([current,candidate]);if(dimensionKey!==shownManoDimensions){shownManoDimensions=dimensionKey;
+ $('manoDimensionsRows').innerHTML=fingers.map((f,i)=>{const a=current?.[f],b=candidate?.[f];return `<tr><td>${names[i]}</td><td>${num(a?.surface_length_mm)} → ${num(b?.surface_length_mm)}<br><small>分段 ${segments(a)}<br>→ ${segments(b)}</small></td><td>${num(a?.proximal_width_mm)} × ${num(a?.proximal_depth_mm)}<br>→ ${num(b?.proximal_width_mm)} × ${num(b?.proximal_depth_mm)}</td></tr>`;}).join('');}
  if(h.material&&document.activeElement!==$('manoYoung')&&document.activeElement!==$('manoThickness')){if(!$('manoYoung').dataset.edited)$('manoYoung').value=h.material.young_pa/1000;if(!$('manoThickness').dataset.edited)$('manoThickness').value=h.material.thickness_m*1000;}
 
 }

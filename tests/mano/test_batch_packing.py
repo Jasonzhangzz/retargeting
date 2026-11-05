@@ -1,7 +1,7 @@
 import sqlite3
 import numpy as np
 from scripts.pack_dexonomy_batches import pack
-from scripts.retarget_dexonomy_mano import write,read
+from scripts.mano_campaign_inputs import write,read
 
 
 def test_packing_crosses_shards_without_changing_or_repeating_poses(tmp_path):

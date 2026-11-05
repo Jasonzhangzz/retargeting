@@ -19,6 +19,7 @@ import hashlib
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from moxian_web.native_skeleton import NativeSkeleton
+from moxian_web.kinematic_policy import build_kinematic_config
 
 
 def json_value(value):
@@ -74,6 +75,7 @@ def main():
     sdk = None
     native = None
     native_fingerprint = None
+    runtime_policy = None
     subscriptions = []
     try:
         from qnbot_sdk import AlgorithmsConfig, CaptureConfig, CaptureInteractionMode, Sdk, Side, TargetName
@@ -174,7 +176,7 @@ def main():
                         nodes_by_name=dict(zip(result['pose']['names'],result['pose']['positions_local']))
                         alignment={f:math.dist(nodes_by_name[f+'_tip'],p)*1000 for f,p in zip(('thumb','index','middle','ring','little'),result['targets']['positions_local'])}
                         emit(type='state',status='ready',pose=result['pose'],targets=result['targets'],physics=result['physics'],
-                             alignment={'tip_errors_mm':alignment},calibration_fingerprint=native_fingerprint,pose_source='official_native_kinematic',error=None)
+                             alignment={'tip_errors_mm':alignment},runtime_policy=runtime_policy,calibration_fingerprint=native_fingerprint,pose_source='official_native_kinematic',error=None)
                         pose_at=time.monotonic();next_pose_emit=pose_at+1/60
                 last_timestamp = timestamp
                 input_frames += 1
@@ -208,8 +210,7 @@ def main():
                         artifact=max(artifacts,key=lambda p:p.stat().st_mtime)
                         text=artifact.read_text();native_fingerprint=hashlib.sha256(text.encode()).hexdigest()
                         runtime=Path(args.home)/'runtime';runtime.mkdir(exist_ok=True)
-                        derived=runtime/f'kinematic-{native_fingerprint[:16]}.yaml'
-                        derived.write_text(text.replace('physics_enabled: true','physics_enabled: false'))
+                        derived,runtime_policy=build_kinematic_config(text,builtin_skeleton_package_root(),runtime)
                         native=NativeSkeleton(builtin_skeleton_package_root(),derived)
                         if native.lib.qh_engine_physics_enabled(native.handle):raise RuntimeError('运动学骨架不允许开启动力学')
                         # Calibration is complete. Stop the unused SDK engine,

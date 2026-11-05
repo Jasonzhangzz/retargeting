@@ -57,6 +57,7 @@ class ContactTests(unittest.TestCase):
         for i in range(10):
             self.engine.feed(raw, 3.01 + i*.01)
         self.assertEqual(self.engine.snapshot(now=3.1)["count"], 0)
+        self.assertFalse(any(self.engine.snapshot(now=3.1)["cell_contact"]))
 
     def test_neighbor_support_and_enter_exit_hysteresis(self):
         self.tare()
@@ -68,6 +69,8 @@ class ContactTests(unittest.TestCase):
         for i in range(1, 12):
             self.engine.feed(raw, 3.01 + i/100)
         self.assertEqual(self.engine.snapshot(now=3.12)["active_patches"], ["thumb_distal"])
+        cells=self.engine.snapshot(now=3.12)['cell_contact']
+        self.assertEqual([i for i,on in enumerate(cells) if on],[380,381])
         # Signal below entry threshold stays active above the lower exit threshold.
         raw[380] = raw[381] = 11
         for i in range(1, 21):
@@ -117,6 +120,7 @@ class ContactTests(unittest.TestCase):
         self.assertFalse(self.engine.snapshot(now=3.3)["ready"])
         self.assertIsNone(self.engine.snapshot(live=False, now=3)["count"])
         self.assertTrue(all(p["contact"] is None for p in self.engine.snapshot(live=False, now=3)["patches"]))
+        self.assertTrue(all(c is None for c in self.engine.snapshot(live=False,now=3)['cell_contact']))
 
     def test_interrupted_or_insufficient_tare_keeps_old_profile(self):
         self.tare()

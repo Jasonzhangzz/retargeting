@@ -37,14 +37,7 @@ def control_bounds(cpu):
 
 
 class BatchedPhysics:
-    """One native model and independent physical states for all MPPI candidates.
-
-    Use a separate one-world instance for execution. ``warmup`` uses a second
-    data buffer, so graph preparation never advances the measured initial state.
-    All allocations and state buffers live on one device. ``reset``/``restore``
-    and ``step(use_graph=False)`` are device-only for already-device Tensor inputs,
-    allowing a caller to capture an entire prediction horizon after ``warmup``.
-    """
+    'One native model and independent physical states for all CEM candidates.\n\n    Use a separate one-world instance for execution. ``warmup`` uses a second\n    data buffer, so graph preparation never advances the measured initial state.\n    All allocations and state buffers live on one device. ``reset``/``restore``\n    and ``step(use_graph=False)`` are device-only for already-device Tensor inputs,\n    allowing a caller to capture an entire prediction horizon after ``warmup``.\n    '
 
     def __init__(self, cpu, worlds, device="cuda:0", *, nconmax=256, njmax=2048,
                  nccdmax=None, capture=True):

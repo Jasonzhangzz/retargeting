@@ -9,7 +9,7 @@ ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
 import mujoco,numpy as np
 from PIL import Image,ImageDraw
 from retarget.viewer.snapshot import get_snapshot
-from retarget.env.grasp.dexonomy_replay import write_json
+from retarget.env.grasp.dexonomy_io import write_json
 
 def render(batch):
     batch=Path(batch).resolve();image_dir=batch/'images';image_dir.mkdir(exist_ok=True);records=[];started=time.time()

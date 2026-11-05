@@ -80,12 +80,11 @@ def prepare(a):
     write(root/'inputs.json',rows)
     files=['scripts/restart_native_mano_gpu.py','retarget/env/grasp/native_model_assets.py',
         'retarget/env/grasp/native_mjwarp.py','retarget/env/grasp/native_batched_qp.py','retarget/env/grasp/native_wrench_gpu.py',
-        'retarget/env/grasp/native_admm.py','retarget/env/grasp/projected_qp.py','retarget/env/grasp/contact_margin.py',
-        'retarget/env/grasp/qp_projection.py','retarget/env/grasp/shadow_mano_seed_gpu.py']
+        'retarget/env/grasp/native_admm.py','retarget/env/grasp/shadow_mano_seed_gpu.py']
     write(root/'MANIFEST.json',dict(authorization='User: 修改后重新启动求解',stage='GPU_end_to_end_preflight',
         samples=len(rows),source=str(a.source),upstream_commit=native.COMMIT,optimizer_budget=dict(admm=50,substeps=10),
         solver='Original rigid-body ADMM formulas; native mjwarp; GPU six-ray batched QP',
-        margin='MuJoCo 3.3.3 max geom margin/gap; final projected closure uses force-active slots',
+        margin='MuJoCo 3.3.3 max geom margin/gap; native QP filter and physical checks',
         cpu_pose_solver_allowed=False,production_launch_allowed=False,inputs_sha256=sha(root/'inputs.json'),
         source_sha256={f:sha(ROOT/f) for f in files},asset_sha256={str(p.relative_to(root)):sha(p) for p in assets.iterdir()},
         gpu_device=a.device,batch_size=a.samples,seed=20261104))
@@ -95,10 +94,10 @@ def prepare(a):
 def run(a):
     import torch,warp as wp
     from retarget.env.grasp.native_model_assets import load_model
-    from retarget.env.grasp.native_mjwarp import NativePhysics,native_admm,native_filter_squeeze_pregrasp
+    from retarget.env.grasp.native_mjwarp import NativePhysics,native_filter_squeeze_pregrasp
     from retarget.env.grasp.native_batched_qp import NativeBatchedQP
+    from retarget.solver.graspadmm import solve,GPUProblem
     from retarget.env.grasp.native_admm import ObjectSurfaces,Settings,plane_projection
-    from retarget.env.grasp.projected_qp import ProjectedQPClosure,ClosureSettings
     root=a.root;m=json.loads((root/'MANIFEST.json').read_text());rows=json.loads((root/'inputs.json').read_text())
     for f,h in m['source_sha256'].items():
         if sha(ROOT/f)!=h:raise ValueError('Restart code changed: '+f)
@@ -138,8 +137,7 @@ def run(a):
             write(root/'status.json',value);print(json.dumps(value),flush=True)
     qp=NativeBatchedQP(len(hand_bodies),a.device)
     torch.cuda.synchronize();begin=time.perf_counter()
-    admm=native_admm(physics,q,hand_bodies,local,cp,surfaces,qp,external,center,
-        settings=Settings(),hand_body_count=meta['n_hand_body'],progress=status)
+    admm=solve(GPUProblem(physics,q,hand_bodies,local,cp,surfaces,qp,external,center,meta['n_hand_body']),progress=status)
     torch.cuda.synchronize();admm_seconds=time.perf_counter()-begin
     # Commit only the final ADMM state before the independent filter stage.
     final={('admm_'+k):v.detach().cpu().numpy() for k,v in admm.items() if isinstance(v,torch.Tensor)}
@@ -159,23 +157,6 @@ def run(a):
     projected,_,distance,faces,_=surfaces.query(slots[...,:3],torch.arange(batch,device=a.device))
     triangles,normals=surfaces.triangle_data(faces)
     _,outward=plane_projection(projected,triangles,normals)
-    closure=ProjectedQPClosure(ClosureSettings(friction=.6,cuda_graph=True),center=center[0],
-        radius=1.,object_mass=.1);closure.set_object_batch(surfaces.centers,surfaces.radii)
-    hand_geoms=[]
-    for b in hand_bodies.cpu().tolist():
-        ids=np.flatnonzero((cpu.geom_bodyid==b)&((cpu.geom_contype!=0)|(cpu.geom_conaffinity!=0)))
-        if len(ids)!=1:raise ValueError('Ambiguous hand surface geom ownership')
-        hand_geoms.append(int(ids[0]))
-    object_ids=np.flatnonzero(object_mask&((cpu.geom_contype!=0)|(cpu.geom_conaffinity!=0)))
-    # The raw visual mesh can span many convex geoms. Require identical pair
-    # margin/gap parameters before using a representative object geom.
-    for hg in hand_geoms:
-        if len(object_ids)==0 or not np.all(cpu.geom_margin[object_ids]==cpu.geom_margin[object_ids[0]]) or not np.all(cpu.geom_gap[object_ids]==cpu.geom_gap[object_ids[0]]):
-            raise ValueError('Object projection needs explicit closest-geom ownership')
-        if any({int(cpu.pair_geom1[i]),int(cpu.pair_geom2[i])}&{hg} for i in range(cpu.npair)):
-            raise ValueError('Explicit hand/object pairs need exact projection ownership')
-    result,selection=physics.projected_closure(closure,projected,outward,distance,hand_geoms,int(object_ids[0]))
-    hypothetical=closure.solve(projected,outward)
     angle=torch.rad2deg(torch.acos((-(slots[...,3:]*outward).sum(-1)).clamp(-1,1)))
     coverage=((distance.abs()<=.002)&(angle<=30.)).float().mean(-1)
     packet=physics.native_contacts(meta['n_hand_body'],.002)
@@ -184,21 +165,17 @@ def run(a):
     # Persist actual solve states before the separate dynamic rollout stage.
     values=dict(initial_qpos=q,final_qpos=admm['qpos'],hand_cpn_b=admm['hand_cpn_b'],cp_o=admm['cp_o'],
         hand_slots=slots,projected_points=projected,object_normals=outward,signed_distance_m=distance,
-        contact_active=selection.active,contact_margin_m=selection.margin,contact_gap_m=selection.gap,
-        projected_closure=result.certified,projected_closure_hypothetical=hypothetical.certified,
-        projected_closure_valid=result.valid,coverage=coverage,collision_pass=collision,
+        coverage=coverage,collision_pass=collision,
         native_output=native['native_output'],fallback=admm['fallback_used'],numerical_failure=admm['numerical_failure'],
         squeeze_qpos=native['squeeze_qpos'],pregrasp_qpos=native['pregrasp_qpos'],pregrasp_count=native['pregrasp_count'])
     np.savez_compressed(root/'poses.npz',**{k:v.detach().cpu().numpy() for k,v in values.items()})
     write(root/'solve_receipt.json',dict(completed=batch,total=batch,finite=int(torch.isfinite(admm['qpos']).all(-1).sum()),
-        native_output=int(native['native_output'].sum()),projected_closure=int(result.certified.sum()),
-        hypothetical_projected_closure=int(hypothetical.certified.sum()),coverage_pass=int((coverage>=.8).sum()),
-        collision_pass=int(collision.sum()),joint_pass=int((result.certified&(coverage>=.8)&collision).sum()),
+        native_output=int(native['native_output'].sum()),coverage_pass=int((coverage>=.8).sum()),
+        collision_pass=int(collision.sum()),native_geometry_joint_pass=int((native['native_output']&(coverage>=.8)&collision).sum()),
         load_and_preparation_seconds=preparation,admm_seconds=admm_seconds,filter_seconds=filter_seconds,
         diagnostic_seconds=diagnostic_seconds,admm_amortized_seconds=admm_seconds/batch,
         physics_launch='CUDA graph' if a.capture_physics else 'eager CUDA mjwarp; no CPU fallback',
         coverage_normal_source='Transported input slot normals; final surface-normal validation is pending',
-        closure_definition='Margin-eligible actual hand slots projected onto unchanged object surface',
         native_gsr_measured=False,scope='Finite restart preflight, not the full dataset'))
     write(root/'status.json',dict(state='solve_complete_pending_dynamic_validation',completed=batch,total=batch,
         wall_seconds=time.perf_counter()-start,production_launch_allowed=False))

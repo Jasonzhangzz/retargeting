@@ -1,10 +1,4 @@
-"""Differentiable trajectory rollout with a reusable MJWarp contact cache.
-
-MJWarp is used only to construct a nominal trajectory cache. Candidate controls
-are evaluated entirely in Torch: neither collision detection nor simulator state
-is revisited when MPPI changes its controls. The cached model is a local model;
-contacts absent from the nominal trajectory cannot be discovered by a rollout.
-"""
+'Differentiable trajectory rollout with a reusable MJWarp contact cache.\n\nMJWarp is used only to construct a nominal trajectory cache. Candidate controls\nare evaluated entirely in Torch: neither collision detection nor simulator state\nis revisited when CEM changes its controls. The cached model is a local model;\ncontacts absent from the nominal trajectory cannot be discovered by a rollout.\n'
 
 from __future__ import annotations
 

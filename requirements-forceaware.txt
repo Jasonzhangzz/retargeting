@@ -1,2 +1,0 @@
-# Exact upstream numerical stack; install into .venv-forceaware (Python 3.10).
--r third_party/DexForge/requirements.txt

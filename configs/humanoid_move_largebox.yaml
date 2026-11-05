@@ -5,10 +5,7 @@ output:
   name: humanoid_move_largebox_cem
 seed: 0
 solver:
-  iterations: 16
-  population: 1024
   type: cem
-  worlds: 128
 task:
   type: humanoid
   name: move_largebox

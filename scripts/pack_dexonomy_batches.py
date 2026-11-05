@@ -8,7 +8,7 @@ import sys
 import time
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
-from scripts.retarget_dexonomy_mano import source_groups,read,write,stamp,load_npz,save_npz
+from scripts.mano_campaign_inputs import source_groups,read,write,stamp,load_npz,save_npz
 
 
 def pack(db,typ,count,output):

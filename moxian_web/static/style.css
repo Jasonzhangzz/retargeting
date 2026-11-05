@@ -11,3 +11,9 @@ select{font:11px var(--sans);border:1px solid var(--line);border-radius:3px;padd
 .contact-chip{border:0;background:#39cf68;color:#174e2a}
 .pose-toolbar>label{font-size:9px;color:#839174;white-space:nowrap}
 @media(max-width:640px){.pose-toolbar{height:auto;min-height:43px;flex-wrap:wrap;padding:8px 12px}.pose-toolbar>span{letter-spacing:0}}
+.mano-dimensions{margin:14px 0;padding:10px 0;border-top:1px solid var(--line,#d6dacd)}
+.mano-dimensions summary{cursor:pointer;font-size:12px;font-weight:600}
+.dimension-table-wrap{width:100%;overflow:auto}
+.dimension-table{width:100%;border-collapse:collapse;font-size:11px;font-variant-numeric:tabular-nums}
+.dimension-table th,.dimension-table td{text-align:left;padding:7px 5px;border-bottom:1px solid #d6dacd;white-space:normal}
+.dimension-table th{font-weight:500;color:#66745c}

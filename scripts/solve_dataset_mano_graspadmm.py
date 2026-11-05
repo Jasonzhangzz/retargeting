@@ -67,8 +67,6 @@ def prepare(a):
     native.write(root/'source_shards.json',ordered)
     assets={str(p.relative_to(root)):native.sha(p) for directory in ('hand','shadow_templates') for p in (root/directory).rglob('*') if p.is_file()}
     script_hashes={name:native.sha(root/name) for name in SCRIPT_NAMES}
-    # Freeze the existing posthoc certificate implementation as well as the native solver.
-    certificates={name:native.sha(a.production/name) for name in ('retarget/env/grasp/projected_qp.py','retarget/env/grasp/qp_projection.py')}
     manifest=dict(campaign='dataset_shadow_to_native_mano_graspadmm_20261104',created_utc=native.stamp(),
         authorization='User: launch large-scale MANO GraspADMM on server, dataset Shadow grasp poses as initialization',
         upstream_commit=native.COMMIT,upstream_source_manifest_sha256=native.sha(source.root/'GRASPADMM_UPSTREAM.json'),
@@ -80,7 +78,7 @@ def prepare(a):
         initialization='Dataset Shadow qpos, original per-type Shadow contact annotations, anatomical point IK; source GSR not re-evaluated or assumed',
         contact_mapping=dict(BODY_MAP),mapping_note='Proximal/middle/distal stay on corresponding finger segment; Shadow pinky metacarpal maps to MANO palm, which has no separate pinky metacarpal',
         solver='Unmodified upstream _single_grasp: 50 x 10, Clarabel, MuJoCo virtual forces, dual, fallback, filter, squeeze, pregrasp',
-        penetration_m=dict(hand_object=.002,self=.002),evaluation='All finite final states: static geometry plus production 13-case/96-step projected QP. All native outputs: original six-force GSR plus six-force/six-pure-torque rollouts.',
+        penetration_m=dict(hand_object=.002,self=.002),evaluation='All finite final states: contact geometry and penetration checks. All native outputs: original six-force GSR plus six-force/six-pure-torque rollouts.',
         budgets=dict(input_rows=sum(r['samples'] for r in ordered),bone_ik_max_evaluations=80,contact_ik_max_evaluations=80,admm_outer=50,hand_substeps=10),
         failure_policy='Every input row retained. Missing states are NaN with explicit status. No failed-row resampling. No CPU/GPU solver substitution.',
         storage='Compact committed shards, final states/contact data/keypoints/object pose only; no optimization history. Scratch native files removed after packing.',
@@ -88,7 +86,7 @@ def prepare(a):
         source_policy='Finite snapshot of currently packed rows; later producer rows require a new campaign',
         callback_required=False,production_gpu_pause='none',python=sys.executable,
         versions={k:importlib.metadata.version(k) for k in native.VERSIONS},assets_sha256=assets,
-        scripts_sha256=script_hashes,certificate_sha256=certificates)
+        scripts_sha256=script_hashes)
     native.write(root/'MANIFEST.json',manifest)
     native.write(root/'status.json',dict(state='prepared',total=manifest['source_samples'],updated_utc=native.stamp()))
 
@@ -98,8 +96,6 @@ def validate(root):
     for group in ('assets_sha256','scripts_sha256'):
         for name,expected in m[group].items():
             if native.sha(root/name)!=expected:raise RuntimeError('Frozen campaign file changed: '+name)
-    for name,expected in m['certificate_sha256'].items():
-        if native.sha(Path(m['production'])/name)!=expected:raise RuntimeError('Certificate implementation changed: '+name)
     for key,name in [('source_snapshot_sha256','source_shards.json'),('source_journal_snapshot_sha256','source_journal_snapshot.jsonl')]:
         if native.sha(root/name)!=m[key]:raise RuntimeError('Source snapshot changed')
     for k,v in native.VERSIONS.items():
@@ -271,13 +267,12 @@ def solve_chunk(job):
         if len(rows)!=end-start:
             # Never commit a partial chunk as complete.
             return dict(job_id=job_id,interrupted=True,computed_uncommitted=len(rows))
-        tclosure=time.perf_counter()
+        tgeometry=time.perf_counter()
         import diagnose_native_graspadmm
-        diagnostic_rows=[r.get('geometry',dict(projected_hand=False,projected_targets=False,slot_joint_pass=False)) for r in rows]
-        diagnose_native_graspadmm.closure_batches(diagnostic_rows,packets,Path(c['manifest']['production']))
+        diagnostic_rows=[r.get('geometry',dict(slot_joint_pass=False)) for r in rows]
         for r,d in zip(rows,diagnostic_rows):
             d['tolerated_collision_pass']=d.get('valid_final_state',False) and d.get('hand_object_depth_m',np.inf)<=.002 and d.get('self_depth_m',np.inf)<=.002
-            d['diagnostic_joint_pass']=d.get('projected_hand',False) and d.get('slot_joint_pass',False) and d['tolerated_collision_pass'] and d.get('native_contact_count',0)>0
+            d['geometry_joint_pass']=d.get('slot_joint_pass',False) and d['tolerated_collision_pass'] and d.get('native_contact_count',0)>0
             r['geometry']=d
         folder=root/'shards'/job_id;folder.parent.mkdir(parents=True,exist_ok=True)
         staging=folder.with_name(folder.name+f'.tmp.{os.getpid()}');staging.mkdir(exist_ok=False)
@@ -289,10 +284,9 @@ def solve_chunk(job):
             type=group['type'],source_start=start,source_end=end,samples=len(rows),
             mapped=sum('initial_qpos' in v for v in values),valid_final_states=sum('final_qpos' in v for v in values),
             native_outputs=sum(r['native_operation_output'] for r in rows),gsr_passed=sum(r['native_gsr_pass'] for r in rows),
-            projected_closure=sum(r['geometry'].get('projected_hand',False) for r in rows),
-            joint_quality=sum(r['geometry']['diagnostic_joint_pass'] for r in rows),
+            geometry_joint_quality=sum(r['geometry']['geometry_joint_pass'] for r in rows),
             torque_passed=sum(r['torque_passed'] for r in rows),exceptions=sum(not r['complete'] for r in rows),
-            chunk_wall_seconds=time.perf_counter()-t,closure_seconds=time.perf_counter()-tclosure,
+            chunk_wall_seconds=time.perf_counter()-t,geometry_seconds=time.perf_counter()-tgeometry,
             files_sha256={n:native.sha(staging/n) for n in ('poses.npz','rows.json.gz')},completed_utc=native.stamp())
         native.write(staging/'receipt.json',receipt);staging.rename(folder)
         native.write(heartbeat,dict(pid=os.getpid(),job_id=job_id,state='committed',updated_utc=native.stamp()))
@@ -328,7 +322,7 @@ def run(a):
                 if native.sha(path.parent/name)!=h:raise RuntimeError('Committed shard corrupted')
             receipts.append(r)
         else:pending.append(job)
-    fields=['samples','mapped','valid_final_states','native_outputs','gsr_passed','projected_closure','joint_quality','torque_passed','exceptions']
+    fields=['samples','mapped','valid_final_states','native_outputs','gsr_passed','geometry_joint_quality','torque_passed','exceptions']
     for r in receipts:
         for k in fields:counters[k]+=r[k]
     def status(state,**extra):

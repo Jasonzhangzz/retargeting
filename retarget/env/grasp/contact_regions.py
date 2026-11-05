@@ -1,8 +1,4 @@
-"""Shared, body-local contact regions for the local GraspADMM/MPPI bridge.
-
-Query samples lie on the official meshes. Center preference is finite over the
-whole exposed distal surface; the central band is only a diagnostic/reference.
-"""
+'Shared, body-local contact regions for the local GraspADMM/CEM bridge.\n\nQuery samples lie on the official meshes. Center preference is finite over the\nwhole exposed distal surface; the central band is only a diagnostic/reference.\n'
 
 import xml.etree.ElementTree as ET
 from functools import lru_cache
@@ -53,11 +49,6 @@ def region_mask(name, points, normals, region):
     return (u >= region["u_min"]) & (u <= region["u_max"]) & (facing > region["normal_min"])
 
 
-def region_preference(name, points, normals, region):
-    """Dimensionless soft cost: center=0, every other surface point is allowed."""
-    u, facing, _ = region_coordinates(name, points, normals)
-    return (region["center_weight"] * ((u - .5) / region["longitudinal_scale"]) ** 2
-            + region["palmar_weight"] * np.maximum(region["normal_min"] - facing, 0.) ** 2)
 
 
 def region_pool(name, region):
@@ -147,44 +138,9 @@ def contact_region_diagnostics(qpos, names, points_normals, region):
         normal = np.asarray(value[3:]) @ rotation
         u, facing, _ = region_coordinates(name, point, normal)
         rows.append(dict(body=name, normalized_longitudinal=float(u), palmar_normal_dot=float(facing),
-                         in_region=bool(region_mask(name, point, normal, region)),
-                         **({"center_preference_cost":float(region_preference(name, point, normal, region))}
-                            if region.get("mode") == "soft" else {})))
+                         in_region=bool(region_mask(name, point, normal, region))))
     covered = {r["body"] for r in rows if r["in_region"]}
     return dict(region=region, contacts=rows,
                 mode=region.get("mode", "hard"), diagnostic_only=True,
                 required_bodies_in_region={name: name in covered for name in region["bodies"]},
                 semantic_success=all(name in covered for name in region["bodies"]))
-
-
-def orientation_error_deg(qpos, reference_quat):
-    return float(np.degrees((Rotation.from_quat(reference_quat, scalar_first=True).inv()
-                            * Rotation.from_quat(np.asarray(qpos)[3:7], scalar_first=True)).magnitude()))
-
-
-def lock_root_orientation(env, reference_quat):
-    """Install an optimization-only equality constraint, including every substep."""
-    quat = np.asarray(reference_quat, float).copy()
-    if quat.shape != (4,) or not np.isfinite(quat).all() or np.linalg.norm(quat) < 1e-12:
-        raise ValueError("Need a finite reference quaternion")
-    quat /= np.linalg.norm(quat)
-    free = np.flatnonzero(env._model.jnt_type == mujoco.mjtJoint.mjJNT_FREE)
-    if len(free) != 1:
-        raise ValueError("Orientation lock requires exactly one free hand root")
-    joint = int(free[0])
-    qa, va = int(env._model.jnt_qposadr[joint]), int(env._model.jnt_dofadr[joint])
-    original_step = env.step_sim
-
-    def enforce():
-        env._data.qpos[qa + 3:qa + 7] = quat
-        env._data.qvel[va + 3:va + 6] = 0.
-        mujoco.mj_forward(env._model, env._data)
-
-    def step(substep):
-        for _ in range(substep):
-            enforce()
-            original_step(1)
-            enforce()
-
-    env.step_sim = step
-    return quat

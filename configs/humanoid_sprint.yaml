@@ -2,14 +2,10 @@ environment:
   device: cuda:0
 mode: solve
 output:
-  name: humanoid_sprint_mppi
+  name: humanoid_sprint_cem
 seed: 0
 solver:
-  iterations: 16
-  population: 1024
-  type: mppi
-  worlds: 128
-  temperature: 0.6
+  type: cem
 task:
   type: humanoid
   name: sprint

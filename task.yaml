@@ -1,19 +1,21 @@
 mode: solve
 task:
-  type: humanoid
-  name: move_largebox
-  data: data/humanoid/move_largebox
+  type: grasp
+  name: graspadmm_wuji2
+  data: data/grasp
+  templates:
+  - 1
+  options:
+    hand_model: wuji2
+    primary_shape_only: true
 solver:
-  type: dexforge
-  dexforge: {}
+  type: graspadmm
 environment:
   device: cuda:0
-  dynamics: dexforge
-  dexforge:
-    gradient_check: true
+  dynamics: graspadmm
 seed: 0
 output:
-  name: humanoid_move_largebox_forceaware
+  name: graspadmm_wuji2
 visualization:
   live: false
   save_video: false

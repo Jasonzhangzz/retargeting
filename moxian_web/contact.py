@@ -195,6 +195,7 @@ class ContactEngine:
         enter = [d >= max(DETECTOR["enter_adc"], DETECTOR["enter_sigma"] * s) for d, s in zip(delta, sigma)]
         leave = [d >= max(DETECTOR["exit_adc"], DETECTOR["exit_sigma"] * s) for d, s in zip(delta, sigma)]
         patches = []
+        cells = [False] * 460
         for i, definition in enumerate(PATCHES):
             mask = leave if self.active[i] else enter
             supported = any(mask[a] and mask[b] for a, b in self.neighbors[i])
@@ -210,7 +211,13 @@ class ContactEngine:
             patches.append({**definition, "contact": self.active[i],
                             "response": max(normalized[s] for s in self.groups[i]),
                             "active_cells": sum(mask[s] for s in self.groups[i])})
+            # Only supported neighboring cells in an active patch turn yellow.
+            # An isolated spike must not paint a taxel as confirmed contact.
+            if self.active[i]:
+                for a, b in self.neighbors[i]:
+                    if leave[a] and leave[b]:cells[a] = cells[b] = True
         self.latest = {"ready": True, "status": "ready", "normalized": normalized, "patches": patches,
+                       "cell_contact": cells,
                        "active_patches": [p["id"] for p in patches if p["contact"]],
                        "count": sum(self.active), "timestamp_monotonic": now, "timestamp_ms": time.time() * 1000}
 
@@ -222,5 +229,5 @@ class ContactEngine:
                       tare=dict(self.tare_status), mapping_version=getattr(self, "version", None),
                       mapping_confirmed=len(self.profile.get("confirmed", [])), detector=dict(DETECTOR))
         if not ready:
-            result.update(count=None, active_patches=[], patches=[{**p, "contact": None, "response": None} for p in PATCHES], normalized=[0.] * 460)
+            result.update(count=None, active_patches=[], patches=[{**p, "contact": None, "response": None} for p in PATCHES], normalized=[0.] * 460, cell_contact=[None] * 460)
         return result

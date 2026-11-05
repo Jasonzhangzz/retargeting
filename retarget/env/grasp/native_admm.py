@@ -15,21 +15,7 @@ import warp as wp
 from .graspadmm_source import require_upstream
 
 
-@dataclass(frozen=True)
-class Settings:
-    step: int = 50
-    step_obj: int = 1
-    step_hand: int = 1
-    substep: int = 10
-    rho_admm: float = 1000.0
-    lr_obj: float = 0.0002
-    square_res: bool = True
-    fix_hand_local_cp: bool = False
-    opt_miu_coef: tuple = (0.1, 0.0)
-    spring_stiffness: float = 500.0
-    damping: float = 0.01
-    qp_tolerance: float = 1.0e-6
-    qp_max_steps: int = 10000
+from retarget.solver.graspadmm import Settings, DEFAULTS
 
 
 class ContactQP:
