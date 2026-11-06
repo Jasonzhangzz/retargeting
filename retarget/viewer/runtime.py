@@ -16,10 +16,14 @@ def scan(root=None):
     ):
         batch = manifest.parent
         try:
-            for case in json.loads(manifest.read_text())["cases"]:
-                if case.get("method") not in ("cem", "graspadmm"):
+            saved = json.loads(manifest.read_text())
+            for case in saved["cases"]:
+                # Frozen snapshots remain replayable after retiring their solver.
+                archived_mppi = (saved.get("storage") == "compact_grasp_pose_snapshot_v2"
+                                 and case.get("method") == "mppi" and "cached_case" in case)
+                if case.get("method") not in ("cem", "graspadmm") and not archived_mppi:
                     continue
-                if case.get("task") == "grasp" and case.get("method") not in ("cem", "graspadmm"):
+                if case.get("task") == "grasp" and case.get("method") not in ("cem", "graspadmm") and not archived_mppi:
                     continue
                 rows.append(
                     dict(case, batch=batch, label=f"{batch.name} / {case['name']}")

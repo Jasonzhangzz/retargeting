@@ -58,7 +58,7 @@ def variant(method,label,base,a,m,records,decoder,provenance):
     for side in range(2):
         target=anchors if side==0 else move(anchors);contact=po if side==0 else move(po)
         patch=mesh(patch_vertices,patch_faces,'模板手面 patch','#a84bce','mapped');patch['opacity']=.18
-        traces=[mesh(v,faces,'MANO 皮肤','#c4b2a2','hand'),mesh(ov if side==0 else move(ov),of,'物体','#87a5af','object'),patch,
+        traces=[mesh(v,faces,'MANO 皮肤',decoder.base.appearance.get('skin','#c4b2a2'),'hand'),mesh(ov if side==0 else move(ov),of,'物体','#87a5af','object'),patch,
             points(hp,'手面固定模板点','#b38148',ids),points(target,'固定物体模板目标','#0077c8',ids),
             points(ph,'patch 手面接触点',colors,ids),points(contact,'patch 物面接触点',colors,ids),
             lines(hp,target,'优化的模板点距离','#b38148',layer='mapped'),

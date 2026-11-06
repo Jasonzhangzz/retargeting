@@ -39,3 +39,10 @@ configs/generated/
 /MoxianEMF-Windows-*/
 /MoxianEMF-Windows-*.zip
 *.tmp
+
+# Published grasp datasets live on Hugging Face.
+/data/grasp/datasets/
+/data/grasp/primitives/
+*.tar
+*.tar.gz
+*.zip

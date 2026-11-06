@@ -13,15 +13,34 @@ sys.path.insert(0, str(ROOT))
 from retarget.solver.cem import DEFAULTS
 from scripts.mano_campaign_inputs import source_groups, round_robin_groups, GeometryLoader, sha, write, read, stamp
 
-def make_jobs(groups, batch_size):
+def make_jobs(groups, batch_size, completed=()):
     """Interleave source row batches across types, without resampling or repeats."""
+    covered = collections.defaultdict(list)
+    sources = {(g['type'], int(g['part'])): g for g in groups}
+    for job in completed:
+        identity = (job['type'], int(job['part']))
+        source = sources[identity]
+        start, end = int(job['offset']), int(job['offset']) + int(job['samples'])
+        if job['path'] != source['path'] or not 0 <= start < end <= int(source['samples']):
+            raise ValueError('Completed source interval mismatch')
+        covered[identity].append((start, end))
+    for intervals in covered.values():
+        intervals.sort()
+        if any(b[0] < a[1] for a, b in zip(intervals, intervals[1:])):
+            raise ValueError('Overlapping completed source intervals')
     pending = collections.defaultdict(list)
     for group in sorted(groups, key=lambda g: (g['type'], int(g['part']))):
         n = int(group['samples'])
-        for offset in range(0, n, batch_size):
-            pending[group['type']].append(dict(type=group['type'], part=int(group['part']), path=group['path'], offset=offset, samples=min(batch_size, n - offset)))
+        cursor = 0
+        for start, end in [*covered[(group['type'], int(group['part']))], (n, n)]:
+            for offset in range(cursor, start, batch_size):
+                pending[group['type']].append(dict(type=group['type'], part=int(group['part']), path=group['path'], offset=offset, samples=min(batch_size, start - offset)))
+            cursor = end
     order = sorted(pending, key=lambda t: (int(t.split('_')[0]), t))
     for t in order:
+        if completed:
+            # Finish partial inherited shards after full batches, retaining every row.
+            pending[t].sort(key=lambda job: job['samples'] != batch_size)
         pending[t] = collections.deque(pending[t])
     while pending:
         for typ in order:
@@ -33,6 +52,53 @@ def make_jobs(groups, batch_size):
 
 def key(job):
     return f"{job['type']}/{job['part']:07d}/{job['offset']:07d}"
+
+
+def inherited_results(root, config, seen=None):
+    """Reuse immutable receipts only after the previous controller has stopped."""
+    config = json.loads(json.dumps(config))
+    root = Path(root).resolve()
+    seen = set() if seen is None else seen
+    if root in seen or root == Path(config['output']).resolve():
+        raise ValueError('Cyclic campaign continuation')
+    seen.add(root)
+    lock = (root/'campaign.lock').open('a+')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if read(root/'status.json')['state'] not in ('stopped', 'complete', 'finished_with_errors'):
+            raise ValueError('Previous campaign is not stopped')
+        prior = read(root/'configuration.json')
+        for name in ('source', 'model', 'mapping', 'shadow_xml', 'dataset', 'seed', 'rollout', 'model_sha256', 'mapping_sha256'):
+            if prior[name] != config[name]:
+                raise ValueError('Continuation changes '+name)
+        for name in set(prior['algorithm_parameters']) | set(config['algorithm_parameters']):
+            if name != 'resources' and prior['algorithm_parameters'].get(name) != config['algorithm_parameters'].get(name):
+                raise ValueError('Continuation changes solver parameters: '+name)
+        for name in set(prior['code_sha256']) | set(config['code_sha256']):
+            if name != 'scripts/retarget_mano_comfree_campaign.py' and prior['code_sha256'].get(name) != config['code_sha256'].get(name):
+                raise ValueError('Continuation changes scoring code: '+name)
+        inherited = inherited_results(prior['resume_from'], config, seen) if prior.get('resume_from') else {}
+        for receipt in sorted(root.glob('*/*/*/verification.json')):
+            verification = read(receipt)
+            if not verification.get('success'):
+                continue
+            manifest = receipt.parent/'MANIFEST.json'
+            if sha(manifest) != verification['files']['MANIFEST.json']:
+                raise ValueError('Changed result manifest: '+str(manifest))
+            job = read(manifest)['job']
+            name = key(job)
+            if verification['config_sha256'] != prior['config_sha256'] or job['samples'] != verification['samples']:
+                raise ValueError('Result/configuration identity mismatch')
+            if name in inherited:
+                raise ValueError('Duplicate inherited result: '+name)
+            for rel, fingerprint in verification['files'].items():
+                path = (receipt.parent/rel).resolve()
+                if not path.is_relative_to(receipt.parent.resolve()) or sha(path) != fingerprint:
+                    raise ValueError('Changed completed result: '+str(path))
+            inherited[name] = dict(event='reused', key=name, job=job, origin_campaign=str(root), **verification)
+        return inherited
+    finally:
+        lock.close()
 
 def prepare_packet(job, loader, cache):
     import numpy as np
@@ -77,6 +143,7 @@ def worker(number, device, config, tasks, events):
     write(output / f'worker_{number}.json', dict(pid=os.getpid(), device=device, stage='loading', updated_utc=stamp()))
     mapping = read(config['mapping'])
     decoder = ManoDecoder(config['model'], device)
+    write(output / f'worker_{number}_model.json', dict(model_sha256=sha(config['model']), appearance=decoder.base.appearance, asset_metadata=decoder.base.asset_metadata, device=device))
     decoder.configure_contact_vertices(mapping['mappings'])
     skeleton = ShadowSkeleton(config['shadow_xml'], device)
     mesh = MeshCache(device)
@@ -124,6 +191,7 @@ def main():
     parser.add_argument('--candidate-chunk', type=int, default=DEFAULTS.resources.candidate_chunk)
     parser.add_argument('--seed', type=int, default=7)
     parser.add_argument('--max-batches', type=int, default=0, help='0 means the complete frozen source')
+    parser.add_argument('--resume-from', help='Stopped campaign whose verified source rows must be retained')
     args = parser.parse_args()
     from retarget.env.grasp.comfree_rollout import RolloutSettings
     if min(args.batch_size, args.candidate_chunk) < 1 or args.max_batches < 0:
@@ -140,6 +208,7 @@ def main():
     config = vars(args).copy()
     config['rollout'] = asdict(DEFAULTS.rollout)
     config['algorithm_parameters'] = asdict(DEFAULTS)
+    config['algorithm_parameters']['resources'].update(batch_size=args.batch_size, candidate_chunk=args.candidate_chunk)
     config['model_sha256'] = sha(args.model)
     config['mapping_sha256'] = sha(args.mapping)
     mapping = read(args.mapping)
@@ -147,15 +216,20 @@ def main():
         raise ValueError('Model/mapping identity mismatch')
     config['code_sha256'] = {str(p.relative_to(ROOT)): sha(p) for p in [Path(__file__), ROOT / 'scripts/solve_mano_comfree.py', *[ROOT / 'retarget/env/grasp' / f for f in ['mano_solver.py', 'mano_comfree.py', 'mano_contact_collision.py', 'mano_collision_geometry.py', 'contact_geometry.py', 'comfree_rollout.py']], ROOT / 'scripts/mano_campaign_inputs.py', ROOT / 'retarget/solver/base.py']}
     config['code_sha256'].update({f: sha(ROOT / f) for f in ['retarget/env/grasp/mano_patch_anchor.py', 'retarget/solver/cem.py', 'retarget/env/grasp/mano_patch_consistent.py', 'retarget/env/grasp/spring_history.py', 'retarget/env/grasp/spring_history_warp.py', 'retarget/env/grasp/patch_query.py', 'retarget/env/grasp/triangle_penetration.py']})
+    config['code_sha256']['scripts/calibrate_wuji_mano.py'] = sha(ROOT / 'scripts/calibrate_wuji_mano.py')
+    config = json.loads(json.dumps(config))
     config['config_sha256'] = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
     cfg = output / 'configuration.json'
     if cfg.exists() and read(cfg) != config:
         raise ValueError('Existing campaign/configuration mismatch')
     write(cfg, config)
-    jobs = list(make_jobs(source_groups(args.source), args.batch_size))
+    inherited = inherited_results(args.resume_from, config) if args.resume_from else {}
+    groups = source_groups(args.source)
+    jobs = list(make_jobs(groups, args.batch_size, [v['job'] for v in inherited.values()]))
     if args.max_batches:
         jobs = jobs[:args.max_batches]
-    write(output / 'schedule.json', dict(total_batches=len(jobs), total_samples=sum((j['samples'] for j in jobs)), first_round=jobs[:len(set((j['type'] for j in jobs)))], source_frozen=True))
+    write(output / 'inherited_results.json', inherited)
+    write(output / 'schedule.json', dict(total_batches=len(jobs)+len(inherited), total_samples=sum((j['samples'] for j in jobs))+sum(v['samples'] for v in inherited.values()), remaining_batches=len(jobs), inherited_samples=sum(v['samples'] for v in inherited.values()), first_round=jobs[:len(set((j['type'] for j in jobs)))], source_frozen=True))
     context = mp.get_context('spawn')
     tasks = context.Queue(maxsize=2 * len(devices))
     events = context.Queue()
@@ -173,7 +247,7 @@ def main():
     write(output / 'process.json', dict(pid=os.getpid(), workers=[p.pid for p in processes], created_utc=stamp()))
     pending = iter(jobs)
     next_job = next(pending, None)
-    completed = {}
+    completed = dict(inherited)
     failures = {}
     sentinels = 0
     last_status = 0.0
@@ -203,7 +277,7 @@ def main():
                 pass
             if any((p.exitcode not in (None, 0) for p in processes)):
                 request_stop()
-            status = dict(state='stopping' if stop else 'running', updated_utc=stamp(), samples=sum((e['samples'] for e in completed.values())), stable=sum((e.get('stable', 0) for e in completed.values())), geometry_accepted=sum((e.get('geometry_accepted', 0) for e in completed.values())), completed_batches=len(completed), failed_batches=len(failures), by_type={t: sum((e['samples'] for k, e in completed.items() if k.startswith(t + '/'))) for t in sorted(set((j['type'] for j in jobs)))})
+            status = dict(state='stopping' if stop else 'running', updated_utc=stamp(), samples=sum((e['samples'] for e in completed.values())), stable=sum((e.get('stable', 0) for e in completed.values())), geometry_accepted=sum((e.get('geometry_accepted', 0) for e in completed.values())), completed_batches=len(completed), failed_batches=len(failures), by_type={t: sum((e['samples'] for k, e in completed.items() if k.startswith(t + '/'))) for t in sorted(set(g['type'] for g in groups))})
             if time.monotonic() - last_status >= 2:
                 write(output / 'status.json', status)
                 last_status = time.monotonic()
@@ -215,7 +289,7 @@ def main():
                 (failures if e['event'] == 'failed' else completed)[e['key']] = e
             except queue.Empty:
                 break
-        status.update(state='stopped' if stop else 'complete' if not failures else 'finished_with_errors', updated_utc=stamp(), completed_batches=len(completed), failed_batches=len(failures), samples=sum((e['samples'] for e in completed.values())))
+        status.update(state='stopped' if stop else 'complete' if not failures else 'finished_with_errors', updated_utc=stamp(), completed_batches=len(completed), failed_batches=len(failures), samples=sum((e['samples'] for e in completed.values())), stable=sum(e.get('stable',0) for e in completed.values()), geometry_accepted=sum(e.get('geometry_accepted',0) for e in completed.values()), by_type={t:sum(e['samples'] for k,e in completed.items() if k.startswith(t+'/')) for t in sorted(set(g['type'] for g in groups))})
         write(output / 'status.json', status)
         write(output / 'failures.json', failures)
     finally:

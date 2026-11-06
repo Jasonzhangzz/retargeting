@@ -22,7 +22,7 @@ class ManoDecoder(torch.nn.Module):
         self.base = PersonalizedMANO(path).to(device=device, dtype=torch.float32)
         b = self.base
         self.register_buffer("rest", b.template.clone())
-        self.register_buffer("joints_rest", b.regressor @ b.template)
+        self.register_buffer("joints_rest", b.calibrated_rest_joints.clone() if hasattr(b, "calibrated_rest_joints") else b.regressor @ b.template)
         self.register_buffer("basis", b.components[:components].clone())
         ids = sorted(
             set(

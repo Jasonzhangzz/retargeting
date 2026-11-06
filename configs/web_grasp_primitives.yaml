@@ -2,7 +2,7 @@ mode: web
 output:
   name: viewer
 visualization:
-  host: 10.136.26.252
+  host: 192.168.0.32
   port: 8110
   batch: grasp_current_20261103
   task: grasp
