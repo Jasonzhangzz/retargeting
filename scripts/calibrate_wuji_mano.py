@@ -142,6 +142,13 @@ class PersonalizedMANO(torch.nn.Module):
                 value *= unit
             self.register_buffer(name, torch.tensor(value))
         self.faces = as_array(data["f"]).astype(np.int64)
+        if "retarget_rest_joints" in data:
+            joints = np.asarray(data["retarget_rest_joints"], dtype=np.float64)
+            if joints.shape != (16, 3) or not np.isfinite(joints).all():
+                raise ValueError("Invalid calibrated MANO rest joints")
+            self.register_buffer("calibrated_rest_joints", torch.tensor(joints * unit))
+        self.appearance = dict(data.get("retarget_appearance", {}))
+        self.asset_metadata = dict(data.get("retarget_metadata", {}))
         tree = as_array(data["kintree_table"])
         lookup = {int(label): i for i, label in enumerate(tree[1])}
         self.parents = [-1] + [lookup[int(label)] for label in tree[0, 1:]]
@@ -154,7 +161,7 @@ class PersonalizedMANO(torch.nn.Module):
         extent = float(torch.linalg.vector_norm(self.template.max(0).values - self.template.min(0).values))
         if not .08 < extent < .5:
             raise ValueError("Unexpected model scale; select --model-unit m or mm explicitly")
-        rest = self.regressor @ self.template
+        rest = self.calibrated_rest_joints if hasattr(self, "calibrated_rest_joints") else self.regressor @ self.template
         self.register_buffer("finger_weights", torch.stack([self.weights[:, list(c)].sum(-1) for c in CHAINS], -1))
         # Palm lateral axis and a palm normal, computed from anatomical landmarks.
         lateral = torch.nn.functional.normalize(rest[1] - rest[7], dim=0)
@@ -189,7 +196,7 @@ class PersonalizedMANO(torch.nn.Module):
 
     def rest_shape(self, beta, log_scale, log_lengths, log_radial):
         v = self.template + torch.einsum("vck,k->vc", self.shapedirs, beta)
-        j = self.regressor @ v
+        j = self.calibrated_rest_joints if hasattr(self, "calibrated_rest_joints") else self.regressor @ v
         delta_v = torch.zeros_like(v)
         new_j = [j[0]] + [None] * 15
         for f, chain in enumerate(CHAINS):

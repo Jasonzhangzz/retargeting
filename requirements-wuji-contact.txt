@@ -1,0 +1,3 @@
+# Independent Moxian -> Wuji2 SLSQP, alongside the existing CARD/CEM runtime.
+-r requirements-contact.txt
+nlopt==2.11.0

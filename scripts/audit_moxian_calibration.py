@@ -18,6 +18,7 @@ def write(path,value):
     temp=path.with_suffix('.tmp');temp.write_text(json.dumps(value,ensure_ascii=False,allow_nan=False,indent=2));temp.replace(path)
 
 def restore(m,p):
+    m.rigid_finger_fk=bool(p.get('rigid_finger_fk',False));m.finger_base_offsets_m=np.array(p.get('finger_base_offsets_m',[0.]*4),dtype=float);m.finger_axis_yaw_rad=np.array(p.get('finger_axis_yaw_rad',[0.]*4),dtype=float)
     m.proximal_lateral_scales=np.array(p.get('proximal_lateral_scales',[0.]*4),dtype=float)
     m.bone_reference=np.array(p['bone_reference']) if p.get('bone_reference') is not None else None
     m.dimension_parameters=np.array(p.get('dimension_parameters',np.zeros(20)));m.set_shape(p['shape'])

@@ -1,0 +1,182 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robokit"
+version = "1.0.0"
+authors = [{ name = "RoboKit Organization", email = "jianglong.yeh@gmail.com" }]
+description = "RoboKit is a high-performance, general-purpose toolkit for versatile robotic tasks."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "typing-extensions>=4.0",
+    "jaxtyping>=0.2.19",
+    "matplotlib>=3.7",
+    "rich>=13",
+    "robot_descriptions>=1.22,<3",  # 3.0 drops the UR10 model that robokit assets, tests, and doctests load
+    "tyro>=0.8",
+    "PyYAML>=6",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "yourdfpy>=0.0.56",
+    "viser>=1.1",
+    "warp-lang>=1.8",
+    "filelock>=3.12",
+    "huggingface-hub>=0.36",
+    "trimesh>=4.7",
+]
+
+
+[project.optional-dependencies]
+pt-cpu = ["torch>=2.4"]
+pt-cu118 = ["torch>=2.4"]
+pt-cu126 = ["torch>=2.4"]
+pt-cu128 = ["torch>=2.4", "nvidia-nccl-cu12"]
+mj = ["mujoco>=3.2"]
+mjwarp = ["mujoco-warp>=3.17; python_version >= '3.10'"]
+
+[dependency-groups]
+dev = [
+    "tqdm>=4.60",
+    "tabulate>=0.9",
+    "ruff>=0.5",
+    "pyright>=1.1.380",
+    "pytest>=7.4",
+    "pytest-xdist>=3.3",
+    "xdoctest>=1.1",
+    "coverage>=7.3",
+    "pytest-cov>=4.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/openrobokit/robokit"
+Repository = "https://github.com/openrobokit/robokit"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+robokit = [
+    "**/*.c",
+    "**/*.cpp",
+    "**/*.h",
+    "**/*.hpp",
+    "**/*.cu",
+    "**/*.cuh",
+    "**/*.urdf",
+    "**/*.yaml",
+    "**/*.json",
+    "**/*.jsx",
+    "**/*.html",
+    "**/*.jpg",
+]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["ref", "media_*"]  # untracked reference checkouts and the bpy render code (own env)
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors.
+    "I",   # isort
+    "F",   # Pyflakes rules.
+    "PLC", # Pylint convention warnings.
+    "PLE", # Pylint errors.
+    "PLR", # Pylint refactor recommendations.
+    "PLW", # Pylint warnings.
+]
+ignore = [
+    "E731",    # Do not assign a lambda expression, use a def.
+    "E741",    # Ambiguous variable name. (l, O, or I)
+    "E501",    # Line too long.
+    "E721",    # Do not compare types, use `isinstance()`.
+    "F722",    # Forward annotation false positive from jaxtyping. Should be caught by pyright.
+    "F821",    # Forward annotation false positive from jaxtyping. Should be caught by pyright.
+    "PLR2004", # Magic value used in comparison.
+    "PLR0915", # Too many statements.
+    "PLR0913", # Too many arguments.
+    "PLR0917", # Too many positional arguments.
+    "PLC0414", # Import alias does not rename variable. (this is used for exporting names)
+    "PLC1901", # Use falsey strings.
+    "PLC0415", # `import` should be at the top-level of a file
+    "PLR5501", # Use `elif` instead of `else if`.
+    "PLR0911", # Too many return statements.
+    "PLR0912", # Too many branches.
+    "PLW0603", # Globa statement updates are discouraged.
+    "PLW2901", # For loop variable overwritten.
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["robokit"]
+force-single-line = false
+lines-after-imports = 2
+
+[tool.pytest.ini_options]
+addopts = "--durations=10"
+pythonpath = ["."]
+norecursedirs = ["scripts", ".worktrees", "ref", "runs", "media_*"]
+markers = ["torch: requires PyTorch", "slow: long-running; skipped on PRs and by make ci, run on main/weekly"]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv]
+# uv-only fixes for bad upstream metadata: these claim Python versions they ship no wheels for.
+constraint-dependencies = ["torch!=2.5.*", "mujoco!=3.4.*,!=3.5.*", "embreex!=4.4.0.post1"]
+required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+conflicts = [[{ extra = "pt-cpu" }, { extra = "pt-cu118" }, { extra = "pt-cu126" }, { extra = "pt-cu128" }]]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu118", extra = "pt-cu118", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { index = "pytorch-cu126", extra = "pt-cu126", marker = "python_version >= '3.9' and (sys_platform == 'linux' or sys_platform == 'win32')" },
+    { index = "pytorch-cu128", extra = "pt-cu128", marker = "python_version >= '3.9' and (sys_platform == 'linux' or sys_platform == 'win32')" },
+    { index = "pytorch-cpu", extra = "pt-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },
+]
+
+[tool.pyright]
+typeCheckingMode = "standard"
+include = ["src"]
+ignore = ["src/robokit/thirdparty"]
+reportAttributeAccessIssue = false
+reportInvalidTypeForm = false
+reportAbstractUsage = false
+reportIncompatibleMethodOverride = false
+reportOverlappingOverload = false
+reportPossiblyUnboundVariable = false
+reportOptionalMemberAccess = false

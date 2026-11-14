@@ -9,7 +9,9 @@ from retarget.solver.base import Settings
 
 def test_solver_modules_and_parameters_have_single_owners():
     files={p.stem for p in Path(cem.__file__).parent.glob('*.py')}
-    assert files=={'__init__','base','cem','graspadmm'}
+    assert files=={'__init__','base','cem','graspadmm','contact_cem','contact_defaults','control_sampling','robokit_cem'}
+    from retarget.solver import contact_cem, contact_defaults
+    assert contact_cem.DEFAULTS is contact_defaults.DEFAULTS
     from retarget.env.grasp.contact_geometry import PoseObjectiveSettings
     from retarget.env.grasp.spring_history import SpringHistorySettings
     from retarget.env.grasp.comfree_rollout import RolloutSettings

@@ -1,0 +1,821 @@
+{
+  "revision": "contact_targets_qnbot_flat_trajectory_v5",
+  "stages": {
+    "open": {
+      "kind": "none",
+      "label": "伸直、展开；无指定接触目标",
+      "patches": []
+    },
+    "together": {
+      "kind": "side_prior",
+      "label": "相邻四指侧面并拢；几何先验，不伪造触觉",
+      "patches": []
+    },
+    "mcp90": {
+      "kind": "none",
+      "label": "掌指关节弯曲；无指定接触目标",
+      "patches": []
+    },
+    "hook": {
+      "kind": "none",
+      "label": "钩状弯曲；无指定接触目标",
+      "patches": []
+    },
+    "range_thumb": {
+      "kind": "none",
+      "label": "拇指活动范围；无指定接触目标",
+      "patches": []
+    },
+    "range_index": {
+      "kind": "none",
+      "label": "食指活动范围；无指定接触目标",
+      "patches": []
+    },
+    "range_middle": {
+      "kind": "none",
+      "label": "中指活动范围；无指定接触目标",
+      "patches": []
+    },
+    "range_ring": {
+      "kind": "none",
+      "label": "无名指活动范围；无指定接触目标",
+      "patches": []
+    },
+    "range_pinky": {
+      "kind": "none",
+      "label": "小指活动范围；无指定接触目标",
+      "patches": []
+    },
+    "thumb_opposition": {
+      "kind": "none",
+      "label": "拇指对掌扫动；无唯一接触目标",
+      "patches": []
+    },
+    "pinch_index": {
+      "kind": "opposing_pads",
+      "label": "拇指远端指腹 ↔ 食指远端指腹",
+      "patches": [
+        "thumb_distal",
+        "index_distal"
+      ],
+      "equality_phase": "touch",
+      "bilateral_required": true,
+      "max_timestamp_delta_ms": 25
+    },
+    "pinch_middle": {
+      "kind": "opposing_pads",
+      "label": "拇指远端指腹 ↔ 中指远端指腹",
+      "patches": [
+        "thumb_distal",
+        "middle_distal"
+      ],
+      "equality_phase": "touch",
+      "bilateral_required": true,
+      "max_timestamp_delta_ms": 25
+    },
+    "pinch_ring": {
+      "kind": "opposing_pads",
+      "label": "拇指远端指腹 ↔ 无名指远端指腹",
+      "patches": [
+        "thumb_distal",
+        "ring_distal"
+      ],
+      "equality_phase": "touch",
+      "bilateral_required": true,
+      "max_timestamp_delta_ms": 25
+    },
+    "pinch_pinky": {
+      "kind": "opposing_pads",
+      "label": "拇指远端指腹 ↔ 小指远端指腹",
+      "patches": [
+        "thumb_distal",
+        "pinky_distal"
+      ],
+      "equality_phase": "touch",
+      "bilateral_required": true,
+      "max_timestamp_delta_ms": 25
+    },
+    "open_repeat": {
+      "kind": "none",
+      "label": "独立张开复测；无指定接触目标",
+      "patches": []
+    },
+    "together_repeat": {
+      "kind": "side_prior",
+      "label": "相邻四指侧面并拢；仅作独立验证",
+      "patches": []
+    },
+    "fist": {
+      "kind": "none",
+      "label": "自然虚握；无强制指尖到掌面的接触目标",
+      "patches": []
+    },
+    "mcp90_pip90": {
+      "kind": "none",
+      "label": "掌指及近端指间关节弯曲；无指定接触目标",
+      "patches": []
+    },
+    "contact_pair_index": {
+      "label": "拇指与食指远端指腹对指",
+      "kind": "region_pairs",
+      "active_fingers": [
+        "thumb",
+        "index"
+      ],
+      "patches": [
+        "thumb_distal",
+        "index_distal"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "index_distal"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_pair_middle": {
+      "label": "拇指与中指远端指腹对指",
+      "kind": "region_pairs",
+      "active_fingers": [
+        "thumb",
+        "middle"
+      ],
+      "patches": [
+        "thumb_distal",
+        "middle_distal"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "middle_distal"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_pair_ring": {
+      "label": "拇指与无名指远端指腹对指",
+      "kind": "region_pairs",
+      "active_fingers": [
+        "thumb",
+        "ring"
+      ],
+      "patches": [
+        "thumb_distal",
+        "ring_distal"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "ring_distal"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_pair_pinky": {
+      "label": "拇指与小指远端指腹对指",
+      "kind": "region_pairs",
+      "active_fingers": [
+        "thumb",
+        "pinky"
+      ],
+      "patches": [
+        "thumb_distal",
+        "pinky_distal"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "pinky_distal"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_tripod_index_middle": {
+      "label": "拇指与食指中指三指捏合",
+      "kind": "distal_cluster",
+      "active_fingers": [
+        "thumb",
+        "index",
+        "middle"
+      ],
+      "patches": [
+        "thumb_distal",
+        "index_distal",
+        "middle_distal"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "index_distal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "thumb_distal",
+            "middle_distal"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_tripod_middle_ring": {
+      "label": "拇指与中指无名指三指捏合",
+      "kind": "distal_cluster",
+      "active_fingers": [
+        "thumb",
+        "middle",
+        "ring"
+      ],
+      "patches": [
+        "thumb_distal",
+        "middle_distal",
+        "ring_distal"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "middle_distal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "thumb_distal",
+            "ring_distal"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_tripod_ring_pinky": {
+      "label": "拇指与无名指小指三指捏合",
+      "kind": "distal_cluster",
+      "active_fingers": [
+        "thumb",
+        "ring",
+        "pinky"
+      ],
+      "patches": [
+        "thumb_distal",
+        "ring_distal",
+        "pinky_distal"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "ring_distal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "thumb_distal",
+            "pinky_distal"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_four_index_middle_ring": {
+      "label": "拇指与食指中指无名指四指贴合",
+      "kind": "distal_cluster",
+      "active_fingers": [
+        "thumb",
+        "index",
+        "middle",
+        "ring"
+      ],
+      "patches": [
+        "thumb_distal",
+        "index_distal",
+        "middle_distal",
+        "ring_distal"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "index_distal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "thumb_distal",
+            "middle_distal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "thumb_distal",
+            "ring_distal"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_four_middle_ring_pinky": {
+      "label": "拇指与中指无名指小指四指贴合",
+      "kind": "distal_cluster",
+      "active_fingers": [
+        "thumb",
+        "middle",
+        "ring",
+        "pinky"
+      ],
+      "patches": [
+        "thumb_distal",
+        "middle_distal",
+        "ring_distal",
+        "pinky_distal"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "middle_distal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "thumb_distal",
+            "ring_distal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "thumb_distal",
+            "pinky_distal"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_five": {
+      "label": "五指远端指腹贴合",
+      "kind": "distal_cluster",
+      "active_fingers": [
+        "thumb",
+        "index",
+        "middle",
+        "ring",
+        "pinky"
+      ],
+      "patches": [
+        "thumb_distal",
+        "index_distal",
+        "middle_distal",
+        "ring_distal",
+        "pinky_distal"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "index_distal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "thumb_distal",
+            "middle_distal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "thumb_distal",
+            "ring_distal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "thumb_distal",
+            "pinky_distal"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_palm_pinky": {
+      "label": "拇指远端指腹接触小指 MCP 指根掌面",
+      "kind": "region_pairs",
+      "active_fingers": [
+        "thumb"
+      ],
+      "patches": [
+        "thumb_distal",
+        "palm_mcp_pinky"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "palm_mcp_pinky"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_palm_ring": {
+      "label": "拇指远端指腹接触无名指 MCP 指根掌面",
+      "kind": "region_pairs",
+      "active_fingers": [
+        "thumb"
+      ],
+      "patches": [
+        "thumb_distal",
+        "palm_mcp_ring"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "palm_mcp_ring"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_palm_middle": {
+      "label": "拇指远端指腹接触中指 MCP 指根掌面",
+      "kind": "region_pairs",
+      "active_fingers": [
+        "thumb"
+      ],
+      "patches": [
+        "thumb_distal",
+        "palm_mcp_middle"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "palm_mcp_middle"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_palm_index": {
+      "label": "拇指远端指腹接触食指 MCP 指根掌面",
+      "kind": "region_pairs",
+      "active_fingers": [
+        "thumb"
+      ],
+      "patches": [
+        "thumb_distal",
+        "palm_mcp_index"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "thumb_distal",
+            "palm_mcp_index"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_fist": {
+      "label": "四指握拳：远端指腹接触对应 MCP 下方掌面",
+      "kind": "region_pairs",
+      "active_fingers": [
+        "index",
+        "middle",
+        "ring",
+        "pinky"
+      ],
+      "patches": [
+        "index_distal",
+        "palm_mcp_index",
+        "middle_distal",
+        "palm_mcp_middle",
+        "ring_distal",
+        "palm_mcp_ring",
+        "pinky_distal",
+        "palm_mcp_pinky"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "index_distal",
+            "palm_mcp_index"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "middle_distal",
+            "palm_mcp_middle"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "ring_distal",
+            "palm_mcp_ring"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "pinky_distal",
+            "palm_mcp_pinky"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "contact_fold": {
+      "label": "四指折叠：远端指腹接触自身近端指节掌侧",
+      "kind": "region_pairs",
+      "active_fingers": [
+        "index",
+        "middle",
+        "ring",
+        "pinky"
+      ],
+      "patches": [
+        "index_distal",
+        "index_proximal",
+        "middle_distal",
+        "middle_proximal",
+        "ring_distal",
+        "ring_proximal",
+        "pinky_distal",
+        "pinky_proximal"
+      ],
+      "edges": [
+        {
+          "regions": [
+            "index_distal",
+            "index_proximal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "middle_distal",
+            "middle_proximal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "ring_distal",
+            "ring_proximal"
+          ],
+          "required": true
+        },
+        {
+          "regions": [
+            "pinky_distal",
+            "pinky_proximal"
+          ],
+          "required": true
+        }
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": "trajectory_minimum",
+      "bilateral_required": false
+    },
+    "motion_spread_together": {
+      "kind": "noncontact_motion",
+      "label": "五指伸直，张开、并拢两次",
+      "patches": [],
+      "edges": [],
+      "active_fingers": [
+        "thumb",
+        "index",
+        "middle",
+        "ring",
+        "pinky"
+      ],
+      "seconds": 5,
+      "repetitions": 2,
+      "equality_phase": null,
+      "bilateral_required": false
+    }
+  },
+  "protocols": {
+    "contact_motion_v3": {
+      "stages": [
+        "contact_pair_index",
+        "contact_pair_middle",
+        "contact_pair_ring",
+        "contact_pair_pinky",
+        "contact_tripod_index_middle",
+        "contact_tripod_middle_ring",
+        "contact_tripod_ring_pinky",
+        "contact_four_index_middle_ring",
+        "contact_four_middle_ring_pinky",
+        "contact_five",
+        "contact_palm_pinky",
+        "contact_palm_ring",
+        "contact_palm_middle",
+        "contact_palm_index",
+        "contact_fist",
+        "contact_fold"
+      ],
+      "passes": [
+        "train",
+        "validation"
+      ],
+      "window_seconds": 5,
+      "repetitions": 2,
+      "penetration_tolerance_mm": 2
+    },
+    "contact_motion_v3_spread_v1": {
+      "stages": [
+        "contact_pair_index",
+        "contact_pair_middle",
+        "contact_pair_ring",
+        "contact_pair_pinky",
+        "contact_tripod_index_middle",
+        "contact_tripod_middle_ring",
+        "contact_tripod_ring_pinky",
+        "contact_four_index_middle_ring",
+        "contact_four_middle_ring_pinky",
+        "contact_five",
+        "contact_palm_pinky",
+        "contact_palm_ring",
+        "contact_palm_middle",
+        "contact_palm_index",
+        "contact_fist",
+        "contact_fold",
+        "motion_spread_together"
+      ],
+      "passes": [
+        "train",
+        "validation"
+      ],
+      "window_seconds": 5,
+      "repetitions": 2,
+      "penetration_tolerance_mm": 2
+    },
+    "contact_motion_v4": {
+      "stages": [
+        "contact_pair_index",
+        "contact_pair_middle",
+        "contact_pair_ring",
+        "contact_pair_pinky",
+        "contact_tripod_index_middle",
+        "contact_tripod_middle_ring",
+        "contact_tripod_ring_pinky",
+        "contact_four_index_middle_ring",
+        "contact_four_middle_ring_pinky",
+        "contact_five",
+        "contact_palm_pinky",
+        "contact_palm_ring",
+        "contact_palm_middle",
+        "contact_palm_index",
+        "contact_fist",
+        "contact_fold",
+        "motion_spread_together"
+      ],
+      "passes": [
+        "train",
+        "validation"
+      ],
+      "window_seconds": 6,
+      "repetitions": 2,
+      "penetration_tolerance_mm": 2,
+      "release_requirement": "full_hand_flat",
+      "automatic_extension": true
+    },
+    "contact_static_v5": {
+      "stages": [
+        "contact_pair_index",
+        "contact_pair_middle",
+        "contact_pair_ring",
+        "contact_pair_pinky",
+        "contact_tripod_index_middle",
+        "contact_tripod_middle_ring",
+        "contact_tripod_ring_pinky",
+        "contact_four_index_middle_ring",
+        "contact_four_middle_ring_pinky",
+        "contact_five",
+        "contact_palm_pinky",
+        "contact_palm_ring",
+        "contact_palm_middle",
+        "contact_palm_index",
+        "contact_fist",
+        "contact_fold",
+        "motion_spread_together"
+      ],
+      "passes": [
+        "train",
+        "validation"
+      ],
+      "source": "static_holds",
+      "hold_seconds": 0,
+      "collect_seconds": 0,
+      "timeout_seconds": 120,
+      "stability_window_frames": 20,
+      "variance_threshold_m2": 0.0002,
+      "split_endpoints": {
+        "motion_spread_together": [
+          "spread",
+          "together"
+        ]
+      },
+      "penetration_tolerance_mm": 2,
+      "pose_constraints_revision": "moxian_static_pose_constraints_v1",
+      "pose_constraints": {
+        "rx_distance_m": 0.05,
+        "pad_distance_m": 0.06,
+        "palm_distance_m": 0.04,
+        "opposing_normal_deg": 45,
+        "cluster_normal_deg": 30,
+        "straight_reach_ratio": 0.45,
+        "straight_plane_deg": 45,
+        "together_direction_deg": 20,
+        "spread_direction_deg": 6,
+        "five_cluster_distance_m": 0.08,
+        "five_curl_ratio": 0.85
+      },
+      "equality_phase": "accepted_static_hold",
+      "repetitions": 1
+    }
+  }
+}

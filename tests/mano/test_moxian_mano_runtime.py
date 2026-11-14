@@ -25,17 +25,14 @@ def test_778_vertices_460_unique_sids_twenty_anatomical_patches(model):
     assert set(m.mapping['assignments'])==set(range(20))
     assert all(m.face_patches[m.sid_faces[sid]]==m.mapping['assignments'][sid] for sid in range(460))
 
-def test_thickness_keeps_joint_lengths_and_small_length_corrections_are_distinct(model):
-    m=model;m.bone_reference=np.array([[.035,.025,.02]]*5);m.set_shape(np.zeros(41));basej=m.rest_j_np.copy();basev=m.rest_np.copy();tips=m.tip_anchors.copy()
-    shape=m.shape.copy();shape[21:]=.001;m.set_shape(shape)
-    assert np.allclose(m.rest_j_np,basej) and np.allclose(m.tip_anchors,tips)
-    assert not np.allclose(m.rest_np,basev)
-    shape[11]=np.log(1.02);shape[16]=.001;m.set_shape(shape)
-    # Bone segments are information about total size, not exact surface lengths.
-    assert not np.isclose(np.linalg.norm(basej[14]-basej[13]),.035,atol=1e-6)
-    assert np.linalg.norm(m.rest_j_np[14]-m.rest_j_np[13])>np.linalg.norm(basej[14]-basej[13])
-    assert np.linalg.norm(m.tip_anchors[0]-m.rest_j_np[15])>np.linalg.norm(tips[0]-basej[15])
-    m.bone_reference=None;m.set_shape(np.zeros(41))
+def test_custom_shape_extensions_are_rejected_and_bone_prior_cannot_resize(model):
+    m=model;m.set_shape(np.zeros(10));base=m.rest_np.copy()
+    m.bone_reference=np.full((5,3),.08);m.set_shape(np.zeros(10))
+    np.testing.assert_array_equal(m.rest_np,base)
+    for index in (10,11,16,21):
+        value=np.zeros(41);value[index]=.001
+        with pytest.raises(ValueError):m.set_shape(value)
+    m.bone_reference=None
 
 def test_native_collision_version_and_triangle_verification(model):
     m=model;m.set_shape(np.zeros(41));q=torch.zeros((1,15,3),device=m.device);root=torch.eye(3,device=m.device)[None]
@@ -50,7 +47,7 @@ def test_native_collision_version_and_triangle_verification(model):
     frame={'contact':{'ready':True,'patches':[{**p,'contact':True,'response':.3,'active_cells':2} for p in PATCHES]}}
     result=fuse_contacts(m,frame,fake)
     assert result['count']==0 and all(p['state']=='conflict' for p in result['patches'])
-    change=m.shape.copy();change[21]=.001;m.set_shape(change)
+    change=m.shape.copy();change[0]=.5;m.set_shape(change)
     with pytest.raises(ValueError,match='旧尺寸'):g.query(v[0].cpu().numpy(),j[0].cpu().numpy(),r[0].cpu().numpy())
     fresh=CollisionSurface(m);assert fresh.version==m.shape_version
     m.set_shape(np.zeros(41))
@@ -66,15 +63,15 @@ def test_compression_does_not_mutate_rest_and_releases(model):
     for t in range(1040,2000,40):out,report=deform_surface(m,v,{'ready':True,'pairs':[]},t)
     assert report['max_m']<1e-6 and np.array_equal(m.rest_np,saved)
 
-def test_bounded_powell_recovers_observed_thickness_with_noisy_surface_samples(model):
-    m=model;m.set_shape(np.zeros(41));known=.0012;shape=m.shape.copy();shape[21]=known;m.set_shape(shape)
+def test_bounded_powell_recovers_official_beta_with_noisy_surface_samples(model):
+    m=model;m.set_shape(np.zeros(41));known=.7;shape=m.shape.copy();shape[0]=known;m.set_shape(shape)
     rng=np.random.default_rng(7);target=m.rest_np.copy()+rng.normal(0,.00002,(778,3))
     ids=np.flatnonzero(m.vertex_patches==0)
     def objective(x):
-        value=np.zeros(41);value[21]=x[0];m.set_shape(value)
+        value=np.zeros(41);value[0]=x[0];m.set_shape(value)
         return float(np.mean((m.rest_np[ids]-target[ids])**2))
-    result=minimize(objective,[0.],method='Powell',bounds=[(-.002,.002)],options={'xtol':1e-7})
-    assert abs(result.x[0]-known)<.0001
+    result=minimize(objective,[0.],method='Powell',bounds=[(-2.,2.)],options={'xtol':1e-7})
+    assert abs(result.x[0]-known)<.02
     # No information was supplied for other patches, and none was invented.
     assert np.allclose(m.shape[22:],0)
     m.set_shape(np.zeros(41))
@@ -252,20 +249,18 @@ def _motion_frame(m,pose,root,stamp,frozen_bones=False):
       'skeleton_targets':{'timestamp_ms':stamp,'hand_side':'left','coordinate_frame':'wrist_local','positions_local':p.tolist(),'rotations_local':r.reshape(5,9).tolist()}},p
 
 
-def test_current_frame_ik_follows_step_and_release_despite_unresponsive_bone_seed():
-    m=ManoSurface(DEFAULT_MANO);m.bone_reference=np.array([[.03,.02,.02]]*5);identity=np.eye(3,dtype=np.float32)
-    a=np.zeros((15,3));a[:12:3,0]=.65;a[1:12:3,0]=.9;a[2:12:3,0]=.5;b=m.anatomy.basis
-    bent=Rotation.from_matrix(b@Rotation.from_euler('XYZ',a).as_matrix()@b.swapaxes(-2,-1)).as_rotvec().astype(np.float32)
-    shape=m.shape.copy();i=0
-    for q in (np.zeros((15,3),np.float32),bent,np.zeros((15,3),np.float32)):
-        errors=[]
-        for k in range(8):
-            frame,p=_motion_frame(m,q,identity,1000+i*22.2,True);v,*_=m.track(frame,steps=1);i+=1
-            errors.append(np.linalg.norm(v[[744,320,443,554,671]]-p,axis=1)*1000)
-        # Three output frames, about 67 ms at the synthetic 45 Hz input.
-        assert np.max(errors[2])<2.,errors
-        assert np.max(errors[-1])<.5,errors
-    assert np.array_equal(shape,m.shape) and np.all(m.compression==0)
+def test_official_rotation_steps_apply_in_one_frame_with_frozen_bone_positions():
+    m=ManoSurface(DEFAULT_MANO);m.enable_official_fk()
+    bone=copy.deepcopy(m.official_fk.reference);bone['timestamp_ms']=1000.
+    frame={'timestamp_ms':1000.,'skeleton':bone,'fingers':{f:{'position':[0.,0.,0.],'quaternion_xyzw':[0,0,0,1]} for f in ('thumb','index','middle','ring','pinky')}}
+    before=m.track(frame)[0];fixed=m.rest_np.copy();rotations=Rotation.from_quat(bone['orientations_local_xyzw']).as_matrix()
+    ids=[i for i,n in enumerate(bone['names']) if n.startswith('index_') and n!='index_metacarpal']
+    rotations[ids]=Rotation.from_euler('x',45,degrees=True).as_matrix()@rotations[ids]
+    bone['orientations_local_xyzw']=Rotation.from_matrix(rotations).as_quat().tolist()
+    changed=m.track(frame)[0]
+    assert not np.allclose(before,changed)
+    np.testing.assert_array_equal(changed,m.track(frame)[0])
+    np.testing.assert_array_equal(fixed,m.rest_np)
 
 
 def test_responsive_tracking_retains_real_palm_rotation_and_static_stability():
@@ -340,33 +335,22 @@ def test_calibrated_emf_direction_follows_bending_and_returns_to_flat():
     assert np.max(np.abs(np.rad2deg(m.anatomy.angles(m.last_pose)[:12,0])))<6.
 
 
-def test_anatomical_tip_extension_is_independent_of_distal_to_emf_mount():
+def test_retired_tip_extension_is_rejected_without_changing_sensor_mount():
     m=ManoSurface(DEFAULT_MANO);m.flat_reference={'reference_id':'test'}
     m.sensor_joint_position=(m.tip_anchors-m.rest_j_np[[c[-1] for c in CHAINS]])*.7
     sensor=m.sensor_offsets().copy();tip=m.tip_anchors.copy();joints=m.rest_j_np.copy()
-    changed=m.shape.copy();changed[16:21]=.0015;m.set_shape(changed)
+    changed=m.shape.copy();changed[16:21]=.0015
+    with pytest.raises(ValueError):m.set_shape(changed)
     assert np.array_equal(m.sensor_offsets(),sensor)
-    assert np.allclose(m.rest_j_np,joints) and np.min(np.linalg.norm(m.tip_anchors-tip,axis=1))>.001
+    assert np.array_equal(m.rest_j_np,joints) and np.array_equal(m.tip_anchors,tip)
 
 
-def test_fixed_segment_dimensions_change_only_segment_scale_and_finger_radius():
-    m=ManoSurface(DEFAULT_MANO);m.set_dimensions(np.zeros(20));base_v=m.rest_np.copy();base_j=m.rest_j_np.copy()
-    x=np.zeros(20);x[3]=np.log(1.12);x[16]=np.log(1.2);m.set_dimensions(x)
-    c=CHAINS[1]
-    assert np.isclose(np.linalg.norm(m.rest_j_np[c[1]]-m.rest_j_np[c[0]])/np.linalg.norm(base_j[c[1]]-base_j[c[0]]),1.12,atol=1e-5)
-    assert np.allclose(m.rest_j_np[[CHAINS[0][0],CHAINS[2][0]]],base_j[[CHAINS[0][0],CHAINS[2][0]]])
-    fixed=m.rest_np.copy();dimensions=m.dimension_parameters.copy();geometry_version=m.shape_version
-    weights=m.model.weights.cpu().numpy();ids=np.flatnonzero(weights[:,c[-1]]>.9999)
-    assert len(ids)>2
-    for angle in (0,.2,.5,.8):
-        q=np.zeros((15,3),np.float32);q[c[0]-1,2]=angle;q[c[1]-1,2]=angle
-        with torch.no_grad():v,j,r,o=m.decode(torch.tensor(q[None],device=m.device),torch.eye(3,device=m.device)[None])
-        expected=j[0,c[-1]].cpu().numpy()+(fixed[ids]-m.rest_j_np[c[-1]])@r[0,c[-1]].cpu().numpy().T
-        assert np.max(np.linalg.norm(v[0,ids].cpu().numpy()-expected,axis=1))<1e-5
-        assert np.array_equal(m.rest_np,fixed) and np.array_equal(m.dimension_parameters,dimensions) and m.shape_version==geometry_version
-    # The retired patch and fingertip displacement entries cannot change fixed geometry.
-    shape=m.shape.copy();shape[16:]=.001;m.set_shape(shape)
-    assert np.allclose(m.rest_np,fixed)
+def test_independent_segment_and_radial_dimensions_are_rejected():
+    m=ManoSurface(DEFAULT_MANO);m.set_dimensions(np.zeros(20));base=m.rest_np.copy()
+    for index in (3,16):
+        x=np.zeros(20);x[index]=.1
+        with pytest.raises(ValueError):m.set_dimensions(x)
+        np.testing.assert_array_equal(m.rest_np,base)
 
 
 def test_sensor_supported_pinch_is_pose_only_and_requires_bilateral_tactile():
@@ -398,13 +382,13 @@ def test_sensor_supported_pinch_is_pose_only_and_requires_bilateral_tactile():
 
 def test_calibration_acceptance_requires_real_contact_observations_and_allows_small_overlap():
     from moxian_web.mano_fit import candidate_validation
-    geo={'noncontact_penetration_m':.003,'contact_gap_m':.004,'contact_stages':['pinch_'+f for f in ('index','middle','ring','pinky')]}
+    geo={'noncontact_penetration_m':.002,'contact_gap_m':.003,'contact_stages':['pinch_'+f for f in ('index','middle','ring','pinky')]}
     assert candidate_validation(10.,8.,geo,.005)==(True,True)
     # Reduced position error cannot legitimize missing contact data or a
     # fabricated default distance; all four guided pairs must be evaluated.
     assert not candidate_validation(10.,8.,{**geo,'contact_stages':[]},.005)[0]
     assert not candidate_validation(10.,8.,{**geo,'contact_gap_m':.04},.005)[0]
-    assert candidate_validation(10.,8.,{**geo,'noncontact_penetration_m':.008},.005)[0]
+    assert not candidate_validation(10.,8.,{**geo,'noncontact_penetration_m':.008},.005)[0]
     assert not candidate_validation(10.,11.,geo,.005)[0]
     assert not candidate_validation(10.,float('nan'),geo,.005)[0]
 
@@ -444,18 +428,12 @@ def test_known_capture_gestures_constrain_training_bends_without_resizing():
     assert np.array_equal(m.rest_np,rest)
 
 
-def test_emf_only_cannot_identify_radial_or_surface_tip_length_scales():
-    m=ManoSurface(DEFAULT_MANO);m.set_dimensions(np.zeros(20));m.flat_reference={'reference_id':'unit'}
-    m.sensor_joint_position=.6*(m.tip_anchors-m.rest_j_np[[c[-1] for c in CHAINS]])
-    q=torch.zeros((1,15,3),device=m.device);root=torch.eye(3,device=m.device)[None]
-    def sensors():
-        with torch.no_grad():_,j,r,_=m.decode(q,root)
-        return j[0,[c[-1] for c in CHAINS]].cpu().numpy()+(r[0,[c[-1] for c in CHAINS]].cpu().numpy()@m.sensor_offsets()[:,:,None]).squeeze(-1)
-    base=sensors();summary=m.dimension_summary();x=np.zeros(20);x[2:15:3]=np.log(1.1);x[15:]=np.log(1.1);m.set_dimensions(x)
-    assert np.allclose(sensors(),base,atol=1e-8)
-    changed=m.dimension_summary();assert changed['index']['surface_length_mm']>summary['index']['surface_length_mm']
-    assert changed['index']['proximal_width_mm']>summary['index']['proximal_width_mm']*1.05
-    assert 5<changed['index']['proximal_width_mm']<50
+def test_only_official_betas_change_reported_dimensions():
+    m=ManoSurface(DEFAULT_MANO);m.set_shape(np.zeros(10));before=m.dimension_summary()
+    beta=np.zeros(10);beta[0]=1.;m.set_shape(beta)
+    assert m.dimension_summary()!=before
+    assert not np.any(m.dimension_parameters)
+    assert all(d['runtime_joint_spacing']=='official_MANO_regressed_joints' for d in m.dimension_summary().values())
 
 
 def test_surface_distance_beyond_four_cm_is_not_a_missing_query_sentinel():
@@ -479,7 +457,7 @@ def test_together_side_strips_cover_adjacent_fingers_and_follow_new_geometry():
         assert len(r['ids_a'])==len(r['ids_b'])==8
         assert set(m.labels[r['ids_a']])<=set(CHAINS[r['a']])
         assert set(m.labels[r['ids_b']])<=set(CHAINS[r['b']])
-    version=m.shape_version;dims=m.dimension_parameters.copy();dims[16]=np.log(1.15);m.set_dimensions(dims)
+    version=m.shape_version;beta=np.zeros(10);beta[0]=1.;m.set_shape(beta)
     assert m.shape_version!=version and m.together_regions() is not regions
     q=torch.zeros((1,15,3),device=m.device,requires_grad=True)
     v,*_=m.decode(q,torch.eye(3,device=m.device)[None])

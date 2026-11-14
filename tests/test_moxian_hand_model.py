@@ -1,8 +1,8 @@
 import copy,math,tempfile,unittest,json
 from pathlib import Path
-from moxian_web.hand_model import pair_mechanics,positive_gain,material_config,aligned_frame,fusion_state,validate_hand_output,HandModelBridge,HandInputSynchronizer,confirmed_contact_points,persist_calibrated_profile
-from moxian_web.hand_capture import HandCapture
+from moxian_web.hand_model import pair_mechanics,positive_gain,material_config,aligned_frame,fusion_state,validate_hand_output,HandModelBridge,HandInputSynchronizer,confirmed_contact_points,persist_calibrated_profile,tracking_registration_matches
 from moxian_web.contact import PATCHES
+from moxian_web.hand_model import MANO_FIT_REVISION
 
 def input_frame(t=1000,touch=False):
     return {'timestamp_ms':t,'tactile_timestamp_ms':t+4,'hand_side':'left','raw':[10]*460,
@@ -11,6 +11,13 @@ def input_frame(t=1000,touch=False):
             'contact':{'ready':True,'patches':[{**p,'contact':touch and p['id'] in ['thumb_distal','index_distal'],'response':.3 if touch else 0} for p in PATCHES]}}
 
 class HandContractTests(unittest.TestCase):
+    def test_native_policy_change_invalidates_mount_even_with_same_capture(self):
+        saved={'calibration_fingerprint':'capture','skeleton_runtime_revision':'old'}
+        frame={'calibration_fingerprint':'capture','skeleton_runtime_revision':'new'}
+        self.assertFalse(tracking_registration_matches(saved,frame))
+        saved['skeleton_runtime_revision']='new';self.assertTrue(tracking_registration_matches(saved,frame))
+        self.assertFalse(tracking_registration_matches({},frame))
+        self.assertFalse(tracking_registration_matches({'calibration_fingerprint':'capture'},frame))
     def test_contact_markers_only_confirmed_ready_and_no_input_mutation(self):
         pair={'patch_a':'thumb_distal','patch_b':'index_distal','state':'confirmed','point_a_m':[.01,.02,.03],'point_b_m':[.011,.021,.031]}
         fusion={'ready':True,'pairs':[pair,{**pair,'state':'candidate'}]};before=copy.deepcopy(fusion)
@@ -36,7 +43,7 @@ class HandContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):positive_gain([1],[-1])
     def test_timestamp_units_side_and_invalid_pose(self):
         f=input_frame();self.assertTrue(aligned_frame(f))
-        for key,value in [('tactile_timestamp_ms',1026),('hand_side','right'),('timestamp_ms',float('inf'))]:
+        for key,value in [('tactile_timestamp_ms',1026),('hand_side','unknown'),('timestamp_ms',float('inf'))]:
             q=copy.deepcopy(f);q[key]=value;self.assertFalse(aligned_frame(q))
         f['fingers']['thumb']['quaternion_xyzw']=[0,0,0,0];self.assertFalse(aligned_frame(f))
     def test_geometry_motion_and_bilateral_touch_fusion(self):
@@ -49,7 +56,7 @@ class HandContractTests(unittest.TestCase):
     def test_output_rejects_bad_units_side_topology(self):
         p={'hand_side':'left','coordinate_frame':'wrist_local','vertices_m':[[0,0,0]]*778,'joints_m':[[0,0,0]]*21,'timestamp_ms':1234}
         validate_hand_output(p)
-        for key,value in [('hand_side','right'),('vertices_m',[[1,1,1]]*778),('joints_m',[[0,0,0]]*20)]:
+        for key,value in [('hand_side','unknown'),('vertices_m',[[1,1,1]]*778),('joints_m',[[0,0,0]]*20)]:
             q=copy.deepcopy(p);q[key]=value
             with self.assertRaises(ValueError):validate_hand_output(q)
     def test_offline_audit_reports_actual_applied_profile_not_stale_candidate(self):
@@ -57,18 +64,22 @@ class HandContractTests(unittest.TestCase):
             root=Path(tmp);home=root/'hand_model'/'device';home.mkdir(parents=True)
             audit={'dimensions_applied':False,'active_dimensions_mm':{'index':{'surface_length_mm':80}},'capture_complete':True,'candidate_report':{'accepted':False}}
             (home/'calibration-audit.json').write_text(json.dumps(audit))
-            (home/'candidate.json').write_text(json.dumps({'report':{'accepted':True,'dimensions_after_mm':{'index':{'surface_length_mm':85}}}}))
+            (home/'candidate.json').write_text(json.dumps({'dimension_mode':'official_mano_betas_v1','report':{'accepted':True,'dimensions_after_mm':{'index':{'surface_length_mm':85}}}}))
             b=HandModelBridge(root,root);state=b.snapshot(False)
             self.assertFalse(state['ready']);self.assertFalse(state['calibrated']);self.assertTrue(state['fit']['accepted'])
             self.assertEqual(state['dimensions_mm']['index']['surface_length_mm'],80)
-            (home/'current.json').write_text(json.dumps({'calibrated':True,'revision':'applied','dimension_parameters':[.1]*20,'report':{'dimensions_after_mm':{'index':{'surface_length_mm':85}}}}))
+            (home/'current.json').write_text(json.dumps({'dimension_mode':'official_mano_betas_v1','calibrated':True,'revision':'applied','dimension_parameters':[0.]*20,'report':{'dimensions_after_mm':{'index':{'surface_length_mm':85}}}}))
             b.audit_checked=0;state=b.snapshot(False)
-            self.assertTrue(state['calibrated']);self.assertTrue(state['calibration_process']['dimensions_applied'])
+            self.assertFalse(state['calibrated']);self.assertFalse(state['calibration_process']['dimensions_applied'])
             self.assertEqual(state['dimensions_mm']['index']['surface_length_mm'],85)
             self.assertEqual(state['calibration_audit']['applied_revision'],'applied')
 
     def test_auto_application_persists_calibrated_version_and_restore_backup(self):
-        report=dict(accepted=True,validation_pose_source='runtime_emf_only',contact_validation_passed=True,together_validation_passed=True,approach_validation_passed=True)
+        from moxian_web.hand_model import MANO_SOLVER_REVISION
+        report=dict(fit_revision=MANO_FIT_REVISION,solver_revision=MANO_SOLVER_REVISION,accepted=True,validation_pose_source='runtime_mano_sensor_only',contact_validation_passed=True,
+                    together_validation_passed=True,flat_validation_passed=True,penetration_validation_passed=True,
+                    runtime_validation_passed=True,per_stage_validation_passed=True,holdout_validation_passed=True,
+                    capture_protocol='official_eight_v1',max_penetration_mm=1.,runtime_max_penetration_mm=1.)
         candidate={'report':report,'dimension_parameters':[.02]*20,'calibrated':False}
         with tempfile.TemporaryDirectory() as tmp:
             home=Path(tmp);old={'calibrated':False,'dimension_parameters':[0]*20}
@@ -90,45 +101,17 @@ class HandContractTests(unittest.TestCase):
             for _ in range(10000):b.send({'type':'frame'})
             self.assertFalse(b.snapshot()['ready']);b.stop()
 
-class CaptureTests(unittest.TestCase):
-    def test_async_skeleton_joins_original_observation_and_capture_completes(self):
-        sync=HandInputSynchronizer();c=HandCapture();c.start();c.confirm(c.request_id)
-        for i in range(110):
-            t=1000+i*20;sync.push(input_frame(t))
-            # The async IK result is 80 ms behind the current serial input.
-            if i>=4:
-                matched=sync.match(input_frame(t-80)['skeleton'],t)
-                self.assertEqual(matched['timestamp_ms'],t-80)
-                self.assertEqual(matched['tactile_timestamp_ms'],t-76)
-                if i%3==0:c.feed(matched)
-        self.assertEqual(c.complete_groups,['open']);self.assertEqual(c.index,1)
-        self.assertIsNone(sync.match(input_frame(1000)['skeleton'],5000))
-        self.assertIsNone(sync.match(None,5000))
-
-    def test_short_gap_restarts_stable_segment_without_failing_or_changing_request(self):
-        c=HandCapture();c.start();c.confirm(c.request_id);rid=c.request_id
-        for i in range(10):c.feed(input_frame(1000+i*50))
-        c.feed(input_frame(1900))
-        self.assertEqual(c.status,'collecting');self.assertEqual(c.request_id,rid)
-        self.assertEqual(c.samples,[]);self.assertIn('短暂缺帧',c.error)
-        for i in range(33):c.feed(input_frame(1950+i*50))
-        self.assertEqual(c.complete_groups,['open'])
-
-    def test_manual_confirmation_stability_and_retry(self):
-        c=HandCapture();c.start()
-        with self.assertRaises(ValueError):c.confirm('stale')
-        c.confirm(c.request_id)
-        for i in range(40):c.feed(input_frame(1000+i*50))
-        self.assertEqual(c.index,1);self.assertEqual(c.status,'awaiting_confirmation');self.assertEqual(c.complete_groups,['open'])
-        c.confirm(c.request_id);c.feed(input_frame(4000));c.feed(input_frame(6500))
-        self.assertEqual(c.status,'failed');self.assertEqual(c.complete_groups,['open'])
-        c.retry(c.request_id);self.assertEqual(c.status,'awaiting_confirmation');c.cancel();self.assertEqual(c.status,'cancelled')
-    def test_two_pinch_cycles_required_and_no_stale_samples(self):
-        c=HandCapture();c.start();c.index=5;c.confirm(c.request_id)
-        for i in range(145):
-            seconds=i*.05;c.feed(input_frame(1000+i*50,touch=(1<seconds<2 or 3<seconds<4)))
-        self.assertEqual(c.index,6);self.assertEqual(c.complete_groups,['pinch_index'])
-        c.confirm(c.request_id);bad=input_frame(10000);bad['tactile_timestamp_ms']+=100;c.feed(bad);self.assertEqual(len(c.samples),0)
-        self.assertIn('时间',c.error)
 
 if __name__=='__main__':unittest.main()
+
+
+def test_polling_summary_keeps_acceptance_and_hides_large_fit_arrays():
+    from moxian_web.hand_model import public_fit_report
+    report={'accepted':False,'position_rmse_mm':2.,'collision_frames':[{'depth':9}]*1000,
+            'runtime_solver_frames':[{'status':'bad'}]*1000,
+            'solver':{'parameter_snapshot':{'vector':[0]*10000},'phases':[{'phase':'reference','steps':5,'parameter_vector':[0]*10000}]}}
+    before=copy.deepcopy(report);summary=public_fit_report(report)
+    assert summary['accepted'] is False and summary['position_rmse_mm']==2.
+    assert summary['solver']['phases']==[{'phase':'reference','steps':5}]
+    assert 'collision_frames' not in summary and 'parameter_snapshot' not in summary['solver']
+    assert len(json.dumps(summary))<500 and report==before

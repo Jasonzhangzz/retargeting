@@ -28,11 +28,17 @@ class Config:
         return self.environment.get("device", "cuda:0")
 
     def resolved(self):
+        parameters = asdict(self.solver.parameters)
+        if self.task.get('type') == 'contact':
+            from retarget.task.contact.tasks import PROFILES
+            from retarget.solver.contact_cem import DEFAULTS
+            parameters = dict(search=asdict(DEFAULTS), task_profile=asdict(PROFILES[self.task['name']]),
+                              method=self.task.get('options', {}).get('baseline', self.solver.type))
         return dict(
             mode=self.mode,
             task=self.task,
             solver=asdict(self.solver),
-            algorithm_parameters=asdict(self.solver.parameters),
+            algorithm_parameters=parameters,
             environment=self.environment,
             output=self.output,
             visualization=self.visualization,
@@ -60,8 +66,8 @@ def load(path):
     if mode not in ("solve", "replay", "web"):
         raise ValueError("mode must be solve, replay or web")
     task = raw.get("task", {}).copy()
-    if mode == "solve" and task.get("type") not in ("grasp", "dex", "humanoid"):
-        raise ValueError("task.type must be grasp, dex or humanoid")
+    if mode == "solve" and task.get("type") not in ("grasp", "dex", "humanoid", "contact"):
+        raise ValueError("task.type must be grasp, dex, humanoid or contact")
     if mode == "solve" and not task.get("data"):
         raise ValueError("task.data is required")
     for key in ("data", "object", "wrist_reference"):
@@ -102,6 +108,10 @@ def load(path):
     solver_options=raw.get('solver',{})
     if set(solver_options)-{'type'}:raise ValueError('solver accepts only type; algorithm parameters use the canonical defaults')
     solver = Settings(**solver_options)
+    if mode == "solve" and solver.type == "contact_cem" and task.get("type") != "contact":
+        raise ValueError("solver.type: contact_cem requires task.type: contact")
+    if mode == "solve" and task.get("type") == "contact" and solver.type not in ("cem", "contact_cem"):
+        raise ValueError("Contact benchmarks require cem or contact_cem")
     if mode == "solve" and solver.type == "graspadmm":
         if task.get("type") != "grasp":
             raise ValueError("solver.type: graspadmm requires task.type: grasp")

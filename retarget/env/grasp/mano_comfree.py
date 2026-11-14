@@ -80,11 +80,13 @@ class ManoRolloutGeometry:
         return output
 
     @torch.no_grad()
-    def _compute(self,value,ids,*,decoded=None):
+    def _compute(self,value,ids,*,decoded=None,triangle_penetration=None):
         vertices,joints,frames = self.decoder(value,full=True) if decoded is None else decoded
         hand,hn = self.fixed.evaluate(vertices,full=True)
         mapped,on,gap,face,bary = self.surfaces.query(hand,ids)
-        if self.geometry_backend=='optimized':
+        if triangle_penetration is not None:
+            triangle_depth,surface_valid=triangle_penetration
+        elif self.geometry_backend=='optimized':
             triangle_depth,surface_valid=self.vertex_penetration.query(vertices,ids)
         else:
             projected,outward,distance,_,_ = self.surfaces.query(vertices,ids)

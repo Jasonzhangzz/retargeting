@@ -36,9 +36,9 @@ class PatchConsistentAdapter(PatchGeometry):
         self.criterion='patch_consistent_terminal_velocity_h5_v5'
 
     @torch.no_grad()
-    def _compute(self,value,ids):
-        decoded=self.decoder(value,full=True)
-        _,parts=super()._compute(value,ids,decoded=decoded)
+    def _compute(self,value,ids,*,decoded=None,triangle_penetration=None):
+        decoded=self.decoder(value,full=True) if decoded is None else decoded
+        _,parts=super()._compute(value,ids,decoded=decoded,triangle_penetration=triangle_penetration)
         vertices=decoded[0]
         parts.update(self.patches.query(vertices,ids))
         fit=patch_fit_terms(parts['patch_gap_m'],parts['patch_anchor_offset_m'],self.required_groups,self.finger_groups,self.patch_settings)

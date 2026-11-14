@@ -1,0 +1,14 @@
+{
+  "schema": "pose_only_mano_contact_v1",
+  "history": 8,
+  "encoder": {"width": 256, "layers": 4, "heads": 8, "latent_dim": 64},
+  "decoder": "HACO c774211b968bdf836f9511dbd5ff23bb19fe1c44",
+  "stage1": {"steps": 100000, "lr": 0.0001, "supcon_weight": 0.1, "frame_weight": 0.1, "temperature": 0.1},
+  "stage2": {"steps": 50000, "encoder_lr": 0.00001, "decoder_lr": 0.0001, "ema": 0.999, "vcb_beta": 0.9999},
+  "optimizer": {"type": "AdamW", "weight_decay": 0.01, "betas": [0.9, 0.95]},
+  "batch_size": 32,
+  "temporal_fraction": 0.75,
+  "threshold": 0.52,
+  "seed": 42,
+  "device": "cpu"
+}

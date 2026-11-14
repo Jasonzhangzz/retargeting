@@ -17,13 +17,14 @@ import mujoco_warp as mjw
 import trimesh
 from scipy.spatial.transform import Rotation
 from scipy.optimize import least_squares
-from scripts.calibrate_wuji_mano import PersonalizedMANO, CHAINS, TIPS, rotmat, rigid_alignment
+from scripts.calibrate_wuji_mano import CHAINS, TIPS, rotmat, rigid_alignment
 from .contact import PATCHES, PATCH_IDS, FINGERS
 from .hand_model import DEFAULT_MATERIAL, pair_mechanics, fusion_state, positive_gain
 from .hand_anatomy import AnatomicalJoints,GEOMETRY_REVISION,closed_surface_parts
-from .hand_dimensions import scale_segments,scale_proximal_width,PROXIMAL_WIDTH_POLICY,DIMENSION_MODE,DIMENSION_COUNT
+from .hand_dimensions import DIMENSION_COUNT
 from .pose_filter import SensorPoseFilter
 from .official_fk import OfficialSkeletonFK,TRACKING_SOURCE,BINDING_POLICY
+from .official_mano import OfficialMANO, OFFICIAL_MANO_MODE, OFFICIAL_REFERENCE_POLICY
 from .tactile_surface import bind_grid, BINDING_POLICY as TAXEL_BINDING_POLICY
 
 @wp.kernel(enable_backward=False)
@@ -72,7 +73,7 @@ def vertex_normals(v,faces):
 def skeleton_targets(bone):
     if not bone:return None
     try:
-        if bone['hand_side']!='left' or bone['coordinate_frame']!='wrist_local':return None
+        if bone['hand_side'] not in ('left','right') or bone['coordinate_frame']!='wrist_local':return None
         nodes=dict(zip(bone['names'],bone['positions_local']))
         keys=['wrist']
         for f in ('thumb','index','middle','ring','little'):
@@ -99,9 +100,15 @@ def blend_rotations(previous,current,alpha):
 
 
 class ManoSurface:
-    def __init__(self,path,device='cuda:0'):
+    def __init__(self,path,device='cuda:0',side='left'):
+        from .hand_side import check_side
+        self.side=check_side(side)
         self.official_fk=None;self.last_base_offsets=None;self.last_joint_centres=None
-        self.device=torch.device(device);self.model=PersonalizedMANO(path,'left').to(device=self.device,dtype=torch.float32)
+        self.device=torch.device(device);self.model=OfficialMANO(path,self.side).to(device=self.device,dtype=torch.float32)
+        # smplx walks this small parent table in Python. Keeping indices on
+        # CUDA introduces a host/device synchronization at every joint, and
+        # again for every Jacobian evaluation. CPU indices work for CUDA gathers.
+        self.model.backend.parents=self.model.backend.parents.cpu()
         self.weights_hash=hashlib.sha256(Path(path).read_bytes()).hexdigest()
         self.faces=self.model.faces.astype(np.int32);self.face_t=torch.tensor(self.faces.astype(np.int64),device=self.device)
         self.parents=self.model.parents
@@ -112,9 +119,13 @@ class ManoSurface:
         self.shape=np.zeros(41,dtype=np.float64);self.labels=None;self.mapping=None;self.geometry=None
         self.dimension_parameters=None;self.bone_reference=None
         self.proximal_lateral_scales=np.zeros(4)
+        self.rigid_finger_fk=False;self.finger_base_offsets_m=np.zeros(4);self.finger_axis_yaw_rad=np.zeros(4)
         self.raw_rotation=np.eye(3);self.raw_translation=np.zeros(3);self.raw_aligned=False
         self.sensor_joint_position=None;self.mount_pos=np.zeros((5,3));self.mount_rot=np.tile(np.eye(3),(5,1,1))
         self.last_pose=np.zeros((15,3),np.float32);self.last_root=np.eye(3);self.last_frame=None
+        self.calibration_pose_offsets=np.zeros((15,3),np.float32)
+        self.solver_enabled=True;self.solver_report={};self._solver_collision=None;self._mano_solver_previous=None
+        self.contact_pose_enabled=True;self.contact_pose_delta=None;self.contact_correction={}
         self.tracking_time=None;self.tracking_version=None;self.tracking_seed=None
         self.tracking_q=None;self.tracking_optimizer=None
         self.anatomy=None
@@ -123,79 +134,61 @@ class ManoSurface:
         self.sensor_filter=SensorPoseFilter();self.input_quality={};self.tracking_orientations=None
         self.has_wrist_targets=False;self.tracking_root=None;self.alignment_quality=None;self.tracking_tip_offset=np.zeros((5,3));self.tracking_bone_root=None;self.tracking_observed=None;self.tracking_stable_ms=0.;self.reference_translation=np.zeros(3);self.reference_root=None;self.flat_reference=None
         self.material=dict(DEFAULT_MATERIAL);self.response_gains={};self.binding_overrides={}
+        self.contact_registration=None;self.registration_serial=None;self.contact_registration_status={}
         self.compression=np.zeros((778,3),np.float32);self.last_time=None
         self.set_shape(self.shape)
 
     def set_dimensions(self,parameters):
+        # Kept for profile transport compatibility; these are no longer DOFs.
         parameters=np.asarray(parameters,dtype=float)
-        if parameters.shape!=(DIMENSION_COUNT,) or not np.isfinite(parameters).all():raise ValueError('手指尺寸参数无效')
-        self.dimension_parameters=parameters.copy();self.set_shape(self.shape)
+        if parameters.shape!=(DIMENSION_COUNT,) or not np.isfinite(parameters).all() or np.any(parameters):
+            raise ValueError('只允许调整官方 MANO 的 10 个 betas；不支持独立指长／粗细缩放')
+        self.dimension_parameters=np.zeros(DIMENSION_COUNT)
+        self.set_shape(self.shape)
 
     def set_shape(self,value):
-        value=np.array(value,dtype=np.float64)
-        if value.shape!=(41,) or not np.isfinite(value).all():raise ValueError('无效的 MANO 尺寸参数')
-        self.shape=value.copy()
+        value=np.asarray(value,dtype=np.float64)
+        if value.shape not in ((10,),(41,)) or not np.isfinite(value).all():
+            raise ValueError('无效的 MANO betas')
+        if value.shape==(41,) and np.any(value[10:]):
+            raise ValueError('只允许官方 MANO betas；自定义缩放、指尖延长和厚度位移已停用')
+        # Legacy transport has 41 entries. Only the first ten are official.
+        self.shape=np.zeros(41);self.shape[:10]=value[:10]
+        self.dimension_parameters=np.zeros(DIMENSION_COUNT)
+        self.proximal_lateral_scales=np.zeros(4)
+        self.finger_base_offsets_m=np.zeros(4);self.finger_axis_yaw_rad=np.zeros(4)
+        self.rigid_finger_fk=False
         self.tracking_time=None
-        t=lambda x:torch.as_tensor(x,dtype=torch.float32,device=self.device)
         with torch.no_grad():
-            # Layout: beta[10], fixed global scale, five small log-length
-            # corrections, five fingertip soft-tissue extensions (metres),
-            # and twenty transverse half-thickness corrections (metres).
-            neutral,nj=self.model.rest_shape(t(value[:10]),t(value[10]),t(np.zeros(5)),t(np.zeros(5)))
-            nv=neutral.cpu().numpy();nj=nj.cpu().numpy()
-            lengths=value[11:16].copy()
-            if self.bone_reference is not None:
-                base=np.array([sum(np.linalg.norm((nj[c[k+1]] if k<2 else nv[TIPS[f]])-nj[joint]) for k,joint in enumerate(c)) for f,c in enumerate(CHAINS)])
-                # Only total length informs a soft starting scale. SDK joint
-                # segments do not specify surface lengths or a new anatomy.
-                lengths+=np.log(np.clip(np.asarray(self.bone_reference).sum(1)/base,.8,1.3))
-            rest,j=self.model.rest_shape(t(value[:10]),t(value[10]),t(lengths),t(np.zeros(5)))
-        v=rest.cpu().numpy();jn=j.cpu().numpy()
-        if self.dimension_parameters is not None:
-            v,jn=scale_segments(v,jn,self.model.weights.cpu().numpy(),CHAINS,TIPS,self.dimension_parameters)
-            v=scale_proximal_width(v,jn,self.model.weights.cpu().numpy(),CHAINS,self.model.palm_normal.cpu().numpy(),self.proximal_lateral_scales)
-            self.rest_j=torch.as_tensor(jn,dtype=torch.float32,device=self.device);self.rest_j_np=jn
-            self.tip_anchors=v[list(TIPS)].copy()
-            self.anatomy=AnatomicalJoints(jn,v,CHAINS,TIPS,self.model.palm_normal.cpu().numpy(),self.model.pose_mean.cpu().numpy())
-            if self.labels is None:self._anatomy(v)
-            self.rest=t(v);self.rest_np=v.astype(np.float32);self.rest_normals=vertex_normals(v,self.faces)
-            self.shape_version=hashlib.sha256((GEOMETRY_REVISION+DIMENSION_MODE).encode()+np.round(value[:16],9).tobytes()+np.round(self.dimension_parameters,9).tobytes()+np.array(self.bone_reference if self.bone_reference is not None else [],dtype=np.float64).tobytes()).hexdigest()[:16]
-            if np.any(self.proximal_lateral_scales):self.shape_version=hashlib.sha256(self.shape_version.encode()+PROXIMAL_WIDTH_POLICY.encode()+np.round(self.proximal_lateral_scales,9).tobytes()).hexdigest()[:16]
-            self.geometry=None
-            if self.mapping:self.build_binding(self.mapping)
-            return
-        weights=self.model.finger_weights.cpu().numpy()
-        for f,chain in enumerate(CHAINS):
-            axis=v[TIPS[f]]-jn[chain[0]];axis/=np.linalg.norm(axis)
-            u=(v-jn[chain[-1]])@axis;length=float((v[TIPS[f]]-jn[chain[-1]])@axis)
-            blend=np.clip(u/max(length,1e-6),0,1);blend=blend*blend*(3-2*blend)
-            v+=weights[:,f,None]*blend[:,None]*value[16+f]*axis
-        self.rest_j=torch.as_tensor(jn,dtype=torch.float32,device=self.device);self.rest_j_np=jn
-        self.tip_anchors=v[list(TIPS)].copy()
-        self.anatomy=AnatomicalJoints(jn,v,CHAINS,TIPS,self.model.palm_normal.cpu().numpy(),self.model.pose_mean.cpu().numpy())
-        if self.labels is None:self._anatomy(v)
-        normals=vertex_normals(v,self.faces)
-        offsets=value[21:][self.vertex_patches].copy()
-        # Smooth scalar patch changes over the mesh, avoiding seams and lumps.
-        edges=np.concatenate((self.faces[:,[0,1]],self.faces[:,[1,2]],self.faces[:,[2,0]]));edges=np.concatenate((edges,edges[:,::-1]))
-        counts=np.bincount(edges[:,0],minlength=778)
-        for _ in range(3):offsets=.5*offsets+.5*np.bincount(edges[:,0],weights=offsets[edges[:,1]],minlength=778)/counts
-        # Thickness changes are transverse; the separate bounded length and
-        # fingertip variables express uncertainty in the SDK skeleton prior.
-        radial=normals.copy();fade=np.ones(778)
-        for f,chain in enumerate(CHAINS):
-            direction=v[TIPS[f]]-jn[chain[0]];direction/=np.linalg.norm(direction)
-            mask=np.isin(self.vertex_patches,[i for i,p in enumerate(PATCH_IDS) if p.startswith(FINGERS[f]+'_')])
-            radial[mask]-=(normals[mask]@direction)[:,None]*direction
-            radial[mask]/=np.maximum(np.linalg.norm(radial[mask],axis=1,keepdims=True),1e-8)
-            u=(v-jn[chain[0]])@direction;tip_u=(v[TIPS[f]]-jn[chain[0]])@direction
-            fade[mask]=np.clip(u[mask]/.008,0,1)*np.clip((tip_u-u[mask])/.004,0,1)
-        displacement=radial*offsets[:,None]*fade[:,None]
-        self.rest=t(v+displacement);self.rest_np=self.rest.cpu().numpy()
-        self.rest_normals=normals
-        self.shape_version=hashlib.sha256(GEOMETRY_REVISION.encode()+np.round(value,9).tobytes()+np.array(self.bone_reference if self.bone_reference is not None else [],dtype=np.float64).tobytes()).hexdigest()[:16]
+            v,j=self.model.official_rest(torch.as_tensor(self.shape[:10],device=self.device,dtype=torch.float32))
+        self.rest=v;self.rest_j=j;self.rest_np=v.cpu().numpy();self.rest_j_np=j.cpu().numpy()
+        if not hasattr(self,'pose_reference_joints'):
+            # One canonical coordinate chart for fitting and replay. Changing
+            # betas changes official geometry, not the meaning of pose angles.
+            self.pose_reference_joints=self.rest_j_np.copy()
+            self.pose_reference_vertices=self.rest_np.copy()
+        self.tip_anchors=self.rest_np[list(TIPS)].copy()
+        self.anatomy=AnatomicalJoints(self.pose_reference_joints,self.pose_reference_vertices,CHAINS,TIPS,self.model.palm_normal.cpu().numpy(),self.model.pose_mean.cpu().numpy())
+        if self.labels is None:self._anatomy(self.rest_np)
+        self.rest_normals=vertex_normals(self.rest_np,self.faces)
+        self.shape_version=hashlib.sha256(OFFICIAL_MANO_MODE.encode()+self.weights_hash.encode()+self.shape[:10].tobytes()+np.asarray(getattr(self,'glove_parameters',[]),dtype=float).tobytes()+self.model.rest_vertex_residual.detach().cpu().numpy().tobytes()).hexdigest()[:16]
         self.geometry=None
+        self._solver_collision=None;self._mano_solver_previous=None;self._mano_solver_previous_angles=None;self._mano_solver_previous_seed_angles=None
         if self.mapping:self.build_binding(self.mapping)
+
+    def set_glove_geometry(self,parameters):
+        from .glove_geometry import validate
+        self.glove_parameters=validate(parameters).copy()
+        self.model.glove_parameters=torch.as_tensor(self.glove_parameters,device=self.device,dtype=torch.float32)
+        self.set_shape(self.shape)
+
+    def set_rest_vertex_residual(self,value=None):
+        from .mano_local_geometry import validate_rest_residual
+        residual=validate_rest_residual(value)
+        with torch.no_grad():
+            self.model.rest_vertex_residual.copy_(torch.as_tensor(residual,device=self.device))
+        self.model.surface_residual_enabled=bool(np.any(residual))
+        self.set_shape(self.shape)
 
     def _anatomy(self,v):
         self.binding_reference=np.array(v,copy=True)
@@ -259,54 +252,67 @@ class ManoSurface:
             self.cell_area[ids]=max(float(areas[faces].sum())/len(ids),1e-8)
         if cache is not None and cache[0]==cache_key:self.sid_faces=cache[1].copy();self.sid_bary=cache[2].copy()
         else:self._taxel_binding_cache=(cache_key,self.sid_faces.copy(),self.sid_bary.copy())
+        from .contact_registration import material_records,registration_status
+        registration_topology=self.registration_topology()
+        if self.contact_registration:
+            try:registered=material_records(self.contact_registration,registration_topology,self.registration_serial)
+            except (ValueError,KeyError,TypeError,IndexError):registered={}
+            for sid,record in registered.items():
+                self.sid_faces[int(sid)]=record['face'];self.sid_bary[int(sid)]=record['barycentric']
         for sid,record in self.binding_overrides.items():
             if 0<=int(sid)<460 and self.face_patches[int(record['face'])]==assignments[int(sid)]:
                 self.sid_faces[int(sid)]=record['face'];self.sid_bary[int(sid)]=record['barycentric']
-        self.binding_version=hashlib.sha256(json.dumps([mapping['version'],self.sid_faces.tolist(),self.sid_bary.tolist()]).encode()).hexdigest()[:16]
+        self.contact_registration_status=registration_status(self.contact_registration,registration_topology,self.registration_serial,self.sid_faces,self.sid_bary)
+        self.binding_version=hashlib.sha256(json.dumps([mapping['version'],self.sid_faces.tolist(),self.sid_bary.tolist(),self.contact_registration_status]).encode()).hexdigest()[:16]
+
+    def registration_topology(self):
+        return dict(hand_side=self.side,weights_hash=self.weights_hash,geometry_version=self.shape_version,
+                    faces=self.faces.tolist(),face_patches=self.face_patches.tolist(),
+                    rest_vertices_m=self.rest_np.tolist(),sid_patch_indices=list(self.mapping['assignments']))
+
+    def install_contact_registration(self,artifact,serial):
+        from .contact_registration import validate_registration
+        if not self.mapping:raise ValueError('等待 SID 分区映射')
+        validate_registration(artifact,self.registration_topology(),serial)
+        self.registration_serial=serial;self.contact_registration=artifact
+        self.build_binding(self.mapping)
 
     def topology(self):
         if not self.mapping:return {'ready':False}
         official_binding=None
         if self.official_fk is not None:
             self.official_fk.bind(self,CHAINS);d=self.official_fk
-            official_binding={'source':TRACKING_SOURCE,'policy':BINDING_POLICY,'asset_sha256':d.asset_hash,'binding_hash':d.binding_hash,'wrist_sdk_to_mano':d.sdk_to_mano.tolist(),'link_rotation_offsets':d.corrections.tolist(),'link_translation_offsets_m':d.translations.tolist(),'source_link_names':{str(j):d.reference['names'][i] for j,i in d.indices.items()},'length_policy':'official_link_origins_with_personalized_MCP_SE3_offsets','metacarpal_motion':'official_links_with_fixed_calibrated_offsets','dimension_note':'尺寸表为静息局部几何；动态关节由官方骨架与固定 SE3 偏移驱动，保留标定手型的局部尺寸。'}
-        return {'ready':True,'hand_side':'left','coordinate_frame':'mano_wrist_local' if self.official_fk is not None else 'wrist_local','units':'m','official_binding':official_binding,
+            official_binding={'source':TRACKING_SOURCE,'policy':BINDING_POLICY,'asset_sha256':d.asset_hash,'binding_hash':d.binding_hash,'wrist_sdk_to_mano':d.sdk_to_mano.tolist(),'link_rotation_offsets':d.corrections.tolist(),'link_translation_offsets_m':d.translations.tolist(),'source_link_names':{str(j):d.reference['names'][i] for j,i in d.indices.items()},'length_policy':'official_MANO_betas_only','metacarpal_motion':'official_MANO_pose_only','dimension_note':'尺寸仅来自官方 MANO betas；手套只提供旋转。'}
+            if hasattr(self,'glove_parameters'):
+                official_binding.update(length_policy='shared_fixed_glove_geometry',dimension_note='骨架与蒙皮共享固定骨段、指根及指腹宽厚参数。')
+        return {'ready':True,'hand_side':self.side,'coordinate_frame':'mano_wrist_local' if self.official_fk is not None else 'wrist_local','units':'m','model_implementation':'smplx.MANO','dimension_mode':OFFICIAL_MANO_MODE,'surface_policy':'official_MANO_triangles','official_binding':official_binding,
+                'fixed_glove_geometry':{'revision':'personalized_glove_geometry_v1','parameter_count':43,'parameters':self.glove_parameters.tolist()} if hasattr(self,'glove_parameters') else None,
                 'weights_hash':self.weights_hash,'geometry_version':self.shape_version,'binding_version':self.binding_version,
                 'faces':self.faces.tolist(),'face_patches':self.face_patches.tolist(),'patches':PATCHES,
                 'sid_face_ids':self.sid_faces.tolist(),'sid_barycentric':self.sid_bary.tolist(),
-                'sid_patch_indices':list(self.mapping['assignments']),'tactile_binding_policy':TAXEL_BINDING_POLICY,
+                'sid_patch_indices':list(self.mapping['assignments']),'tactile_binding_policy':'fixed_material_measured_with_unverified_fallback' if self.contact_registration else TAXEL_BINDING_POLICY,
+                'rest_vertices_m':self.rest_np.tolist(),'rest_joints_m':self.rest_j_np.tolist(),
+                'tip_anchors_m':self.tip_anchors.tolist(),'skin_weights':self.model.weights.cpu().numpy().tolist(),
                 'palm_view':{'normal':self.anatomy.palmar_normal.tolist(),'forward':self.palm_axes[0].tolist()},
-                'mapping_confirmed':self.mapping.get('confirmed',[]),'mapping_note':'初始 SID 曲面位置为解剖插值；未逐点核验不是精确传感器定位。',
+                'rigid_finger_fk':self.rigid_finger_fk,'finger_base_offsets_m':self.finger_base_offsets_m.tolist(),'finger_axis_yaw_rad':self.finger_axis_yaw_rad.tolist(),
+                'mapping_confirmed':self.mapping.get('confirmed',[]),'mapping_note':f"{self.contact_registration_status.get('verified_count',0)}/460 SID 通过当前手型的实测核验；其余位置未通过实测验收，分区确认不等于位置注册。",
+                'contact_registration':self.contact_registration_status,
                 'joint_chains':[[0]+list(range(1+4*f,5+4*f)) for f in range(5)]}
 
     def decode(self,pose,root,base_offsets=None,joint_centres=None):
-        local=rotmat(pose.reshape(-1,15,3));batch=len(local);eye=torch.eye(3,device=self.device,dtype=local.dtype)
-        rr=[None]*16;pp=[None]*16;rr[0]=eye.expand(batch,3,3);pp[0]=self.rest_j[0].expand(batch,3)
-        for level in self.levels:
-            pr=torch.stack([rr[self.parents[j]] for j in level],1);pos=torch.stack([pp[self.parents[j]] for j in level],1)
-            relative=torch.stack([self.rest_j[j]-self.rest_j[self.parents[j]] for j in level])
-            rel=relative[None].expand(batch,-1,-1)
-            if base_offsets is not None:
-                rel=rel.clone()
-                for k,j in enumerate(level):
-                    if self.parents[j]==0:rel[:,k]+=base_offsets[:,next(f for f,c in enumerate(CHAINS) if c[0]==j)]
-            r=pr@local[:,np.array(level)-1];p=pos+(pr@rel[:,:,:,None]).squeeze(-1)
-            for k,j in enumerate(level):rr[j]=r[:,k];pp[j]=p[:,k]
-        rotations=torch.stack(rr,1);joints=torch.stack(pp,1)
-        if joint_centres is not None:
-            # Use the same official link origins as the skeleton view. LBS still
-            # rotates fixed rest vertices around their own rest joint anchors.
-            joints=joint_centres+self.rest_j[0]
-        feature=(local-eye).reshape(batch,135)
-        posed=self.rest[None].expand(batch,-1,-1) if self.dimension_parameters is not None else self.rest[None]+torch.einsum('bp,vcp->bvc',feature,self.model.posedirs)*math.exp(self.shape[10])
-        offset=joints-(rotations@self.rest_j[None,:,:,None]).squeeze(-1)
-        skin_r=torch.einsum('vj,bjkl->bvkl',self.model.weights,rotations)
-        skin_t=torch.einsum('vj,bjk->bvk',self.model.weights,offset)
-        v=(skin_r@posed[:,:,:,None]).squeeze(-1)+skin_t-self.rest_j[0]
-        j=joints-self.rest_j[0]
-        v=v@root.transpose(-1,-2);j=j@root.transpose(-1,-2);rotations=root[:,None]@rotations
-        tip_offset=torch.as_tensor(self.tip_anchors-self.rest_j_np[[c[-1] for c in CHAINS]],device=self.device)
-        tips=j[:,[c[-1] for c in CHAINS]]+(rotations[:,[c[-1] for c in CHAINS]]@tip_offset[None,:,:,None]).squeeze(-1)
+        # Glove link translations never replace MANO's regressed joints.
+        if not torch.is_grad_enabled() and (self.model.glove_parameters is not None or self.model.surface_residual_enabled):
+            # Inference owns the current frozen rest geometry already. Keep
+            # pose correctives/LBS, without rebuilding individual shape/size.
+            from .card_math import exp_so3
+            batch=len(pose)
+            v,j,rotations=self.model.official_batched_rest_forward(exp_so3(pose),self.rest[None].expand(batch,-1,-1),self.rest_j[None].expand(batch,-1,-1))
+        else:v,j,rotations=self.model.official_forward(self.rest,self.rest_j,self.shape[:10],pose)
+        v=(v-self.rest_j[0])@root.transpose(-1,-2)
+        j=(j-self.rest_j[0])@root.transpose(-1,-2)
+        rotations=root[:,None]@rotations
+        # Surface tips include the official pose correctives and skinning.
+        tips=v[:,list(TIPS)]
         ordered=torch.cat((j,tips),1)[:,self.ordered]
         return v,j,rotations,ordered
 
@@ -359,16 +365,40 @@ class ManoSurface:
             pose=pose.copy();pose[12:15]=Rotation.from_matrix(basis@Rotation.from_euler('XYZ',a).as_matrix()@basis.swapaxes(-2,-1)).as_rotvec()
         return pose.astype(np.float32)
 
-    def install_flat_reference(self,reference):
+    def install_flat_reference(self,reference,allow_coarse=False):
         """Initialize EMF extrinsics/orientation from a confirmed flat sample.
 
         Translation along the finger remains a PRIOR, not a measured length.
         Real sensor mounting is shared across all poses in multi-action fitting.
         """
-        if reference.get('hand_side')!='left' or reference.get('pose')!='flat_open' or reference.get('observation_space')!='raw_emf_sensor':raise ValueError('参考必须明确确认为左手平摊原始 EMF 位姿')
+        if reference.get('hand_side')!=self.side or reference.get('pose')!='flat_open' or reference.get('observation_space')!='raw_emf_sensor':raise ValueError('参考必须为相同手侧的平摊原始 EMF 位姿')
         observed=np.asarray(reference['positions_local'],dtype=float);rotations=np.asarray(reference['rotations_local'],dtype=float).reshape(5,3,3)
         if observed.shape!=(5,3) or not np.isfinite(observed).all() or not np.isfinite(rotations).all():raise ValueError('平摊参考数据无效')
         if not np.allclose(rotations.swapaxes(-2,-1)@rotations,np.eye(3),atol=1e-3) or np.min(np.linalg.det(rotations))<.99:raise ValueError('平摊参考方向无效')
+        if self.official_fk is not None:
+            if reference.get('reference_policy')!=OFFICIAL_REFERENCE_POLICY or not reference.get('skeleton'):
+                raise ValueError('官方 MANO 标定必须使用八动作中同帧官方姿态与 EMF 观测')
+            frame={'timestamp_ms':reference['timestamp_ms'],'skeleton':reference['skeleton']}
+            pose,root,_,_,_=self.official_fk.parameters(self,frame,CHAINS)
+            t=lambda x:torch.as_tensor(x,device=self.device,dtype=torch.float32)
+            with torch.no_grad():_,j,rr,_=self.decode(t(pose[None]),t(root[None]))
+            joints=j[0].cpu().numpy();distal=rr[0,[c[-1] for c in CHAINS]].cpu().numpy()
+            offsets=self.tip_anchors-self.rest_j_np[[c[-1] for c in CHAINS]]
+            prior=offsets-.008*offsets/np.linalg.norm(offsets,axis=1,keepdims=True)
+            local=joints[[c[-1] for c in CHAINS]]+(distal@prior[:,:,None]).squeeze(-1)
+            r,translation=rigid_alignment(local[1:],observed[1:])
+            rms=float(np.sqrt(np.mean(np.sum((local[1:]@r.T+translation-observed[1:])**2,axis=1))))
+            if not np.isfinite(rms) or (rms>.025 and not allow_coarse) or np.linalg.norm(translation)>.25:raise ValueError('官方姿态参考与 EMF 差异过大，请重新八动作采集')
+            self.raw_rotation=r.T;self.raw_translation=-r.T@translation
+            self.sensor_joint_position=prior.astype(np.float32)
+            self.mount_pos=(prior-offsets).astype(np.float32)
+            self.mount_rot=distal.swapaxes(-2,-1)@self.raw_rotation@rotations
+            self.reference_translation=np.zeros(3);self.reference_root=np.eye(3,dtype=np.float32)
+            self.flat_reference=reference.copy();self.flat_seed=pose.copy()
+            self.flat_reference.update(flat_seed=pose.tolist(),initial_sensor_prior_mm=8.,registration_rmse_mm=rms*1000)
+            self.tracking_time=None;self.raw_aligned=True;self.has_wrist_targets=True
+            self.mounting_calibrated=False;self.mounting_estimated=False
+            return {'registration_rmse_mm':rms*1000,'coarse_initialization':bool(rms>.025),'sensor_position_status':'prior_requires_multi_pose_fit','changes_shape':False,'changes_pose':False}
         # EMF origins are behind the anatomical surface tips. Eight millimetres
         # is only an explicit starting prior, never written as measured length.
         offsets=self.tip_anchors-self.rest_j_np[[c[-1] for c in CHAINS]]
@@ -426,7 +456,7 @@ class ManoSurface:
                 'proximal_width_mm':float(np.ptp(section@side)*1000),
                 'proximal_depth_mm':float(np.ptp(section@depth)*1000),
                 'length_definition':'MCP_to_surface_tip_along_chain',
-                'runtime_joint_spacing':'official_sdk_plus_fixed_mcp_offsets' if self.official_fk is not None else 'MANO_rest',
+                'runtime_joint_spacing':'official_MANO_regressed_joints',
                 'measurement_space':'calibrated_rest_local_surface',
                 'cross_section_source':'fixed_MANO_proximal_vertex_section',
                 'cross_section_confidence':'contact_and_prior_only'}
@@ -519,22 +549,27 @@ class ManoSurface:
             offsets.append(tri.mean(0)-self.rest_j_np[chain[-1]]);normals.append(normal)
         return np.array(offsets),np.array(normals)
 
-    def together_regions(self):
+    def together_regions(self,include_thumb=False):
         """Opposing side strips at shared longitudinal levels, never tip pairs."""
         cached=getattr(self,'_together_cache',None)
-        if cached and cached[0]==self.shape_version:return cached[1]
-        roots=self.rest_j_np[[c[0] for c in CHAINS]]
+        key=(self.shape_version,include_thumb)
+        if cached and cached[0]==key:return cached[1]
+        roots=self.rest_j_np[[c[1] if f==0 else c[0] for f,c in enumerate(CHAINS)]]
         forward=self.tip_anchors[1:].mean(0)-roots[1:].mean(0);forward/=np.linalg.norm(forward)
         u=self.rest_np@forward;regions=[]
-        for a in range(1,4):
+        for a in range(0 if include_thumb else 1,4):
             b=a+1;side=roots[b]-roots[a];side-=forward*(side@forward);side/=np.linalg.norm(side)
-            ia=np.flatnonzero(np.isin(self.labels,CHAINS[a])&(self.rest_normals@side>.1))
+            ca=CHAINS[a][1:] if a==0 else CHAINS[a]
+            ia=np.flatnonzero(np.isin(self.labels,ca)&(self.rest_normals@side>.1))
             ib=np.flatnonzero(np.isin(self.labels,CHAINS[b])&(self.rest_normals@side<-.1))
-            lo=max(roots[a]@forward,roots[b]@forward)+.015
-            hi=min(self.tip_anchors[a]@forward,self.tip_anchors[b]@forward)-.008
-            for level in np.linspace(lo,max(lo+.002,hi),3):
+            end_a=self.rest_j_np[CHAINS[a][2] if a==0 else CHAINS[a][1]]
+            end_b=self.rest_j_np[CHAINS[b][1]]
+            lo=max(roots[a]@forward,roots[b]@forward)
+            hi=min(end_a@forward,end_b@forward)
+            for fraction in (.2,.5,.8):
+                level=lo+fraction*max(.002,hi-lo)
                 regions.append({'a':a,'b':b,'ids_a':ia[np.argsort(abs(u[ia]-level))[:8]],'ids_b':ib[np.argsort(abs(u[ib]-level))[:8]]})
-        self._together_cache=(self.shape_version,regions)
+        self._together_cache=(key,regions)
         return regions
 
     def fit_sensor_supported_pinch(self,pose,root,observed,orientations,frame):
@@ -639,7 +674,7 @@ class ManoSurface:
             return p@self.raw_rotation.T+self.raw_translation,self.raw_rotation@r,target
         mapped=frame.get('skeleton_targets')
         if mapped is not None:
-            if (mapped.get('coordinate_frame')!='wrist_local' or mapped.get('hand_side')!='left' or
+            if (mapped.get('coordinate_frame')!='wrist_local' or mapped.get('hand_side')!=self.side or
                 abs(mapped.get('timestamp_ms',0)-frame['timestamp_ms'])>25):raise ValueError('官方指尖目标的坐标或时间不匹配')
             positions=np.array(mapped.get('positions_local'),dtype=np.float32)
             rotations=np.array(mapped.get('rotations_local'),dtype=np.float32)
@@ -667,31 +702,60 @@ class ManoSurface:
         return p@self.raw_rotation.T+self.raw_translation,self.raw_rotation@r,target
 
     def enable_official_fk(self):
-        self.official_fk=OfficialSkeletonFK()
+        self.official_fk=OfficialSkeletonFK(side=self.side)
 
     def official_parameters(self,rows):
         values=[self.official_fk.parameters(self,row,CHAINS) for row in rows]
         t=lambda x:torch.tensor(np.array(x),device=self.device,dtype=torch.float32)
-        return t([v[0] for v in values]),t([v[1] for v in values]),t([v[2] for v in values]),t([v[4] for v in values])
+        pose=t([v[0] for v in values])
+        if np.any(self.calibration_pose_offsets):
+            from .card_math import exp_so3,log_so3
+            pose=log_so3(exp_so3(pose)@exp_so3(t(self.calibration_pose_offsets)))
+        return pose,t([v[1] for v in values]),t([v[2] for v in values]),t([v[4] for v in values])
 
     def track_official(self,frame):
+        if frame.get('skeleton',{}).get('hand_side')!=self.side:raise ValueError('MANO 与输入骨架手侧不匹配')
         if self.bone_reference is None:
             target=skeleton_targets(frame.get('skeleton'))
             if target is None:raise ValueError('等待完整官方骨架')
             self.bone_reference=np.array([[np.linalg.norm(target[2+4*f+k]-target[1+4*f+k]) for k in range(3)] for f in range(5)])
             self.set_shape(self.shape)
         pose,root,offsets,expected,centres=self.official_fk.parameters(self,frame,CHAINS)
+        self.raw_official_pose=pose.copy()
+        if not self.solver_enabled and np.any(self.calibration_pose_offsets):
+            pose=Rotation.from_matrix(Rotation.from_rotvec(pose).as_matrix()@Rotation.from_rotvec(self.calibration_pose_offsets).as_matrix()).as_rotvec().astype(np.float32)
         t=lambda x:torch.tensor(x,device=self.device,dtype=torch.float32)
-        with torch.no_grad():v,j,r,o=self.decode(t(pose[None]),t(root[None]),joint_centres=t(centres[None]))
-        v,j,r,o=[x[0].cpu().numpy() for x in (v,j,r,o)]
+        self.contact_correction={'applied':False,'pairs':[]}
+        if self.solver_enabled:
+            if getattr(self,'gpu_pose_enabled',False):from .mano_gpu_runtime import solve_pose
+            else:from .mano_objective import solve_pose
+            pose,self.solver_report,self.contact_correction=solve_pose(self,frame,pose,root,tactile=self.contact_pose_enabled)
+            v,j,r,o=self._solver_decoded
+        else:
+            pose_tensor=t(pose[None]);root_tensor=t(root[None])
+            if getattr(self,'delta_policy',None) is not None:
+                from .mano_joint_delta import infer
+                pose_tensor=infer(self,[frame],pose[None],root[None])
+            with torch.no_grad():decoded=self.decode(pose_tensor,root_tensor)
+            if getattr(self,'delta_policy',None) is not None:pose=pose_tensor[0].cpu().numpy()
+            v,j,r,o=[x[0].cpu().numpy() for x in decoded]
+            self.solver_report={'revision':'fixed_mano_v1','status':'fixed_forward','optimizer_steps':0,'geometry_updated':False,'tactile_pose_feedback':False}
+            if getattr(self,'delta_policy',None) is not None:self.solver_report.update(status='fixed_joint_delta_forward',delta_policy=not bool(getattr(self,'_delta_disabled_reason',None)),policy_weights_updated=False,tactile_policy_input=True,policy_fallback_reason=getattr(self,'_delta_disabled_reason',None))
+        if not self.solver_enabled and self.contact_pose_enabled and self.mapping:
+            from .tactile_pose import correct_pose
+            pose,self.contact_correction=correct_pose(self,frame,pose,root,v,o)
+            if self.contact_correction['applied']:
+                with torch.no_grad():decoded=self.decode(t(pose[None]),t(root[None]))
+                v,j,r,o=[x[0].cpu().numpy() for x in decoded]
         self.last_pose=pose;self.last_root=root;self.last_base_offsets=offsets;self.last_joint_centres=j;self.last_frame=frame;self.tracking_time=frame['timestamp_ms'];self.retarget_contacts=[]
+        self.retarget_contacts=self.contact_correction['pairs']
         self.sensor_predictions=j[[c[-1] for c in CHAINS]]+(r[[c[-1] for c in CHAINS]]@self.sensor_offsets()[:,:,None]).squeeze(-1)
         observed=np.array([frame['fingers'][f]['position'] for f in FINGERS])@self.raw_rotation.T+self.raw_translation
         errors=np.linalg.norm(self.sensor_predictions-observed,axis=-1)*1000 if self.flat_reference else np.zeros(5)
         rmse=float(np.sqrt(np.mean(errors**2)))
         orientation_error=float(np.rad2deg(Rotation.from_matrix(r.swapaxes(-2,-1)@expected).magnitude()).max())
-        self.alignment_quality={'tracking_mode':TRACKING_SOURCE,'binding_policy':BINDING_POLICY,'solver':'official_qnbot_ik_then_fk_lbs','additional_ik':False,'additional_smoothing':False,'joint_projection':False,'sensor_errors_mm':dict(zip(FINGERS,map(float,errors))),'error_metric':'emf_mount_diagnostic_only' if self.flat_reference else 'unregistered','binding_hash':self.official_fk.binding_hash,'official_asset_sha256':self.official_fk.asset_hash,'max_link_rotation_error_deg':orientation_error,'timestamp_ms':frame['skeleton']['timestamp_ms'],'joint_smoothing_max_ms':0,'error_landmark':'emf_sensor_origin','retarget_contacts':[],'geometry_fixed':True}
-        self.thumb_quality={'source':'official_skeleton_rotation','additional_ik':False};self.input_quality={}
+        self.alignment_quality={'tracking_mode':TRACKING_SOURCE,'binding_policy':BINDING_POLICY,'solver':self.solver_report.get('revision','legacy_official_fk'),'additional_ik':self.solver_enabled,'mano_solver':self.solver_report,'tactile_pose_correction':self.contact_correction,'calibration_pose_offsets':bool(not self.solver_enabled and np.any(self.calibration_pose_offsets)),'additional_smoothing':False,'joint_projection':self.solver_enabled,'sensor_errors_mm':dict(zip(FINGERS,map(float,errors))),'error_metric':'emf_sensor_origin' if self.flat_reference else 'unregistered','binding_hash':self.official_fk.binding_hash,'official_asset_sha256':self.official_fk.asset_hash,'max_link_rotation_error_deg':orientation_error,'timestamp_ms':frame['skeleton']['timestamp_ms'],'joint_smoothing_max_ms':0,'error_landmark':'emf_sensor_origin','retarget_contacts':self.retarget_contacts,'geometry_fixed':True}
+        self.thumb_quality={'source':'bounded_MANO_pose' if self.solver_enabled else 'official_skeleton_rotation','additional_ik':self.solver_enabled,'pad_axis':'official_thumb_link_positive_y','length_policy':'official_MANO_betas_only'};self.input_quality={}
         return v,j,r,o,rmse
 
     def track(self,frame,steps=2):
@@ -815,8 +879,12 @@ class ManoSurface:
         return v[0].cpu().numpy()+self.reference_translation,j[0].cpu().numpy()+self.reference_translation,rr[0].cpu().numpy(),ordered[0].cpu().numpy()+self.reference_translation,float(np.sqrt(np.mean(errors**2)))
 
 
+from .warp_runtime import serialized as warp_serialized
+
+
 class CollisionSurface:
     """Native MuJoCo Warp candidate generation, actual MANO patch BVH verification."""
+    @warp_serialized
     def __init__(self,surface):
         self.surface=surface;self.version=surface.shape_version;self.device=str(surface.device)
         root=ET.Element('mujoco');opt=ET.SubElement(root,'option',gravity='0 0 0')
@@ -848,6 +916,7 @@ class CollisionSurface:
             self.points=wp.zeros(1238,dtype=wp.vec3,device=self.device);self.normals=wp.zeros(1238,dtype=wp.vec3,device=self.device)
             self.gap=wp.zeros((1238,20),dtype=float,device=self.device);self.facing=wp.zeros((1238,20),dtype=float,device=self.device);self.nearest=wp.zeros((1238,20),dtype=wp.vec3,device=self.device)
 
+    @warp_serialized
     def query(self,v,j,rotations):
         s=self.surface
         if s.shape_version!=self.version:raise ValueError('禁止使用旧尺寸的碰撞结构')

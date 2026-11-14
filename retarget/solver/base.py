@@ -11,11 +11,13 @@ class Settings:
     type: str = 'cem'
 
     def __post_init__(self):
-        if self.type not in ('cem','graspadmm'):raise ValueError('solver.type must be cem or graspadmm')
+        if self.type not in ('cem','graspadmm','contact_cem'):raise ValueError('solver.type must be cem, graspadmm or contact_cem')
 
     @property
     def parameters(self):
-        if self.type=='graspadmm':
+        if self.type=='contact_cem':
+            from .contact_cem import DEFAULTS
+        elif self.type=='graspadmm':
             from .graspadmm import DEFAULTS
         else:
             from .cem import DEFAULTS
@@ -79,6 +81,9 @@ def evaluate(problem, values):
 
 
 def solve(problem, settings=Settings(), seed=0):
+    if getattr(settings,'type','cem')=='contact_cem':
+        from .contact_cem import solve as implementation
+        return implementation(problem,seed=seed)
     if getattr(settings,'type','cem')=='graspadmm':
         from .graspadmm import solve as implementation
         return implementation(problem)

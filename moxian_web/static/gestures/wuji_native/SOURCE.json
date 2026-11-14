@@ -1,0 +1,19 @@
+{
+  "source": "Wuji Studio 2026.7.1 / installed /usr/bin/wuji-studio frontend assets",
+  "studio_sha256": "dcabb009f021d0a705d6a2c9fb5bacc9ea7143956c3d76c92849f76362db38d6",
+  "purpose": "Unmodified six calibration pose guides, for local Moxian display",
+  "files": {
+    "flat_open-left.png": "af282a89c2bfb0ae8ad0b6724e9bf9715384864a3cc8b237d1fd4134731545de",
+    "flat_open-right.png": "8b089a0d707f8c35823b2c93c732a472f02acc670e24201ae4a91b5b3692fbef",
+    "four_finger_bend_90-left.png": "6a1fdeaf12008956e6a9e512bc4c41a8ddf13ce88883efd13f323b149a74bf0a",
+    "four_finger_bend_90-right.png": "548292441fdc45f2c02cecfe133223a21479d2556b6f105c1e9f259df69e51de",
+    "pinch_index-left.png": "7dd61e8279617f2bd3aca08699b2f84ed83bafc4f8aed1704513920f0bd6eead",
+    "pinch_index-right.png": "702abb6ca39ffd5922f3d85d94ca30c3fcf135381bb7f359b57a3922e5d3285c",
+    "pinch_middle-left.png": "eed42c787836492e6ac61b47708de3e59a8e621cf92cdb1d91bbf2089b65dfd8",
+    "pinch_middle-right.png": "60f0c58df571f98bd269447ba7872927fcec26292cf8990d765096ad38a1f8de",
+    "pinch_pinky-left.png": "0334b68cca09102c93283732af8fa52270692114ec3f9228e0bc3fbd3c66828d",
+    "pinch_pinky-right.png": "2b661b97db2737e1f8a41cc6c799d68291cf2df5ccaa8a0e6452cd2f9dbf79e7",
+    "pinch_ring-left.png": "15bc0c4a123e4d03a51a1ead6975df0ec552fc830f6d1d595d87bbb79ae7ab2e",
+    "pinch_ring-right.png": "55cd5c8c96078564dcac34534662687ca7dd4e15ea4564b36157eedc4f23bb7f"
+  }
+}

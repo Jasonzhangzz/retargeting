@@ -27,7 +27,7 @@ class SkeletonTests(unittest.TestCase):
     def test_reject_bad_side_frame_nan_orientation_or_missing_joint(self):
         for kind in ("side", "frame", "nan", "orientation", "missing", "wrist"):
             pose = self.pose()
-            if kind == "side": pose["hand_side"] = "right"
+            if kind == "side": pose["hand_side"] = "unknown"
             if kind == "frame": pose["coordinate_frame"] = "world"
             if kind == "nan": pose["positions_local"][1][0] = float("nan")
             if kind == "orientation": pose["orientations_local_xyzw"][1] = [0., 0., 0., 0.]

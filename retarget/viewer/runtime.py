@@ -17,7 +17,7 @@ def scan(root=None):
         batch = manifest.parent
         try:
             for case in json.loads(manifest.read_text())["cases"]:
-                if case.get("method") not in ("cem", "graspadmm"):
+                if case.get("method") not in ("cem", "graspadmm", "contact_cem", "source_sampling"):
                     continue
                 if case.get("task") == "grasp" and case.get("method") not in ("cem", "graspadmm"):
                     continue
@@ -236,11 +236,14 @@ def camera_for(model, data):
         if mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "torso_link") >= 0
         else "right_palm_link" if mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "right_palm_link") >= 0
         else "hand-right_palm_link" if hand_body_id(model, "right_palm_link") >= 0
+        else "right_hand_C_MC" if mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "right_hand_C_MC") >= 0
         else "grasp_object" if mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "grasp_object") >= 0 else "world"
     )
     body = model.body(name).id
     camera.lookat[:] = data.xpos[body]
-    camera.distance = 3.0 if name == "torso_link" else 0.4 if name.endswith("right_palm_link") else max(.15, model.stat.extent*2)
+    if name == 'right_hand_C_MC':
+        camera.lookat[:] = np.median(data.geom_xpos[model.geom_type != mujoco.mjtGeom.mjGEOM_PLANE], axis=0)
+    camera.distance = 3.0 if name == "torso_link" else 0.4 if name.endswith("right_palm_link") or name == 'right_hand_C_MC' else max(.15, model.stat.extent*2)
     camera.azimuth = 135.0
     camera.elevation = -20.0
     return camera

@@ -67,6 +67,22 @@ class V1ProtocolTests(unittest.TestCase):
         self.assertEqual(payload.fingertip_local["thumb"].position, (.01, -.02, .03))
         self.assertEqual(payload.fingertip_local["thumb"].quaternion_xyzw, (0., 0., 0., 1.))
 
+    def test_wire_diagnostics_do_not_flip_thumb_or_swap_channels(self):
+        parser = V1Framer()
+        self.assertFalse(parser.pose_diagnostics()['ready'])
+        parser.feed(make_frame())
+        report = parser.pose_diagnostics()
+        raw = bytes.fromhex(report['snapshot_hex'])
+        decoded = GloveFrameDecoder(side='left').decode_message(qntp_snapshot_message(raw))
+        self.assertEqual(report['snapshot_offset'], 0)
+        self.assertEqual(report['emf_block_bytes'], 80)
+        for i, channel in enumerate(report['channels']):
+            self.assertEqual(channel['fields_i16'][:3], [1000+i, -2000, 3000])
+            self.assertLess(channel['decoder_difference_m'], 1e-12)
+            self.assertEqual(tuple(channel['vendor_position_m']), decoded.fingertip_local[channel['sdk_name']].position)
+        parser.feed(make_frame(with_pose=False))
+        self.assertFalse(parser.pose_diagnostics()['ready'])
+
     def test_usb_loss_does_not_kill_cleanup_or_leave_port_owned(self):
         runtime = Runtime.__new__(Runtime)
         runtime.sdk = Mock()
@@ -75,6 +91,7 @@ class V1ProtocolTests(unittest.TestCase):
         runtime.lock = threading.Lock()
         runtime.last_frame = 1
         runtime.state = {"status": "streaming"}
+        runtime.shared_recorder = None
         runtime.samples = deque()
         runtime.parser = SimpleNamespace(buffer=bytearray(b"partial frame"))
         runtime.disconnect()
@@ -94,6 +111,24 @@ class V1ProtocolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             writer.submit(GloveHapticsCommand(source=spec.source, strengths={"thumb": 10}, timestamp=0))
         driver.write_serial_command.assert_not_called()
+
+
+class LiveHistoryTests(unittest.TestCase):
+    def test_bounded_history_preserves_latest_sequences_and_subscribers(self):
+        from moxian_web.protocol import bound_live_sdk_history
+        from qnbot_sdk.core.buffer import TimeSeriesBuffer
+        buffer = TimeSeriesBuffer()
+        observed = []
+        buffer.subscribe('raw', observed.append)
+        bound_live_sdk_history(buffer, 4)
+        for i in range(20):
+            buffer.append('raw', {'sequence': i}, timestamp=float(i))
+        self.assertEqual(len(buffer.records('raw')), 4)
+        self.assertEqual(buffer.latest('raw'), {'sequence': 19})
+        self.assertEqual(len(observed), 20)
+        self.assertEqual(buffer.latest_record('raw').sequence, 20)
+        with self.assertRaises(ValueError):
+            bound_live_sdk_history(buffer)
 
 
 if __name__ == "__main__":

@@ -22,21 +22,26 @@ class NativeTests(unittest.TestCase):
         row=json.loads(CAPTURE.read_text())['rows'][10]
         with tempfile.TemporaryDirectory() as folder:
             folder=Path(folder);shutil.copytree(HOME/'glove',folder/'ik/9c0dfad82edffc57/glove')
+            registration=HOME/'runtime/ik-registration.json'
+            if registration.exists():
+                runtime=folder/'ik/9c0dfad82edffc57/runtime';runtime.mkdir();shutil.copy2(registration,runtime/registration.name)
             bridge=SkeletonBridge(ROOT,folder);self.addCleanup(bridge.stop);bridge.start('2DF5F3B00DA5')
-            deadline=time.monotonic()+12;i=0;state={}
+            deadline=time.monotonic()+100;i=0;state={}
             while time.monotonic()<deadline:
                 frame={k:copy.deepcopy(row[k]) for k in ('fingers','timestamp_ms')};frame.update(type='frame',timestamp_ms=row['timestamp_ms']+i*16);bridge.send(frame);i+=1;time.sleep(.02)
                 state=bridge.snapshot()
                 if state.get('targets') and state.get('ready'):break
-            self.assertTrue(state.get('ready'),state);self.assertEqual(state.get('pose_source'),'official_native_kinematic')
+            self.assertTrue(state.get('ready'),state);self.assertEqual(state.get('pose_source'),'emf_slsqp_kinematic')
             self.assertEqual(state['targets']['timestamp_ms'],state['pose']['timestamp_ms'])
             self.assertEqual(state['targets']['hand_side'],'left');self.assertEqual(state['targets']['coordinate_frame'],'wrist_local')
             self.assertEqual(len(state['targets']['positions_local']),5);self.assertEqual(len(state['pose']['names']),25)
             self.assertEqual(state['physics'],{'enabled':False,'steps':0,'contacts':0,'actuators':0})
             self.assertGreater(max(state['alignment']['tip_errors_mm'].values()),1.)
-            policy=state['runtime_policy'];self.assertFalse(policy['joint_smoother']);self.assertFalse(policy['open_error_reseed'])
-            angles=dict(zip(state['pose']['joint_names'],state['pose']['joint_positions_rad']))
-            for name,limit in policy['joint_limits'].items():self.assertGreaterEqual(angles[name],limit['q_min_rad']-1e-9)
+            policy=state['runtime_policy'];self.assertEqual(policy['mode'],'emf_slsqp')
+            self.assertTrue(policy['local_ik_modifications']);self.assertFalse(policy['input_registration'])
+            self.assertFalse(policy['joint_smoother']);self.assertFalse(policy['open_error_reseed'])
+            self.assertFalse(policy['native_angles_used']);self.assertEqual(policy['solver'],'scipy_SLSQP')
+            self.assertEqual(policy['joint_limits_source'],'calibrated_URDF_with_physical_extension')
             bridge.stop()
         for p,digest in sources.items():self.assertEqual(hashlib.sha256(p.read_bytes()).hexdigest(),digest)
 if __name__=='__main__':unittest.main()

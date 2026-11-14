@@ -93,6 +93,27 @@ def test_parallel_pair_overflow_runs_exact_gpu_search():
     np.testing.assert_allclose(o[0,0,0].cpu(),expected[1],atol=1e-7,rtol=1e-5)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(),reason='CUDA required')
+def test_parallel_lane_reduction_preserves_original_witness_with_many_faces():
+    import trimesh
+    from retarget.env.grasp.patch_query import parallel_query
+    mesh=trimesh.creation.icosphere(subdivisions=1,radius=.01);device='cuda:0'
+    native=wp.Mesh(points=wp.array(mesh.vertices,dtype=wp.vec3,device=device),indices=wp.array(mesh.faces.ravel(),dtype=int,device=device))
+    hand=np.array([[-.03,-.03,0],[.03,-.03,0],[0,.03,0]],np.float32)
+    patches=SimpleNamespace(surfaces=SimpleNamespace(mesh_ids=wp.array([native.id],dtype=wp.uint64,device=device)),
+        packed_slots=torch.tensor([[0,0]],device=device,dtype=torch.int32),packed_triangles=torch.tensor([[0,1,2]],device=device,dtype=torch.int32),
+        packed_clip=torch.eye(3,device=device)[None],settings=PatchAnchorSettings())
+    for anchor in [[0,0,.01],[0,0,0],[.005,0,.005]]:
+        expected=kernel_witness(hand,mesh.vertices,mesh.faces,anchor,device)
+        h=torch.empty(1,1,1,3,device=device);o=torch.empty_like(h);score=torch.empty(1,1,1,device=device)
+        overflow=parallel_query(patches,torch.tensor(hand,device=device)[None],torch.tensor([[anchor]],device=device,dtype=torch.float32),
+            torch.zeros(1,device=device,dtype=torch.long),torch.ones(1,device=device),h,o,score,capacity=128)
+        assert overflow.item()==0
+        np.testing.assert_allclose(float(score[0,0,0]),expected[2],atol=1e-5,rtol=1e-6)
+        np.testing.assert_allclose(h[0,0,0].cpu(),expected[0],atol=1e-7,rtol=1e-5)
+        np.testing.assert_allclose(o[0,0,0].cpu(),expected[1],atol=1e-7,rtol=1e-5)
+
+
 @pytest.mark.parametrize('device',['cpu','cuda:0'])
 def test_triangle_interior_crossing_and_anchor_neighborhood(device):
     if device.startswith('cuda') and not torch.cuda.is_available():pytest.skip('CUDA unavailable')
