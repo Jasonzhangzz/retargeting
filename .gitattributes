@@ -1,3 +1,4 @@
 # Preserve binary numerical assets without line-ending conversion.
 *.npz binary
 *.npy binary
+MoxianEMF-Windows-20260917.zip filter=lfs diff=lfs merge=lfs -text
