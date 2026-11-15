@@ -1,0 +1,205 @@
+{
+  "target": "wuji2",
+  "source_types": 31,
+  "samples": 1247,
+  "numerically_valid": 1247,
+  "joint_limit_violations": 0,
+  "source_contact_accepted": 586,
+  "source_grasp_passed": 122,
+  "keypoint_rmse_mm": 8.918418884277344,
+  "fingertip_rmse_mm": 2.142177104949951,
+  "initial_fingertip_rmse_mm": 92.00938415527344,
+  "fingertip_error_p50_mm": 1.7148873805999756,
+  "fingertip_error_p95_mm": 3.8321077823638916,
+  "kinematic_only": true,
+  "physical_grasp_success": null,
+  "processing_seconds": 1.1115591390407644,
+  "entries": [
+    {
+      "type": "1_Large_Diameter",
+      "file": "grids/1_Large_Diameter.npz",
+      "samples": 33,
+      "sha256": "329e4f94f95d8c1c9c67efeb14b2b65ce62242dbfd513ec3d378ca14e756a570"
+    },
+    {
+      "type": "2_Small_Diameter",
+      "file": "grids/2_Small_Diameter.npz",
+      "samples": 33,
+      "sha256": "bb66f2542b48931c9807a4b61ad3ed60890aa15af33a971b4fd95d2f5beb04c1"
+    },
+    {
+      "type": "3_Medium_Wrap",
+      "file": "grids/3_Medium_Wrap.npz",
+      "samples": 33,
+      "sha256": "dc2521f4aaefe31fa1cace5206dc7fb713ee42be5719e05a06546b3b06bab73f"
+    },
+    {
+      "type": "4_Adducted_Thumb",
+      "file": "grids/4_Adducted_Thumb.npz",
+      "samples": 33,
+      "sha256": "e4697e2cafd00decf2f7c0c3166de3e7fee3f39cefae052a3d00a54645316a3b"
+    },
+    {
+      "type": "5_Light_Tool",
+      "file": "grids/5_Light_Tool.npz",
+      "samples": 33,
+      "sha256": "95a40ee1e815fe6220b87723dde695abc682bb89d76d973f35706fea93233f03"
+    },
+    {
+      "type": "6_Prismatic_4_Finger",
+      "file": "grids/6_Prismatic_4_Finger.npz",
+      "samples": 33,
+      "sha256": "2e73ce3bac732b070de68652cd75b02983c39131fd7f065c4e62da573ebba9a0"
+    },
+    {
+      "type": "7_Prismatic_3_Finger",
+      "file": "grids/7_Prismatic_3_Finger.npz",
+      "samples": 33,
+      "sha256": "e4e63b0fb255995e353f166af66347b37c73a7f916afd5171f7a5bf87fa4c272"
+    },
+    {
+      "type": "8_Prismatic_2_Finger",
+      "file": "grids/8_Prismatic_2_Finger.npz",
+      "samples": 33,
+      "sha256": "9c1e6248159eb256729e73015887583efe6f1b11c4b52d789ec762dd1c030388"
+    },
+    {
+      "type": "9_Palmar_Pinch",
+      "file": "grids/9_Palmar_Pinch.npz",
+      "samples": 33,
+      "sha256": "4d81a6688ef67abe7a42407473f24cca84a5e886a227fa42aff31d5866be59c0"
+    },
+    {
+      "type": "10_Power_Disk",
+      "file": "grids/10_Power_Disk.npz",
+      "samples": 81,
+      "sha256": "5cb8f7f549343d850bce672b6ee7de847aba1a1fd871bb4bb7789ce41da3c312"
+    },
+    {
+      "type": "11_Power_Sphere",
+      "file": "grids/11_Power_Sphere.npz",
+      "samples": 33,
+      "sha256": "3c1cec8a5a8f3ce3be2fa90338c8c061469d0fe5aa434167591577e8b265a74c"
+    },
+    {
+      "type": "12_Precision_Disk",
+      "file": "grids/12_Precision_Disk.npz",
+      "samples": 41,
+      "sha256": "499a5389d91ae56b72398cfd8e3c812d78473f34e36ffdea86381a67afc431c9"
+    },
+    {
+      "type": "13_Precision_Sphere",
+      "file": "grids/13_Precision_Sphere.npz",
+      "samples": 33,
+      "sha256": "7b08dee1e56b000fd314cc9cfa7261f383bdf03e7374a9cacef8216085c3c859"
+    },
+    {
+      "type": "14_Tripod",
+      "file": "grids/14_Tripod.npz",
+      "samples": 33,
+      "sha256": "0d13061c2992a6b79f78251f9b2164596321ef8a421abda3b3707406bfbca0a1"
+    },
+    {
+      "type": "15_Fixed_Hook",
+      "file": "grids/15_Fixed_Hook.npz",
+      "samples": 33,
+      "sha256": "bb418c46e6882c0b7b0a2fa16c4bac358083a708c6d0be9efafc5bd4abe4aad5"
+    },
+    {
+      "type": "16_Lateral",
+      "file": "grids/16_Lateral.npz",
+      "samples": 33,
+      "sha256": "32f246a6ca51bc943ac03666c2a8cfda2794413bcbf59a3daa415c8699159a71"
+    },
+    {
+      "type": "17_Index_Finger_Extension",
+      "file": "grids/17_Index_Finger_Extension.npz",
+      "samples": 33,
+      "sha256": "b25ff4516f82149d0e90ba79df3f125ad551d1bb26181c1d93697c1fcd81c739"
+    },
+    {
+      "type": "18_Extensior_Type",
+      "file": "grids/18_Extensior_Type.npz",
+      "samples": 65,
+      "sha256": "a981e91075da60c6678e7e580f368baa0ecf7773a484c6fae4089d6c1b3f0d66"
+    },
+    {
+      "type": "20_Writing_Tripod",
+      "file": "grids/20_Writing_Tripod.npz",
+      "samples": 33,
+      "sha256": "208a4581a1528104810325b6a1cb3170edb8a6efbb27249ada71ab1e46d50ad5"
+    },
+    {
+      "type": "22_Parallel_Extension",
+      "file": "grids/22_Parallel_Extension.npz",
+      "samples": 73,
+      "sha256": "5f93455ca4160c6ecf56d44ea4b47048c35db65173c343066f2e1e4a0c6fcde9"
+    },
+    {
+      "type": "23_Adduction_Grip",
+      "file": "grids/23_Adduction_Grip.npz",
+      "samples": 33,
+      "sha256": "8878a79b842d38be26235431300c2f5d1d9b7d641bf72c7276917e8e173d31b7"
+    },
+    {
+      "type": "24_Tip_Pinch",
+      "file": "grids/24_Tip_Pinch.npz",
+      "samples": 89,
+      "sha256": "6db4bb5826aef9020b377fdabffd9895c33c99e1c160257397f7cb6bebf4fb07"
+    },
+    {
+      "type": "25_Lateral_Tripod",
+      "file": "grids/25_Lateral_Tripod.npz",
+      "samples": 33,
+      "sha256": "1d5cf3f3af2eb1e314ad35b6c5ef30d157249d14aa85cc76bd98624a782e0622"
+    },
+    {
+      "type": "26_Sphere_4_Finger",
+      "file": "grids/26_Sphere_4_Finger.npz",
+      "samples": 33,
+      "sha256": "3693cb22ec949ac0560c0740d95b32cfe0f5b6e52b157433bd4684d1b10d258e"
+    },
+    {
+      "type": "27_Quadpod",
+      "file": "grids/27_Quadpod.npz",
+      "samples": 33,
+      "sha256": "76d31a6d6ec8c53e2b69bb0c7b8b04ed94a0da7202eec8e9b5336a38773591d9"
+    },
+    {
+      "type": "28_Sphere_3_Finger",
+      "file": "grids/28_Sphere_3_Finger.npz",
+      "samples": 33,
+      "sha256": "3f961a2633bda2526e34e432acb60a38deaeb33fc341a374357f492d6993073a"
+    },
+    {
+      "type": "29_Stick",
+      "file": "grids/29_Stick.npz",
+      "samples": 33,
+      "sha256": "5496cfd69b8d862eddbe8e13703750d1508700dfe8bbf2792bc14d5f688261ea"
+    },
+    {
+      "type": "30_Palmar",
+      "file": "grids/30_Palmar.npz",
+      "samples": 73,
+      "sha256": "3a83369cb9013877c8de7c0995f1bc04232d20379b1cc3ea7c0a952cfa6d3885"
+    },
+    {
+      "type": "31_Ring",
+      "file": "grids/31_Ring.npz",
+      "samples": 33,
+      "sha256": "f883099d5cf121b8a2274ca110f55df2d1eb6557816eb4abf59aa9a4921aa17c"
+    },
+    {
+      "type": "32_Ventral",
+      "file": "grids/32_Ventral.npz",
+      "samples": 33,
+      "sha256": "5c1bedb8ce786a173ba25e30d81a52065a47fe8bfe8e6d1bd2cd21192a4799b7"
+    },
+    {
+      "type": "33_Inferior_Pincer",
+      "file": "grids/33_Inferior_Pincer.npz",
+      "samples": 33,
+      "sha256": "5a5b4f77c9ad2c3358934abd4b70dd5de5f9fbedd94cc2dfffecaa651e92a6e7"
+    }
+  ]
+}

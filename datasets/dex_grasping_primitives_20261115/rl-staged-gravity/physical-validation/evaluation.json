@@ -1,0 +1,60 @@
+{
+  "baseline": {
+    "finite": true,
+    "released_count": 128,
+    "fully_probed_count": 128,
+    "success_count": 21,
+    "success_rate": 0.1640625,
+    "gate_timeout_count": 0,
+    "contact_retained_count": 21,
+    "final_settled_count": 92,
+    "max_consecutive_stable_s": 0.3999999761581421,
+    "final_gate_checks_pass_count": [
+      128,
+      96,
+      92,
+      2,
+      31,
+      31,
+      128
+    ],
+    "gate_check_names": [
+      "joint_speed_and_change",
+      "object_linear_speed",
+      "object_angular_speed",
+      "three_contacts",
+      "two_fingers",
+      "contact_persistence",
+      "penetration_under_3mm"
+    ]
+  },
+  "learned": {
+    "finite": true,
+    "released_count": 128,
+    "fully_probed_count": 128,
+    "success_count": 28,
+    "success_rate": 0.21875,
+    "gate_timeout_count": 0,
+    "contact_retained_count": 30,
+    "final_settled_count": 91,
+    "max_consecutive_stable_s": 0.4399999976158142,
+    "final_gate_checks_pass_count": [
+      128,
+      97,
+      91,
+      22,
+      37,
+      30,
+      128
+    ],
+    "gate_check_names": [
+      "joint_speed_and_change",
+      "object_linear_speed",
+      "object_angular_speed",
+      "three_contacts",
+      "two_fingers",
+      "contact_persistence",
+      "penetration_under_3mm"
+    ]
+  }
+}

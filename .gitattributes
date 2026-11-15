@@ -2,3 +2,6 @@
 *.npz binary
 *.npy binary
 MoxianEMF-Windows-20260917.zip filter=lfs diff=lfs merge=lfs -text
+# Frozen exports/resources keep their original bytes for SHA-256 verification.
+/datasets/dex_grasping_primitives_20261115/** -text -whitespace
+/datasets/dex_grasping_primitives_20261115/**/*.pt filter=lfs diff=lfs merge=lfs -text

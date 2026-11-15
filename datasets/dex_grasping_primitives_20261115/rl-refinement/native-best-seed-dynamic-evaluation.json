@@ -1,0 +1,16 @@
+{
+  "baseline": {
+    "hold_within_30mm_rate": 0.0,
+    "mean_final_displacement_mm": 20195.94921875,
+    "mean_contacts_last_10_steps": 0.0,
+    "mean_wrench_proxy": 0.0,
+    "finite": true
+  },
+  "learned": {
+    "hold_within_30mm_rate": 0.0,
+    "mean_final_displacement_mm": 19912.78515625,
+    "mean_contacts_last_10_steps": 0.0,
+    "mean_wrench_proxy": 0.0,
+    "finite": true
+  }
+}

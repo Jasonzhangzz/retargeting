@@ -1,0 +1,158 @@
+{
+  "default_mode": "virtual",
+  "input_grasp_types": 1,
+  "input_pose": "10_Power_Disk row27",
+  "num_envs": 128,
+  "updates": 100,
+  "training_transitions": 409600,
+  "virtual_evaluation": {
+    "baseline": {
+      "finite": true,
+      "released_count": 128,
+      "fully_probed_count": 0,
+      "success_count": 0,
+      "success_rate": 0.0,
+      "gate_timeout_count": 0,
+      "contact_retained_count": 2,
+      "final_settled_count": 128,
+      "max_consecutive_stable_s": 0.3999999761581421,
+      "final_gate_checks_pass_count": [
+        128,
+        128,
+        128,
+        0,
+        4,
+        68,
+        128
+      ],
+      "gate_check_names": [
+        "joint_speed_and_change",
+        "object_linear_speed",
+        "object_angular_speed",
+        "three_contacts",
+        "two_fingers",
+        "contact_persistence",
+        "penetration_under_3mm"
+      ],
+      "virtual_gravity_feasible_count": 0,
+      "virtual_all_wrenches_feasible_count": 0,
+      "fully_assessed_count": 128,
+      "physically_probed_count": 0,
+      "qualification": "virtual contact-wrench feasibility; not physical disturbance validation"
+    },
+    "learned": {
+      "finite": true,
+      "released_count": 128,
+      "fully_probed_count": 0,
+      "success_count": 0,
+      "success_rate": 0.0,
+      "gate_timeout_count": 0,
+      "contact_retained_count": 118,
+      "final_settled_count": 128,
+      "max_consecutive_stable_s": 0.4399999976158142,
+      "final_gate_checks_pass_count": [
+        128,
+        128,
+        128,
+        86,
+        120,
+        72,
+        128
+      ],
+      "gate_check_names": [
+        "joint_speed_and_change",
+        "object_linear_speed",
+        "object_angular_speed",
+        "three_contacts",
+        "two_fingers",
+        "contact_persistence",
+        "penetration_under_3mm"
+      ],
+      "virtual_gravity_feasible_count": 0,
+      "virtual_all_wrenches_feasible_count": 0,
+      "fully_assessed_count": 128,
+      "physically_probed_count": 0,
+      "qualification": "virtual contact-wrench feasibility; not physical disturbance validation"
+    }
+  },
+  "physical_evaluation": {
+    "baseline": {
+      "finite": true,
+      "released_count": 128,
+      "fully_probed_count": 128,
+      "success_count": 21,
+      "success_rate": 0.1640625,
+      "gate_timeout_count": 0,
+      "contact_retained_count": 21,
+      "final_settled_count": 92,
+      "max_consecutive_stable_s": 0.3999999761581421,
+      "final_gate_checks_pass_count": [
+        128,
+        96,
+        92,
+        2,
+        31,
+        31,
+        128
+      ],
+      "gate_check_names": [
+        "joint_speed_and_change",
+        "object_linear_speed",
+        "object_angular_speed",
+        "three_contacts",
+        "two_fingers",
+        "contact_persistence",
+        "penetration_under_3mm"
+      ]
+    },
+    "learned": {
+      "finite": true,
+      "released_count": 128,
+      "fully_probed_count": 128,
+      "success_count": 28,
+      "success_rate": 0.21875,
+      "gate_timeout_count": 0,
+      "contact_retained_count": 30,
+      "final_settled_count": 91,
+      "max_consecutive_stable_s": 0.4399999976158142,
+      "final_gate_checks_pass_count": [
+        128,
+        97,
+        91,
+        22,
+        37,
+        30,
+        128
+      ],
+      "gate_check_names": [
+        "joint_speed_and_change",
+        "object_linear_speed",
+        "object_angular_speed",
+        "three_contacts",
+        "two_fingers",
+        "contact_persistence",
+        "penetration_under_3mm"
+      ]
+    }
+  },
+  "preload": {
+    "baseline": {
+      "median_sum_normal_force_N": 0.00014966994058340788,
+      "max_sum_normal_force_N": 0.0007492939475923777
+    },
+    "learned": {
+      "median_sum_normal_force_N": 0.05788968876004219,
+      "max_sum_normal_force_N": 0.12023669481277466
+    }
+  },
+  "object_weight_N": 0.3924,
+  "controller_checks_passed": 5,
+  "native_collision_fix": "Restored all native adjacent-link exclusions removed by capsule overlay; earlier native-mesh failure is invalid as a grasp feasibility conclusion.",
+  "limitations": [
+    "Single initial pose; not 128 independent grasp types.",
+    "Each physical validation environment tests one signed force or torque direction, not all directions for every candidate.",
+    "Virtual LP uses measured normal preload capped at 1N per contact; no coupled joint-torque feasibility proof.",
+    "No all-virtual-wrench qualified candidate in the current pilot.",
+    "GPU contact outcomes vary slightly on repeated evaluation."
+  ]
+}

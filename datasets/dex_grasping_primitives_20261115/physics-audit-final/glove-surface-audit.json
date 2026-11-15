@@ -1,0 +1,8 @@
+{
+  "audited": 1141,
+  "center_in_keypoint_hull": 984,
+  "vertex_penetration_over_3mm": 907,
+  "model_hash": "f0dd73b5a88b6ae0b6f2c0cc68fccfd69d5195ab39fec52db6a00fd36c463c3c",
+  "region_revision": "qnbot_material_regions_v4_thumb_pad_center",
+  "note": "Skin vertex SDF is a surface sampling diagnostic, not triangle intersection or grasp stability certification."
+}
