@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/facebookresearch/GeoRT",
+  "revision": "fb2075e2a3272be372016580c0b6ebd6120228f0",
+  "files": {
+    "loss.py": "fbf69e9b40a867d2396f23e5904c91f3f09bc0275bb4c7ededa36af666c86680",
+    "formatter.py": "b0c0b099c66f31ef00a5ba631c3f91c7c16dc1d45cb2800fe9b8eb7cfd9b0a1f",
+    "model.py": "419dfc5c3424e06681948100e249fb74d4eee1bc9b41b907c0678d0c2a6959bf",
+    "dataset.py": "927c37dd209c0eb8455b946b82c5215764a6399f7d72d8560d62d31fe38ef97b",
+    "trainer.py": "af55190ecb2ba665065e4becb66d0ae41dfd3e9fad3abd2de646eb037708485c"
+  }
+}

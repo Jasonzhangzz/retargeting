@@ -12,7 +12,7 @@ from collections import deque
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VENDOR = ROOT / "MoxianEMF-Windows-20260917" / "MoxianEMF"
+VENDOR = ROOT / "moxian_web" / "vendor" / "MoxianEMF-Windows-20260917" / "MoxianEMF"
 sys.path.insert(0, str(VENDOR / "sdk"))
 sys.path.insert(0, str(VENDOR / "server" / "qnbot_hooks"))
 

@@ -1,72 +1,37 @@
-# Robokit CARD 后端
+# CARD objective 与 CEM
 
-`moxian_web/robokit_card.py` 在本项目中扩展 Robokit 的 `Task`、`GaussianSampler` 与 `PopulationSolver`；不修改环境内的 Robokit 安装，不使用模拟器或轨迹优化器。机器人沿用现有原生 MJCF 和关节名称映射。
+默认算法为 `card_wuji2_v10_paper_objective_solver`，`cem_backend='robokit'` 使用本项目扩展的 Robokit `Task`、`GaussianSampler`、`PopulationSolver` 与完整 CUDA Graph。`cem_backend='torch'` 保留独立参考计算。两者使用同一原生 Wuji2 MJCF、语义接触面、网格拟合胶囊、碰撞对和物体采样点；不修改第三方 Robokit。
 
-默认 `CardSettings(cem_backend='robokit')` 的流程：
+## 与论文对齐的部分
 
-1. 当前 MANO 21 节点 → Robokit 初解。Robokit 从自己的上一帧关节解热启动，腕部初值来自当前 MANO；不读取 CEM 输出。完全相同的float32节点输入复用对应的Robokit解，避免对重复问题反复优化引入微小数值漂移；任意输入变化仍重新求解。`initializer.reused_identical_source` 明确标记复用。断流超过1秒、标定更换、源关节相对腕部跳变超过40 mm时清空初值历史及此缓存。
-2. 填入固定16个语义区域的源 CoP、方向、相对压力和上一帧平滑参考。初解与源接触目标不被替换。
-3. Warp 计算接触位置、方向对齐、材料点防滑、全手姿态、关节/基座平滑、源动作一致性、胶囊间距和物体 SDF 代价。接触不会关闭该指的姿态项。
-4. Robokit 全图捕获执行16轮，每轮1024个候选。5%精英的标准差与温度0.1决定 softmax；噪声固定退火到0.2倍，不拟合新的方差。旋转在本帧初解的轴角图内采样和加权。已有有效解时，默认896个候选沿当前Robokit初解的CEM分布采样，另128个在当前源动作提案附近采样，标准差为对应轮次的0.15倍。所有候选使用相同的当前Robokit搜索边界、代价和端点验收。
-5. 保存每轮的全部候选及最后均值。上一帧有效解，以及按当前源腕部刚性运动搬移的版本，若在当前 Robokit 搜索范围内，按当前帧完整代价重新计分，一并参与候选比较。搬移版本保持关节角，仅随源腕部平移和旋转，避免把整手微小位移转化为指关节抖动。保留低代价、初解、时间连续候选与早期候选，最多256个；先作原生网格粗检，再按代价排序以8个一批稠密验收。历史候选同样必须通过当前碰撞验收；未找到可行解时显示当前帧有限候选并标记不可行，不使用未经检查的历史姿态回退。
-6. 使用同一 Warp 接触投影结果导出机器人面编号、重心坐标、接触位置和法向，再进行最终原生端点复核。碰撞不检查帧间扫掠轨迹。
+依据 [CARD 式(2)、(3)、(10)–(13)及表5](https://arxiv.org/html/2610.36539v1#A4)：
 
-胶囊来自 Robokit `RobotSpec.local_link_capsule_endpoints` 和 `link_capsule_radii`；接触曲面仍用语义指腹的原生三角面，通过 BVH 最近点实现式(2)。简化碰撞几何不承担逐税元接触注册的作用。
+- 四组代价为接触、style、smooth、collision；默认没有源动作一致性项或原生网格穿透软代价。接触点在语义指腹三角面上按式(2)求解，位置、方向与材料点防滑按式(3)计分。所有手指保留式(10)的三项 style。
+- 接触优先级 `rho=1+0.5*F/current_frame_max_force`。当前帧力全部为零时 `rho=1`；历史及离线片段的最大压力不参与代价。
+- 指间胶囊间距使用6 mm软铰链代价；掌指胶囊间距小于6 mm时硬拒绝。伪物体和实测物体均使用2 mm软代价 allowance、3 mm硬穿透门槛，权重分别3.5与14。
+- 原生网格0.5 mm检查只输出诊断，不影响排序、`solution_feasible` 或历史更新。`collision.mesh_hard_rejected` 固定为 false，实际超限见 `mesh_diagnostic_exceeded`；`mesh_role='diagnostic_only'`。论文可行不代表网格无穿透。
+- 有上一帧可行解时，均值为 `0.5*previous+0.5*initializer`，并投影到上一输出的关节±0.25 rad与平移20 mm球内；首帧只限制原生关节位置，没有初值附近的局部搜索边界。不增加腕部旋转速度上限。
+- 两后端均在相对上一解连续展开的轴角图中直接采样、计算最近图旋转差并加权；不使用 SO(3) 迭代均值替代式(13)。
+- 固定16轮、每轮1024个高斯候选，无强制零噪声候选、源动作局部候选或搬移历史候选。精英数为51，有限精英代价按总体标准差标准化，softmax温度0.1。噪声为 `sigma_i=sigma_0*0.2**(i/16)`，`i=0..15`，初始噪声为2 mm／0.016 rad／0.05 rad，不拟合方差。16次更新后的噪声尺度为0.2；最后一批实际使用的尺度为 `0.2**(15/16)`。
+- 当前热启动均值、上一帧解和最终均值均重新计分；返回全部已评分可行候选中代价最低者，没有256候选网格验收截断。通常首帧评价16386次，后续有上一解时16387次；最终报告代价和网格诊断的额外计算不计入搜索评价次数。
+- 有限精英不足51个时使用所有有限精英；没有有限精英时保持均值、继续固定预算，不优化违约量。全部不可行时显示当前初值在位置／速度限制内的投影，明确标记不可行，不更新有效历史。
 
-## 论文对应与实时适配
+`settings.objective_profile` 区分默认 `paper` 和显式实验配置。保留的 `coulomb_force`、对指闭合、非零运动一致性权重和接触指style缩放属于实验；显式力锥和对指实验走 Torch 并报告原因。旧的非零 `motion_sample_fraction` 已移除，会报配置错误。`wmesh` 为兼容保留，默认0，不参与论文目标函数。
 
-代价与采样参数依据 [CARD 式(2)、(3)、附录D](https://arxiv.org/html/2610.36539v1)。相对压力仅影响接触优先级；默认方向项不是显式力控制。
+## 保留的项目适配
 
-保留的项目约束：主CEM分布从本帧Robokit初解开始，所有候选的精化边界均为该初解附近±0.25 rad和20 mm；胶囊间距仅作软代价。推测物体凸包仅作软约束，实测物体网格保留3 mm硬门槛，原生手部自穿透0.5 mm硬验收。没有实现论文的闭式初值、历史混合或实时零相位滤波，因此不能称为作者实现的逐行复现。
+一致性范围为 **objective 和 CEM**，不包含整条源数据与初值流程。Robokit 初解仍由当前源手21节点优化产生，用自己的关节历史热启动并缓存完全相同输入，不读取 CEM 历史；没有替换成论文附录C的闭式初值或拇指仿射映射。
 
-`cem_backend='torch'` 为独立参考实现。`coulomb_force` 或 `experimental_self_contact=True` 明确使用参考后端，API 的 `solver.backend_reason` 会说明，不静默忽略实验项。
+实时路径保留因果接触提取和累计凸包，输出原始 CEM。离线入口保留整段接触凸包、11帧接触图表平滑及经可行性检查的 SG(15,3) 后处理；这是独立于逐帧 CEM 的阶段。离线段最大压力仍可作为预处理元数据保存，但不参与 objective。相对ADC响应未标定为牛顿；默认方向项为法向对齐，不是硬件力控制。
 
-源 SID 到个性化 MANO 的实测注册状态仍独立报告；提速不代表源接触注册或真实抓握质量已通过验收。
+恢复论文硬约束后，现有保守胶囊可能令某些源姿态的初解及整个小噪声分布不可行。程序会报告真实不可行，不扩大噪声、修改初值或放宽门槛。碰撞只检查候选端点，不检查帧间扫掠轨迹。
 
-## 计时与验证
+## 诊断与验证
 
-- `solver.timing_ms`：整帧分项，CUDA同步后的墙钟耗时。
-- `solver.backend_timing_ms`：新后端准备、图执行、原生端点验收；是 `timing_ms.cem` 的子项，不能重复相加。
-- `solver.cold_start`：构建、编译和捕获图的首帧，性能统计应与稳态分开。
-- 固定1024×16；最终均值另计一次代价，符合当前搜索范围的时间连续候选分别计分，`evaluations=16385 + len(temporal_candidate_costs)`，最多16388。
-
-`E_style` 的指尖、指腹法向和骨段方向三项，以及 `E_smooth` 的关节、腕部平移和旋转三项均进入搜索。默认 `contact_style_weight=1`，全手保留姿态项，符合式(10)显式全指求和；`contact_style_weight=0` 可复现旧版接触指关闭style的选择。接触位置、方向和相对压力目标不变。
-
-`card_wuji2_v9_source_motion` 新增在线运动一致性项：
-
-```
-expected_joint = previous_CEM_joint + current_Robokit_joint - previous_Robokit_joint
-E_motion = wmotion_joint² * ||joint - expected_joint||²
-```
-
-期望值按原生关节限位截断，默认 `wmotion_joint=300`，单位rad。只在有有效参考且源动作连续时启用，标定变化、断流和大幅源姿态跳变时重置。真实Robokit关节运动不受该项惩罚，改变的是CEM修正量；因此没有将手势锁定在上一帧。该期望姿态还作为当前帧候选重新计分并验收。原 `wtheta=0.1` 保留。`motion_joint` 分项进入 `smooth` 组；`joint_motion_reference_rad / joint_motion_reference / source_motion_samples_per_round` 报告实际参考和局部采样数。
-
-运动一致性项和局部候选是本项目的在线防抖扩展，不能宣称为论文原始代价或采样的逐行复现。默认没有输出EMA、未来帧滤波、动作分类或对指闭合约束；新解仍需通过原生0.5 mm自穿透验收。`wmotion_joint=0, contact_style_weight=0, motion_sample_fraction=0` 是旧策略对照。
-
-数值回归检查独立参考代价、精英softmax/退火、源材料坐标、物体SDF、原生穿透门槛、当前有限候选及worker接口：
+`solver.consistency_scope='objective_and_cem_only'`；`search_center`、`previous_used_as_search_center`、`empty_elite_iterations`、`output_selection_scope='all_scored_candidates'` 和实际 `evaluations` 说明本帧求解过程。`backend_timing_ms` 是 `timing_ms.cem` 的子项，不应重复相加；首次构建／图捕获由 `cold_start` 标记。
 
 ```bash
 .venv-contact/bin/python -m pytest -q tests/mano/test_card_retarget.py tests/mano/test_contact_force.py tests/mano/test_wuji_pinch.py tests/test_moxian_wuji_bridge.py tests/test_moxian_wuji_view.py
 ```
 
-保存的真实帧对照（输出目录必须新建）：
-
-```bash
-.venv-contact/bin/python scripts/benchmark_moxian_robokit_card.py \
-  --source output/card_force_ablation_20261109/pinch-source.json \
-           output/card_force_ablation_20261109/bottle_cap-source.json \
-  --output output/robokit_card_comparison
-```
-
-两组输入标签只用于分组评价。每组前半段仅估计相对压力归一化，后半段选帧；各帧独立重置。分别预热后端，再记录性能、源CoP误差、方向和原生穿透。并行实时进程的资源竞争会计入墙钟时间，须同时查看部署后的在线测量。
-
-连续姿态抖动、接触切换及实际动作跟随回放：
-
-```bash
-.venv-contact/bin/python scripts/benchmark_moxian_pose_stability.py \
-  --source output/card_force_ablation_20261109/pinch-source.json \
-           output/card_force_ablation_20261109/bottle_cap-source.json \
-  --output output/wuji_pose_stability_comparison
-```
-
-加 `--recorded` 重放所有保存的真实帧；默认对固定真实帧施加可重复的微小手指旋转、动作变化、接触开关及50 mm整手位移。标签不输入求解器，统计包含阶段边界的首帧变化；同时报告MANO和Wuji2骨段、指尖变化、接触误差与穿透。
+录制片段通过 `scripts/retarget_moxian_wuji2.py --solver cem --input <recording.jsonl> --output <new.jsonl>` 离线重算；输出路径必须新建。两后端冻结帧对照可使用 `scripts/benchmark_moxian_robokit_card.py`。

@@ -65,7 +65,7 @@ class MixedGPUManoObjective(GPUManoObjective):
         if self._surface_cache is not None:return self._surface_cache
         beta,mp,mr,align,trans,angles=self.unpack(x)
         betas,geometry=masked_geometry(x,self.frame_geometry_mask)
-        from .card_math import exp_so3
+        from retarget.baseline.card.math import exp_so3
         v,j,r,rest,rest_j=self.model.model.official_batched_matrix_forward(
             betas,exp_so3(self.seed_pose),geometry)
         v=(v-rest_j[:,:1])@self.root.transpose(-1,-2)

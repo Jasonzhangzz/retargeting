@@ -38,7 +38,11 @@ class MoxianReplayReconstructor:
         return dict(vertices_m=vertices[0].cpu().tolist(), joints_m=joints[0].cpu().tolist(),
             geometry_version=self.topology['geometry_version'], binding_version=self.topology['binding_version'],
             model_hash=self.candidate['model_hash'], surface_backend='qnbot', hand_side=self.candidate['side'],
-            coordinate_frame='wrist_local', timestamp_ms=stamp, tactile_timestamp_ms=observation.get('tactile_timestamp_ms'),
+            coordinate_frame='wrist_local', timestamp_ms=stamp, skeleton_timestamp_ms=stamp,
+            tactile_timestamp_ms=observation.get('tactile_timestamp_ms'),
             source_contact=observation.get('contact'), object_transform=observation.get('object_transform'),
             calibrated=True, sensor_mounting=dict(status='multi_pose_calibrated'),
-            quality=dict(position_rmse_mm=float(error), source_reconstruction_ms=(time.perf_counter()-began)*1000))
+            source_joint_positions_rad=q[0].cpu().tolist(),calibration_fingerprint=observation['calibration_fingerprint'],
+            skeleton_runtime_revision=self.ik.runtime_revision,serial=self.candidate['serial'],
+            quality=dict(position_rmse_mm=float(error),source_ik_solver=pose['ik_solver'],
+                source_reconstruction_ms=(time.perf_counter()-began)*1000))

@@ -32,8 +32,7 @@ def library_path():
     explicit=os.environ.get('MOXIAN_WUJI_CALIBRATION_ELF')
     root=Path(__file__).resolve().parents[1]
     paths=[Path(explicit)] if explicit else [
-        root/'.cache/wuji-calibration-native/wuji_sdk/_wuji_sdk.cpython-310-x86_64-linux-gnu.so',
-        root/'results/wuji_studio_rea_20261112/sdk/2026.7.1/wuji_sdk/_wuji_sdk.cpython-310-x86_64-linux-gnu.so']
+        root/'moxian_web/vendor/wuji-calibration-native/wuji_sdk/_wuji_sdk.cpython-310-x86_64-linux-gnu.so']
     for path in paths:
         if path.is_file():return path.resolve()
     raise FileNotFoundError('缺少Wuji原生标定solver；运行 scripts/setup_wuji_calibration_solver.py，或设置 MOXIAN_WUJI_CALIBRATION_ELF')

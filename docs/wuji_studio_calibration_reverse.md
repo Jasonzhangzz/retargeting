@@ -8,25 +8,25 @@
 
 ## 直接查看与运行
 
-- [离线交互演示](../results/wuji_studio_rea_20261112/mesh/demo.html)：模板、21 点骨架、蒙皮结果三个同步视图；不依赖网络，演示动作为合成数据。
-- [mesh 精确复原与验证](../results/wuji_studio_rea_20261112/mesh/README.md)：提取出的原始函数、真实 GLB、可复用实现和逐顶点对照。
-- [SDK 离线验证脚本](../results/wuji_studio_rea_20261112/sdk/probe_offline_2026_7_1.py)、[验证数据](../results/wuji_studio_rea_20261112/sdk/offline_probe_2026.7.1.json)：用同版 SDK 的原生求解器检查 URDF、关节角和骨骼点关系。
-- [SDK 原生证据笔记](../results/wuji_studio_rea_20261112/sdk/NOTES.zh-CN.md)：动作表和筛选调用链、61 维字段、版本对照。
-- [SDK 输出重建的 OBJ](../results/wuji_studio_rea_20261112/mesh/sdk_offline_mesh.obj)：合成 EMF → 原生 SDK IK → 21 点 → 复原蒙皮的完整离线链。
+- [离线交互演示](../output/reports/wuji_studio_rea_20261112/mesh/demo.html)：模板、21 点骨架、蒙皮结果三个同步视图；不依赖网络，演示动作为合成数据。
+- [mesh 精确复原与验证](../output/reports/wuji_studio_rea_20261112/mesh/README.md)：提取出的原始函数、真实 GLB、可复用实现和逐顶点对照。
+- [SDK 离线验证脚本](../output/reports/wuji_studio_rea_20261112/sdk/probe_offline_2026_7_1.py)、[验证数据](../output/reports/wuji_studio_rea_20261112/sdk/offline_probe_2026.7.1.json)：用同版 SDK 的原生求解器检查 URDF、关节角和骨骼点关系。
+- [SDK 原生证据笔记](../output/reports/wuji_studio_rea_20261112/sdk/NOTES.zh-CN.md)：动作表和筛选调用链、61 维字段、版本对照。
+- [SDK 输出重建的 OBJ](../output/reports/wuji_studio_rea_20261112/mesh/sdk_offline_mesh.obj)：合成 EMF → 原生 SDK IK → 21 点 → 复原蒙皮的完整离线链。
 
 ```bash
 # 已安装的 REA
 /home/zz/.local/bin/rea --version
 
 # 重跑 mesh 与原始发行函数的对照
-cd /home/zz/retarget/results/wuji_studio_rea_20261112/mesh
+cd /home/zz/retarget/output/reports/wuji_studio_rea_20261112/mesh
 node validate.mjs
 
 # 用自己的 SDK 21 点导出 mesh，JSON 每项有 pose.position
 node run_reconstruction.mjs right sdk_offline_joints.json output.obj
 
 # 同版官方 SDK 的无设备离线探针（使用独立解包的 cp312 wheel）
-/usr/bin/python3 /home/zz/retarget/results/wuji_studio_rea_20261112/sdk/probe_offline_2026_7_1.py
+/usr/bin/python3 /home/zz/retarget/output/reports/wuji_studio_rea_20261112/sdk/probe_offline_2026_7_1.py
 ```
 
 ## 证据来源与版本
@@ -78,7 +78,7 @@ flowchart TD
 
 这有两份相互对应的发行证据：插件自己的 README 明确说明职责，JS 的实际 API 调用也与它一致。
 
-REA 完整插件证据：[rea_calibration_bundle.json](../results/wuji_studio_rea_20261112/evidence/rea_calibration_bundle.json)，父 Evidence `ev_ee93766b8a42cb245553988cc42e3e4d6155bb87557918c6843e2cf495715f94`。只选择了插件入口文件，不能用它推断原生实现或未选文件不存在。
+REA 完整插件证据：[rea_calibration_bundle.json](../output/reports/wuji_studio_rea_20261112/evidence/rea_calibration_bundle.json)，父 Evidence `ev_ee93766b8a42cb245553988cc42e3e4d6155bb87557918c6843e2cf495715f94`。只选择了插件入口文件，不能用它推断原生实现或未选文件不存在。
 
 ## 采集的不是相机 21 点
 
@@ -93,7 +93,7 @@ pinch_index → pinch_middle → pinch_ring → pinch_pinky
 → four_finger_bend_90 → flat_open
 ```
 
-八张 guide 图不等于默认八步。静态证据见 [pose_selection.asm](../results/wuji_studio_rea_20261112/sdk/2026.7.1_pose_selection.asm)、[pose_filter.asm](../results/wuji_studio_rea_20261112/sdk/2026.7.1_pose_filter.asm)；地址均为 ELF 原链接地址，Ghidra 导入该 SO 后需加 `0x100000`。
+八张 guide 图不等于默认八步。静态证据见 [pose_selection.asm](../output/reports/wuji_studio_rea_20261112/sdk/2026.7.1_pose_selection.asm)、[pose_filter.asm](../output/reports/wuji_studio_rea_20261112/sdk/2026.7.1_pose_filter.asm)；地址均为 ELF 原链接地址，Ghidra 导入该 SO 后需加 `0x100000`。
 
 从**旧版**约束数据表还可直接解出下列值；这是数据布局和筛选调用链证据，尚不代替约束枚举评估函数的完整反编译：
 
@@ -114,7 +114,7 @@ variance = max_f,a V[f,a]
 variance_ok = variance <= 0.0002 m²
 ```
 
-动作变化检测使用 `variance > 0.00002 m²`。这些是位置方差阈值，不能按数值直接解读成毫米位移阈值。代码证据、状态重置和确切指令位置见 [collector_optimizer_followup.md](../results/wuji_studio_rea_20261112/sdk/collector_optimizer_followup.md)。
+动作变化检测使用 `variance > 0.00002 m²`。这些是位置方差阈值，不能按数值直接解读成毫米位移阈值。代码证据、状态重置和确切指令位置见 [collector_optimizer_followup.md](../output/reports/wuji_studio_rea_20261112/sdk/collector_optimizer_followup.md)。
 
 ## 个人手模型的 61 维参数
 
@@ -155,7 +155,7 @@ finger[11] = [meta_pos.x, meta_pos.z,
 
 拟合前先把每种动作的采样帧压成一个五指平均观测：位置由米乘 1000 转毫米后求均值；四元数由 `Σ q qᵀ` 的最大特征值对应向量取得平均方向。它不是把每个采样帧都当成一套自由姿态，也不是逐分量平均四元数。
 
-共享 H 而每个动作有自己的 21 维姿态，这让多个姿势共同约束骨长和安装外参，减少仅凭一个姿势的歧义。正常六动作时，完整向量为 `61 + 6×21 = 187`，固定十个 meta 分量后，NLopt 的自由变量数为 **177**。具体观测聚合、vector append 和 projection 指令见 [fit_notes.md](../results/wuji_studio_rea_20261112/native/fit_notes.md)。
+共享 H 而每个动作有自己的 21 维姿态，这让多个姿势共同约束骨长和安装外参，减少仅凭一个姿势的歧义。正常六动作时，完整向量为 `61 + 6×21 = 187`，固定十个 meta 分量后，NLopt 的自由变量数为 **177**。具体观测聚合、vector append 和 projection 指令见 [fit_notes.md](../output/reports/wuji_studio_rea_20261112/native/fit_notes.md)。
 
 | 原生报告中的 cost | 作用 |
 |---|---|
@@ -181,7 +181,7 @@ finger[11] = [meta_pos.x, meta_pos.z,
 
 人手有效自由度为 `thumb 5 + 四指各 4 = 21`。SDK 的角度消息为每指五个槽位，四指最后一个槽为 0；这并不代表 25 个有效自由度。骨骼点也恰好有 21 个，但角度数和点数是不同概念。
 
-原生 `QpIkConfig` 有 `dt`、`v_max`、`lm_damping`、`global_damping`、`rest_pose_weight`、`rest_pose_weight_thumb_scale`、`temporal_smooth_weight`、`config_limit_gain`。进一步对配置校验和步进函数做静态反汇编，恢复了以下代数；详细指令地址在 [qp_notes.md](../results/wuji_studio_rea_20261112/native/qp_notes.md)。
+原生 `QpIkConfig` 有 `dt`、`v_max`、`lm_damping`、`global_damping`、`rest_pose_weight`、`rest_pose_weight_thumb_scale`、`temporal_smooth_weight`、`config_limit_gain`。进一步对配置校验和步进函数做静态反汇编，恢复了以下代数；详细指令地址在 [qp_notes.md](../output/reports/wuji_studio_rea_20261112/native/qp_notes.md)。
 
 定义程序已经加权的 6×n 任务矩阵为 A，反馈目标为 b，则每指求角度增量 delta：
 
@@ -216,7 +216,7 @@ rest 项在相应对角上加 r，在 g 上加 `r*(q_iter-q_rest)`；拇指有�
 
 ## 21 点如何变成 mesh
 
-这里已恢复全部实际前端函数并做数值对照，细节见 [mesh 报告](../results/wuji_studio_rea_20261112/mesh/README.md)。
+这里已恢复全部实际前端函数并做数值对照，细节见 [mesh 报告](../output/reports/wuji_studio_rea_20261112/mesh/README.md)。
 
 左右模板各有 **2187 顶点、4318 三角形、25 根平级 bones**。每帧：
 
@@ -236,6 +236,6 @@ rest 项在相应对角上加 r，在 g 上加 `r*(q_iter-q_rest)`；拇指有�
 
 已经定位但仍需进一步逐项核实：联合标定全部权重/边界默认值与梯度实现、在线误差/Jacobian 的完整修正约定和置信度公式。本次没有用自拟的优化器宣称与原生标定逐位等价，也没有用新版文档补造旧版常数。
 
-原始数据和 REA Evidence 保存在 [results/wuji_studio_rea_20261112](../results/wuji_studio_rea_20261112)。结果区中的裸字符串和普通工具反汇编，与 REA 生成的 Evidence 分开命名；两者均为静态证据，不自动代表运行中观测。
+原始数据和 REA Evidence 保存在 [output/reports/wuji_studio_rea_20261112](../output/reports/wuji_studio_rea_20261112)。结果区中的裸字符串和普通工具反汇编，与 REA 生成的 Evidence 分开命名；两者均为静态证据，不自动代表运行中观测。
 
-原生 REA/Ghidra 成功取得 `HandModel::to_vec` 的反编译 Evidence `ev_d723a01d79dc9281f9fdbf6e18593c174c806093be73d9999ad22846497e04cc`，见 [rea_native_bundle.json](../results/wuji_studio_rea_20261112/native/focused/rea_native_bundle.json)。大拟合函数被 Ghidra 合并到超出 ELF unwind 已知边界的范围，未取得可靠伪码，因此已取消，并关闭/导出/重置分析会话。原生优化与 QP 的主要结论以明确地址范围的机器码、对应版本上游 NLopt 源码和 SDK 离线实验为依据；没有把取消的反编译当作成功结果。
+原生 REA/Ghidra 成功取得 `HandModel::to_vec` 的反编译 Evidence `ev_d723a01d79dc9281f9fdbf6e18593c174c806093be73d9999ad22846497e04cc`，见 [rea_native_bundle.json](../output/reports/wuji_studio_rea_20261112/native/focused/rea_native_bundle.json)。大拟合函数被 Ghidra 合并到超出 ELF unwind 已知边界的范围，未取得可靠伪码，因此已取消，并关闭/导出/重置分析会话。原生优化与 QP 的主要结论以明确地址范围的机器码、对应版本上游 NLopt 源码和 SDK 离线实验为依据；没有把取消的反编译当作成功结果。

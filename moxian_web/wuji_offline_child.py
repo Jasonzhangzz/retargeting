@@ -2,7 +2,7 @@
 import argparse,hashlib,json,os,sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-SDK=ROOT/'.cache/wuji-calibration-native/python312'
+SDK=ROOT/'moxian_web/vendor/wuji-calibration-native/python312'
 ELF_SHA='dddeba3148f6a1e9eae87e5830eea25fc39f5c8bcb7cb958749db6bce82b621c'
 
 def main():

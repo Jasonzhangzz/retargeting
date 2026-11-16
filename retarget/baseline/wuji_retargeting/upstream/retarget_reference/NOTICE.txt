@@ -1,0 +1,23 @@
+Independent RetargetSession reconstruction for validation of wuji-sdk 2026.8.31.
+
+The specialized symmetric eigendecomposition and Householder QR routines
+are a Python/NumPy adaptation of nalgebra v0.33.2:
+  https://github.com/dimforge/nalgebra/tree/v0.33.2
+  src/linalg/symmetric_eigen.rs
+  src/linalg/symmetric_tridiagonal.rs
+  src/linalg/householder.rs
+  src/linalg/givens.rs
+  src/linalg/qr.rs
+  src/geometry/reflection.rs
+nalgebra's package author is Sebastien Crozet; it is licensed under Apache-2.0.
+The upstream license is preserved in LICENSE-nalgebra.txt.
+Adaptation changes: real 3x3 specialization, Python arrays/scalars, explicit
+floating-point accumulation order for comparison against the pinned SDK,
+and bounded diagnostic checks where described in the source.
+
+Other reconstructed formulas and control flow are documented by the local
+machine-code evidence and independent validation reports in the parent folder.
+The four URDF files in assets/ were extracted byte-for-byte from the user's
+installed SDK for this local analysis. Their origin, byte offsets and hashes
+are recorded in the asset manifest; no new license is asserted for those files.
+This package is not an official Wuji SDK release.

@@ -53,7 +53,7 @@ class OfficialMANO(PersonalizedMANO):
     def official_forward(self,rest,joints,betas,pose):
         batch=pose.reshape(-1,45).shape[0]
         if self.glove_parameters is not None or self.surface_residual_enabled:
-            from .card_math import exp_so3
+            from retarget.baseline.card.math import exp_so3
             beta=torch.as_tensor(betas,device=pose.device,dtype=pose.dtype)
             return self.official_matrix_forward(beta,exp_so3(pose.reshape(batch,15,3)))
         # Tensor inputs must stay on the autograd graph during calibration.

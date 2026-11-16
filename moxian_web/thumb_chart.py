@@ -8,7 +8,7 @@ import json
 import numpy as np
 import torch
 from scipy.spatial.transform import Rotation
-from .card_math import exp_so3
+from retarget.baseline.card.math import exp_so3
 from scripts.calibrate_wuji_mano import CHAINS
 
 SUFFIXES=('cmc_abduction','cmc_flexion','cmc_opposition','mcp_abduction','mcp_flexion','ip_flexion')

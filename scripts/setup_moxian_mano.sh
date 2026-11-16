@@ -4,12 +4,15 @@ project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$project_root"
 mano_python="${MOXIAN_MANO_PYTHON:-$project_root/.venv-contact/bin/python}"
 if [[ ! -x "$mano_python" ]]; then
-  mano_python="$project_root/.venv-moxian-mano/bin/python"
-  if [[ ! -x "$mano_python" ]]; then python3 -m venv "$project_root/.venv-moxian-mano"; fi
-  "$mano_python" -m pip install -r requirements-moxian-mano.txt
+  if [[ -n "${MOXIAN_MANO_PYTHON:-}" ]]; then
+    echo 'MOXIAN_MANO_PYTHON 指定的解释器不存在。' >&2
+    exit 1
+  fi
+  "${MOXIAN_COMPUTE_PYTHON:-python3.11}" -m venv "$project_root/.venv-contact"
+  "$mano_python" -m pip install -r requirements.txt
 fi
 if ! "$mano_python" -c 'import nlopt; from robokit.helpers.hand_retargeting import HandRetargeterOnline' >/dev/null 2>&1; then
-  "$mano_python" -m pip install -r requirements-moxian-mano.txt
+  "$mano_python" -m pip install -r requirements.txt
 fi
 "$mano_python" - <<'PY'
 import os

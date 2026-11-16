@@ -192,6 +192,7 @@ class HandModelBridge(SkeletonBridge):
         from .training_trace import TrainingTrace
         self.training_trace=TrainingTrace()
         self.training_history={}
+        self.frame_observer=None
 
     def start(self,serial,side="left",surface_backend=None):
         from .hand_side import check_side
@@ -280,6 +281,17 @@ class HandModelBridge(SkeletonBridge):
                             if packed is not None:self.mesh_payload=packed;self.mesh_frames.append((m['mesh_frame']['sequence'],packed));self.pose_at=time.monotonic()
                             if 'vertices_m' in m:self.pose_at=time.monotonic()
                             self.state.update({k:v for k,v in m.items() if k!='type'})
+                        if packed is not None and self.frame_observer:
+                            try:
+                                joints=list(points)[nv*3:]
+                                joints=[joints[i:i+3] for i in range(0,len(joints),3)]
+                                observed=self.frame_observer(dict(self.state),self.topology,joints,self.serial)
+                                if isinstance(observed,dict):
+                                    with self.lock:
+                                        if self.state.get('timestamp_ms')==m.get('timestamp_ms'):self.state['cart_hull']=observed
+                            except Exception:
+                                # Recording is isolated from the hand/serial owner.
+                                pass
         except Exception as exc:
             if generation==self.generation:
                 with self.lock:self.state.update(status='error',error=str(exc))

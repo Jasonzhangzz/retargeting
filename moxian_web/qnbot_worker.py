@@ -329,6 +329,7 @@ def main():
                     baseline=None;preview=None
                 elif action=='apply':
                     if not candidate or not candidate['report'].get('accepted') or not candidate['report'].get('validation_complete'):raise ValueError('候选尚未完成原生标定与结果检查')
+                    if not candidate.get('source_ik_initialization'):raise ValueError('候选缺少源IK分支初值，请重新执行六动作拟合')
                     if candidate['report'].get('fit_revision')!=WUJI_FIT_REVISION:raise ValueError('目标函数已更新，请重新执行Wuji原生标定')
                     check(candidate)
                     if (native/'current.json').exists():save(native/'previous.json',json.loads((native/'current.json').read_text()))
@@ -420,6 +421,8 @@ def main():
             emit(dict(type='frame',status='preview' if preview else 'calibrated' if profile else 'default',ready=True,error=None,surface_backend='qnbot',runtime_backend='wuji_native21_qnbot_display_v1' if runtime.wuji else REVISION,
                 hand_side=args.side,coordinate_frame='wrist_local',timestamp_ms=frame['timestamp_ms'],skeleton_timestamp_ms=frame['skeleton']['timestamp_ms'],geometry_version=geometry_version,binding_version=model.binding_hash,
                 source_contact=frame.get('contact'),tactile_timestamp_ms=frame.get('tactile_timestamp_ms'),
+                calibration_fingerprint=frame.get('calibration_fingerprint'),skeleton_runtime_revision=frame.get('skeleton_runtime_revision'),
+                source_joint_positions_rad=q[0].cpu().tolist(),
                 mesh_frame=dict(sequence=sequence,vertex_count=len(vertices),joint_count=len(joints)),mesh_f32_b64=base64.b64encode(payload).decode(),
                 tracking_source='wuji_sdk_native21' if runtime.wuji else frame['skeleton'].get('ik_solver',QP_REVISION) if runtime.model_hash else 'qnbot_native25_fixed_forward',model_hash=runtime.model_hash,model_implementation='Wuji native21 FK → Qnbot display LBS' if runtime.wuji else 'Qnbot SKN + bone-length-driven skin',calibrated=bool(profile and preview is None),preview=preview is not None,
                 sensor_positions_m=pred[0].cpu().tolist(),tip_positions_m=j[0,model.tip_bodies].cpu().tolist(),root_rotation=np.eye(3).tolist(),

@@ -39,6 +39,16 @@ function view(){
  return {update,run:source=>vm.runInContext(source,context)};
 }
 
+test('GeoRT labels neural inference and hides unknown tactile overlays',()=>{
+ const v=view();
+ v.run("model.solver_backend='geort';model.algorithm='geort_official_v1';version=viewKey({...model,mapping_version:'mapping',geometry_version:'geometry',source_binding_version:'binding'});");
+ const shown=v.update({solver_backend:'geort',algorithm:'geort_official_v1',status:'ready',contact_ready:false,
+   model_id:'trained-model',quality:{processing_ms:1.2},playback:{active:true}});
+ assert.ok(shown.mano&&shown.robot);assert.match(shown.status,/GeoRT.*trained-model.*动作回放/);
+ assert.match(shown.rightLabel,/GeoRT/);assert.match(shown.identity,/录制回放/);
+ assert.match(shown.errorText,/未进行接触或碰撞约束优化/);
+});
+
 test('polling a slow solve retains paired geometry without redundant rebuilds',()=>{
  const v=view(),first=v.update();assert.ok(first.mano&&first.robot&&first.anchor);
  for(let i=0;i<10;i++){
@@ -46,6 +56,18 @@ test('polling a slow solve retains paired geometry without redundant rebuilds',(
   assert.equal(next.meshUpdates,first.meshUpdates);assert.equal(next.renders,first.renders);
  }
  assert.ok(v.update({timestamp_ms:2000}).meshUpdates>first.meshUpdates);
+});
+
+test('constrained GeoRT labels survive repeated polling of a paused frame',()=>{
+ const v=view();
+ v.run("model.solver_backend='geort';model.algorithm='geort_contact_v1';version=viewKey({...model,mapping_version:'mapping',geometry_version:'geometry',source_binding_version:'binding'});");
+ const frame={solver_backend:'geort',algorithm:'geort_contact_v1',status:'ready',contact_ready:false,model_id:'current',playback:{active:true}};
+ const first=v.update(frame);
+ assert.match(first.errorText,/Glove反伸限位/);assert.match(first.rightLabel,/接触约束/);
+ for(let i=0;i<3;i++){
+  const next=v.update(frame);assert.match(next.errorText,/Glove反伸限位/);assert.match(next.status,/GeoRT/);
+  assert.equal(next.meshUpdates,first.meshUpdates);
+ }
 });
 
 test('invalid correspondence preserves measured source touch and reports recovery truthfully',()=>{
@@ -160,4 +182,26 @@ test('SLSQP status and semantic graph use the supplied edges and clear stale ove
  assert.deepEqual(Array.from(first.graph),[true,true]);
  const stale=v.update({ready:false,display_available:false,contact_ready:false});
  assert.deepEqual(Array.from(stale.graph),[false,false]);
+});
+
+test('CART labels the independent contact network and updates both rigid hull views',()=>{
+ const v=view();
+ v.run("model.solver_backend='cart';model.algorithm='cart_contact_v2';version=viewKey({...model,mapping_version:'mapping',geometry_version:'geometry',source_binding_version:'binding'});scenes=[{},{}];window.cartOverlaySeen=[];window.updateCartHullOverlay=(scene,hull)=>window.cartOverlaySeen.push({scene:scenes.indexOf(scene),id:hull?.id});");
+ const shown=v.update({solver_backend:'cart',algorithm:'cart_contact_v2',status:'ready',contact_ready:false,
+  model_id:'cart-model',quality:{processing_ms:40},cart_hull:{id:'source'},cart_robot_hull:{id:'robot'}});
+ assert.match(shown.status,/CART.*cart-model/);assert.match(shown.rightLabel,/CART/);
+ assert.match(shown.errorText,/接触损失训练/);
+ assert.equal(v.run('window.cartOverlaySeen.map(x=>x.id).join(",")'),'source,robot');
+});
+
+test('wuji-retargeting shows the calibrated skeleton input and hides contact overlays',()=>{
+ const v=view();
+ v.run("model.solver_backend='wuji-retargeting';model.algorithm='wuji_retargeting_moxian_skeleton_v2';version=viewKey({...model,mapping_version:'mapping',geometry_version:'geometry',source_binding_version:'binding'});");
+ const shown=v.update({solver_backend:'wuji-retargeting',algorithm:'wuji_retargeting_moxian_skeleton_v2',
+  solver:{first:false,frames_computed:3},quality:{processing_ms:60,output_hz:16},contact_ready:false});
+ assert.ok(shown.mano&&shown.robot);assert.match(shown.rightLabel,/wuji-retargeting/);
+ assert.match(shown.status,/wuji-retargeting.*60.0 ms/);
+ assert.match(shown.errorText,/已标定 Moxian 骨架.*原版 Wuji2.*低通/);
+ assert.doesNotMatch(shown.status,/CEM|1024/);assert.deepEqual(Array.from(shown.graph),[false,false]);
+
 });

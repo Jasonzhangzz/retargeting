@@ -11,7 +11,7 @@ from scipy.spatial.transform import Rotation
 from .qnbot_surface import FINGERS, normals
 from .contact import PATCH_IDS
 from .calibration_targets import target
-from .card_math import log_so3
+from retarget.baseline.card.math import log_so3
 
 PARAMETER_REVISION = 'qnbot_lsq_coordinates_v1'
 STAGES = ('extrinsics', 'dimensions', 'kinematics', 'tactile', 'surface')

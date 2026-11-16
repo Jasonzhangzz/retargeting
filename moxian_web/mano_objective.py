@@ -15,7 +15,7 @@ import numpy as np
 import torch
 from scipy.spatial.transform import Rotation
 
-from .card_math import exp_so3, log_so3
+from retarget.baseline.card.math import exp_so3, log_so3
 from .contact import FINGERS
 from .hand_model import MANO_SOLVER_REVISION
 from .mano_collision import SurfaceCollision, collision_residual, HARD_PENETRATION_M

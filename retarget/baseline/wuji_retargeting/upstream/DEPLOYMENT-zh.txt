@@ -1,0 +1,56 @@
+Frank 独立 Python 手部转换项目
+================================
+
+目录：/mnt/cpfs/zbl-cpfs-new/USERS/frank/code/emf_wuji_retarget
+环境：conda activate retarget
+或直接使用 /mnt/cpfs/zbl-cpfs-new/USERS/frank/miniconda3/envs/retarget/bin/python
+
+主要文件
+  run_emf_retarget.py              完整 episode 转换入口
+  compare_ego_retarget.py          调用当前 ego_fast_retarget 实际代码进行对比
+  emf_retarget/episode.py          H5读取、连续处理、相机时间线对齐、NPZ保存
+  emf_retarget/pipeline.py         EMF→人手IK/FK→Wuji1/Wuji2统一状态管理
+  human_ik_reference/solver.py     人手IK实现
+  retarget_reference/session.py   Wuji机器人手优化、热启动、滤波实现
+  requirements-frank.txt          验证环境依赖
+
+运行（EP 替换为 episode 目录；输出目录必须尚不存在）
+  python run_emf_retarget.py --episode "$EP" --models wuji1 wuji2 --output results/my_episode
+  python compare_ego_retarget.py --episode "$EP" --ego-project ../ego_fast_retarget --output validation/my_comparison
+  python -m unittest discover -s tests -p 'test_*.py' -v
+
+run_emf_retarget.py 默认使用随包提供的 CQQ 左右人手 URDF；可用 --left-urdf / --right-urdf 指定。
+不依赖原项目与 wuji_sdk；入口明确禁止导入 SDK。比较脚本仅在独立进程完成后导入 SDK 基准。
+compare_ego_retarget.py 默认使用 ego_fast_retarget/hand_models/cqq 下的模型，给两边同一份模型文件。
+比较直接调用该项目 utils/wuji_retarget/emf_offline.py 的 compute_episode。
+本次对应当前配置 retarget_weight=normal，glove_emf_rx_corrections=null。
+Wuji1 是当前 ex001_wuji 配置；Wuji2 是同一处理入口的 hand2 模式追加验证。
+比较脚本不会自动应用 batch YAML 中的其他策略；若权重/校正配置改变，需要扩展后重新验证。
+
+输入
+  rd001.wuji_offline_h5，左右手独立连续EMF流，位置米，四元数XYZW，五指顺序拇指到小指。
+  这里的 EMF 是已解码的5个接收器位姿，不是原始电磁场ADC数据。
+  必须为 l_hand_emf_tx/r_hand_emf_tx 局部坐标系。
+  action_timestamp_ns 必须有序；source_timestamp_ns 必须严格递增。
+
+输出
+  native_all.npz：左右人手21自由度q、21点骨架、指尖、Wuji1/Wuji2各20维q及完整时间戳。
+  wuji1_native.npz / wuji2_native.npz：按原项目手部字段命名的原生EMF结果。
+  wuji1_camera.npz / wuji2_camera.npz：按相机帧匹配的结果，wuji_hand_q为右20维+左20维。
+  manifest.json：输入和模型哈希、帧数、相机匹配详情。
+  所有关节角单位rad；坐标位置单位m；*_source_timestamp_ns和camera_timestamp_ns保留完整纳秒。
+  *_urdf_joint_names记录原模型名称；*_joint_names采用项目发布的对应关节命名。
+
+验证结果位于 validation/full_episode_20261021/comparison.json。
+独立输出在 reference/，当前原项目输出在 ego_baseline/，均保存原生与相机两条时间线。
+report中包括最大/RMSE/P95误差、每个关节误差、首个差异行、float32逐位一致帧数。
+时间戳、帧索引、关节顺序单独精确比较，旋转误差处理四元数q/-q等价性。
+
+范围
+  新目录独立部署，原ego_fast_retarget源码及原输出目录不被改动。
+  连续处理整条EMF流，左右手各保留状态；无片段重置或相机频率重新求解。
+  相机对齐：优先精确payload；否则最近action时间，限一个EMF周期，等距选较早帧。
+  不包含手臂/全身IK、世界坐标轨迹、tips二次优化、20FPS重定时、起始插值段和硬件控制。
+  不包含SN标定自动发现、RX额外校正文件、原始电磁场解码、SDK硬件/订阅API。
+  下游整机回放前仍须保留原项目的连续丢帧检查；本入口负责记录丢帧信息，不执行整机安全策略。
+  当前验证只覆盖报告所列episode、SDK和依赖版本；不能据此断言所有输入完全等价。

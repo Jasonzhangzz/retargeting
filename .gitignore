@@ -6,7 +6,6 @@ __pycache__/
 .venv/
 .venv-*/
 output/
-results/
 build/
 dist/
 *.egg-info/
@@ -29,3 +28,6 @@ MUJOCO_LOG.TXT
 /MoxianEMF-Windows-*/
 
 /third_party/robokit/src/*.egg-info/
+
+!/data/datasets/
+/moxian_web/vendor/

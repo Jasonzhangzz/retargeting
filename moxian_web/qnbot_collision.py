@@ -54,7 +54,7 @@ class QnbotCollision:
 
     @torch.no_grad()
     @serialized
-    def query(self,vertices):
+    def query(self,vertices,part_allowed=None):
         wp.to_torch(self.vertex_buffer).copy_(vertices.detach())
         for mesh in self.meshes:mesh.refit()
         for solid,buf,(_,_,loops) in zip(self.solids,self.buffers,self.closed):
@@ -68,6 +68,14 @@ class QnbotCollision:
         # An incident triangle cannot be an independent self-collision witness.
         near=(self.faces_tensor(vertices.device)[target][...,None]==self.source[:,None,None,:]).any(-1).any(-1)
         valid=(face>=0)&~near&torch.isfinite(distance)
+        part_depths=None
+        if part_allowed is not None:
+            valid=valid&part_allowed[self.source_part_t[:,None],torch.arange(20,device=vertices.device)[None]]
+            # Diagnostics need every finger-pair maximum, independent of the
+            # bounded witness list used by optimization below.
+            part_depths=torch.zeros((20,20),device=vertices.device)
+            part_depths.scatter_reduce_(0,self.source_part_t[:,None].expand_as(distance),
+                torch.where(valid,(-distance).clamp_min(0)*1000,torch.zeros_like(distance)),reduce='amax',include_self=True)
         chosen=(valid&(distance<.001)).nonzero()
         if len(chosen)>8192:
             ids=torch.topk(torch.where(valid,distance,torch.full_like(distance,1.)).flatten(),8192,largest=False).indices
@@ -76,7 +84,7 @@ class QnbotCollision:
         uv=wp.to_torch(self.bary)[a,b].clone();signed=distance[a,b].clone()
         return dict(source=self.source[a],source_bc=self.bc[a],source_part=self.source_part_t[a],target_part=b,target=self.faces_tensor(vertices.device)[target[a,b]],target_bc=torch.stack((uv[:,0],uv[:,1],1-uv.sum(-1)),1),
                     sign=torch.where(signed<0,-torch.ones_like(signed),torch.ones_like(signed)),max_penetration_mm=float(torch.where(valid,(-distance).clamp_min(0),torch.zeros_like(distance)).max())*1000,
-                    samples=len(points),query='qnbot_original_triangles_vertices_and_face_centroids' if self.dense else 'qnbot_original_triangles_stratified_witnesses')
+                    samples=len(points),part_depths_mm=part_depths,query='qnbot_original_triangles_vertices_and_face_centroids' if self.dense else 'qnbot_original_triangles_stratified_witnesses')
 
     def faces_tensor(self,device):return self.tf
 

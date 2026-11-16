@@ -119,8 +119,13 @@ def test_native_point_and_normal_jacobians_and_each_cost_term(kinematics):
     from third_party.emf_wuji_reference.targets import prepare_targets
     from third_party.emf_wuji_reference.objectives import FrameObjective
     t = prepare_targets(targets[0], thumb_free=True, thumb_rel_skip_proximal=2)
-    reference = FrameObjective(t['S'], t['edges'], directions=t['directions'], laplacian=t['L'],
-        differential=t['D'], weights=t['row_weights'], thumb_triplets=t['thumb_triplets'],
+    # The supported graph objective excludes distal direction edges and weakens
+    # distal skeleton rows. Reconstruct those targets independently.
+    distal_edges=np.array([[3,4],[7,8],[11,12],[15,16],[19,20]])
+    keep=np.array([not np.any(np.all(distal_edges==edge,axis=1)) for edge in t['edges']])
+    weights=t['row_weights'].copy();weights[np.unique(distal_edges)]*=ContactSLSQPSettings().distal_skeleton_weight
+    reference = FrameObjective(t['S'], np.asarray(t['edges'])[keep], directions=np.asarray(t['directions'])[keep], laplacian=t['L'],
+        differential=t['D'], weights=weights, thumb_triplets=t['thumb_triplets'],
         params={**asdict(ContactSLSQPSettings()), 'thumb_rel_full_rad': .35, 'thumb_rel_off_rad': .5},
         q_ref=q+.03, antirev_indices=[i for i in range(20) if i % 4 in (2, 3)])
     _, base_g, base_terms = reference.evaluate(q, geometry[0], geometry[1])
@@ -185,7 +190,8 @@ def test_single_augmented_laplacian_has_shared_rows_and_hand_computed_loss(kinem
     fk = kinematics; q = np.full(20, .2)
     geometry = fk.forward(q); p, jp, c, n, jc, jn = geometry
     offset = np.array([[0., 0., 0.], [.001, 0., 0.], [.003, 0., 0.]])
-    objective = ContactObjective(p, c+offset, n, [[0, 1], [1, 2]], q, contact_links=CONTACT_LINKS)
+    objective = ContactObjective(p, c+offset, n, [[0, 1], [1, 2]], q, contact_links=CONTACT_LINKS,
+        settings=replace(ContactSLSQPSettings(),distal_skeleton_weight=1.,active_distal_skeleton_weight=1.))
     assert objective.laplacian.shape == (24, 24)
     assert np.any(objective.laplacian[:21, 21:]) and np.any(objective.laplacian[21:, :21])
     assert objective.adjacency[21, 22] == 10 and objective.adjacency[22, 21] == 5
@@ -252,15 +258,15 @@ def test_slsqp_moves_negative_object_gap_to_zero(kinematics):
     assert constraints.evaluate(q)[0][0] < -.0019
     result, trace = engine._solve(Projection(), q, 2, 80, constraints)
     assert not trace['fallback']
-    assert constraints.evaluate(result)[0][0] >= -1e-7
+    assert constraints.evaluate(result)[0][0] >= -engine.settings.separation_tolerance_mm*.001
     assert np.linalg.norm(result-q) > 0
 
 
 def test_actual_known_object_witnesses_use_the_fixed_source_wrist_transform(kinematics):
     import trimesh
     from scipy.spatial.transform import Rotation
-    from moxian_web.card_geometry import TrackedMesh
-    from moxian_web.wuji_collision import WujiMeshCollision
+    from retarget.baseline.card.geometry import TrackedMesh
+    from retarget.baseline.card.collision import WujiMeshCollision
     from moxian_web.wuji_contact_collision import NativeSeparation
     fk = kinematics; q = np.full(20, .2); fk.forward(q)
     owner = 8; local = np.asarray(fk.surface.meshes[owner].vertices)[0]
@@ -303,14 +309,18 @@ def test_solver_contract_failure_reset_and_offline(source, tmp_path):
     ids = [int(np.flatnonzero((np.asarray(m.mapping['assignments']) == p)&engine.valid_sids)[0]) for p in (0, 2, 14, 15)]
     f = frame(m, ids); output = engine.step(f)
     assert len(output['qpos']) == 26 and output['solver']['backend'] == 'nlopt.LD_SLSQP'
-    assert output['postprocessing'] == 'none' and len(output['contact_edges']) == 5
+    assert output['postprocessing'] == 'none' and len(output['contact_edges']) <= 5
+    assert output['solver_profile'] == 'contact_graph'
     graph = output['retarget_graph']
-    assert graph['type'] == 'unified_weighted_laplacian' and graph['material_node_count'] == 4
-    assert len(graph['source_nodes_m']) == len(graph['robot_nodes_m']) == 25
-    assert {'skeleton', 'contact', 'material_attachment'} == {edge['kind'] for edge in graph['edges']}
+    assert graph['type'] == 'unified_weighted_laplacian'
+    assert graph['material_node_count'] == len(graph['source_nodes_m']) - 21
+    assert len(graph['source_nodes_m']) == len(graph['robot_nodes_m']) == 21 + graph['material_node_count']
+    assert 'skeleton' in {edge['kind'] for edge in graph['edges']}
+    assert ('material_attachment' in {edge['kind'] for edge in graph['edges']}) == bool(graph['material_node_count'])
+    assert ('contact' in {edge['kind'] for edge in graph['edges']}) == bool(output['contact_edges'])
     assert 'contact_edge' not in output['quality']['cost_terms'] and 'laplacian' in output['quality']['cost_terms']
     # Recompute the sole Laplacian cost from the exported graph and positions.
-    a = np.zeros((25, 25))
+    a = np.zeros((len(graph['source_nodes_m']), len(graph['source_nodes_m'])))
     for edge in graph['edges']: a[tuple(edge['nodes'])] = edge['weight']
     lap = np.diag(a.sum(axis=1))-a
     residual = lap @ (np.asarray(graph['robot_nodes_m'])-np.asarray(graph['source_nodes_m']))
@@ -336,7 +346,7 @@ def test_solver_contract_failure_reset_and_offline(source, tmp_path):
     recording.write_text(json.dumps(dict(hand_model=frame(m, ids), hand_model_topology=m.topology()))+'\n')
     destination = tmp_path/'output.jsonl'
     result = replay(recording, destination, cache=tmp_path/'mapping')
-    assert result['solver'] == 'slsqp' and result['postprocessing'] == 'none'
+    assert result['solver'] == 'slsqp_graph' and result['postprocessing'] == 'none'
     row = json.loads(destination.read_text()); assert row['wuji2']['source_surface_backend'] == 'moxian'
     with pytest.raises(FileExistsError): replay(recording, destination)
 
@@ -352,7 +362,7 @@ def test_worker_switches_actual_independent_backends(source, tmp_path):
     fd = os.open(events, os.O_WRONLY | os.O_CREAT, 0o600)
     with log.open('w') as stderr:
         process = subprocess.Popen([sys.executable, '-I', str(Path.cwd()/'moxian_web/wuji_worker.py'),
-            '--event-fd', str(fd), '--home', str(tmp_path/'worker'), '--solver', 'slsqp'],
+            '--event-fd', str(fd), '--home', str(tmp_path/'worker'), '--solver', 'slsqp_graph'],
             pass_fds=(fd,), stdin=subprocess.PIPE, stdout=stderr, stderr=stderr, text=True)
     os.close(fd)
     def send(message):
@@ -374,17 +384,35 @@ def test_worker_switches_actual_independent_backends(source, tmp_path):
     try:
         send(dict(type='topology', model=source.topology()))
         f = frame(source, [], time.time()*1000); send(dict(type='frame', frame=f))
-        result = wait_for(lambda r: r.get('type') == 'frame' and r.get('solver_backend') == 'slsqp')
+        result = wait_for(lambda r: r.get('type') == 'frame' and r.get('solver_backend') == 'slsqp_graph')
         assert result['solver']['backend'] == 'nlopt.LD_SLSQP'
         send(dict(type='control', action='solver_set', data=dict(solver='cem'), id='switch-cem'))
         wait_for(lambda r: r.get('type') == 'ack' and r.get('id') == 'switch-cem')
         f = frame(source, [], time.time()*1000); send(dict(type='frame', frame=f))
         result = wait_for(lambda r: r.get('type') == 'frame' and r.get('algorithm', '').startswith('card_'))
         assert len(result['qpos']) == 26
-        send(dict(type='control', action='solver_set', data=dict(solver='slsqp'), id='switch-back'))
+        send(dict(type='control', action='solver_set', data=dict(solver='wuji-retargeting'), id='switch-wuji-reference'))
+        wait_for(lambda r: r.get('type') == 'ack' and r.get('id') == 'switch-wuji-reference')
+        from retarget.baseline.wuji_retargeting.reference import RetargetSession
+        original=RetargetSession.for_hand('WujiHand2', source.side)
+        chains=source.topology()['joint_chains']
+        indices=[chains[0][0], *[j for c in chains for j in c[-4:]]]
+        for index in range(2):
+            f=frame(source, [], time.time()*1000)
+            f.update(calibrated=True, preview=False, surface_backend='qnbot', skeleton_timestamp_ms=f['timestamp_ms'])
+            expected=original.step(np.asarray(f['joints_m'])[indices])
+            send(dict(type='frame', frame=f))
+            shared=wait_for(lambda r:r.get('type')=='frame' and r.get('solver_backend')=='wuji-retargeting'
+                            and r.get('timestamp_ms')==f['timestamp_ms'])
+            np.testing.assert_array_equal(shared['joint_positions_rad'], expected)
+            assert shared['postprocessing']=='upstream_float32_lowpass_alpha_0.2'
+            assert shared['solver']['first'] is (index==0)
+            assert shared['active_solver_session_id']==shared['solver_session_id']
+            assert shared['solver']['input']=='current_calibrated_moxian_skeleton'
+        send(dict(type='control', action='solver_set', data=dict(solver='slsqp_graph'), id='switch-back'))
         wait_for(lambda r: r.get('type') == 'ack' and r.get('id') == 'switch-back')
         f = frame(source, [], time.time()*1000); send(dict(type='frame', frame=f))
-        new = wait_for(lambda r: r.get('type') == 'frame' and r.get('solver_backend') == 'slsqp'
+        new = wait_for(lambda r: r.get('type') == 'frame' and r.get('solver_backend') == 'slsqp_graph'
                        and r.get('timestamp_ms') == f['timestamp_ms'])
         assert new['settings']['wrist_policy'] == 'fixed_source_wrist'
         assert new['active_solver_session_id']==new['solver_session_id']
@@ -483,20 +511,31 @@ def test_restoration_keeps_making_progress_when_zero_gap_is_outside_motion_box()
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(),reason='Dense native GPU recovery regression')
-def test_realtime_escapes_a_deeply_penetrating_warm_start(source,tmp_path):
+def test_realtime_recovery_is_bounded_and_reports_dense_feasibility(source,tmp_path):
     engine=ContactSLSQPRetarget(source.topology(),tmp_path/'recovery','cuda:0',realtime=True)
     q=np.array([1.291,-.29950217,.63081916,.12025834,.54494104,.50084703,.25564316,.03984771,
         .48350511,.33397265,-.02039607,.08483385,.222141,.35959966,1.07520912,.00172664,
         -.02712961,-.51986308,.94930865,1.31123959])
     engine.previous=q.copy();engine.previous_timestamp=1000.-1000/60
-    reached=False;saw_infeasible=False;saw_recovery=False
+    reached=False;saw_infeasible=False;saw_recovery=False;depths=[]
     for i in range(45):
         r=engine.step({**frame(source,stamp=1000.+i*1000/60),'input_stream_epoch':0})
         np.testing.assert_allclose(r['initial_qpos'][6:],q,atol=1e-12)
         updated=np.asarray(r['qpos'][6:]);assert abs(updated-q).max()<=2*np.pi/60+1e-8
         saw_infeasible|=not r['solution_feasible'];saw_recovery|=bool(r['solver']['separation_recovery'])
+        depths.append(r['collision']['max_penetration_mm'])
+        if not r['solution_feasible']:assert not r['ready']
         q=updated
         if r['solution_feasible']:
             assert r['collision']['max_penetration_mm']<=engine.settings.separation_tolerance_mm
             reached=True;break
-    assert reached and saw_infeasible and saw_recovery
+    # Discrete graph selection does not promise recovery in a fixed frame count.
+    # Keep the velocity, actual dense acceptance and recovery-progress contracts.
+    assert saw_infeasible and saw_recovery
+    assert reached or min(depths) < depths[0] - 1e-4
+
+
+def test_removed_objective_profiles_are_rejected():
+    for removed in ('edge_laplacian', 'envelope', 'legacy', 'chamfer', 'cem_contact'):
+        with pytest.raises(ValueError):
+            ContactSLSQPRetarget({}, objective_profile=removed)

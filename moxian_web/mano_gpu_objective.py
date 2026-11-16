@@ -7,7 +7,7 @@ from .mano_objective import ManoObjective
 from .mano_gpu_collision import BatchedSurfaceCollision
 from .motion_capture import confirmed_touch,bilateral
 from .contact import PATCH_IDS,FINGERS
-from .card_geometry import contact_weights
+from retarget.baseline.card.geometry import contact_weights
 from .calibration_targets import pinch_patches
 from scripts.calibrate_wuji_mano import TIPS,CHAINS
 from .mano_contact_loss import vertex_normals,normal_residual,normal_error_deg
@@ -44,7 +44,7 @@ class GPUManoObjective(ManoObjective):
         if not self.training:self.weights=self.t(self.mask_np)/self.t(self.mask_np).sum(1,keepdim=True).clamp_min(1)/len(self.rows)
 
     def unpack(self,x):
-        from .card_math import exp_so3
+        from retarget.baseline.card.math import exp_so3
         if self.shared:
             beta=x[:10];mp=self.mp0+.01*x[10:25].reshape(5,3)
             mr=self.mr0@exp_so3(x[25:40].reshape(5,3))

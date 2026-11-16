@@ -1,3 +1,5 @@
+> 历史实验记录：文中部分脚本已于2026-11-16清理；当前基线入口见 [baseline说明](../retarget/baseline/README.md)。
+
 # Contact-space CEM
 
 `solver.type: contact_cem` selects an explicit `ContactProblem`, rather than
@@ -21,9 +23,8 @@ MuJoCo 4: this pinned Warp version does not implement speculative contacts.
 
 ```bash
 uv venv --python 3.11 .venv-contact
-uv pip install --python .venv-contact/bin/python -r requirements-contact.txt
-uv venv --python 3.11 .venv-contact4
-uv pip install --python .venv-contact4/bin/python -r requirements-contact4.txt
+uv pip install --python .venv-contact/bin/python -r requirements.txt
+bash scripts/setup_contact.sh
 
 CUDA_VISIBLE_DEVICES=0 uv run --no-project --python .venv-contact/bin/python \
   python scripts/run_contact_benchmark.py --task sharpa_pen \

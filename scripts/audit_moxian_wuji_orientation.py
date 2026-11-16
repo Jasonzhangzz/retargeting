@@ -269,7 +269,7 @@ def source_sensor_oracles(replay,pair):
 
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--output',type=Path,required=True);ap.add_argument('--frames',type=int,default=15)
-    ap.add_argument('--source-model',type=Path,default=Path('results/moxian_wuji_contact_laplacian_20261112_final/source-model.json'))
+    ap.add_argument('--source-model',type=Path,default=Path('output/reports/moxian_wuji_contact_laplacian_20261112_final/source-model.json'))
     ap.add_argument('--capture',type=Path,default=Path('output/moxian/hand_model/348640923d9e2f3f/qnbot/raw-captures/glove_20261112T151631_867012Z.jsonl'))
     a=ap.parse_args();a.output.mkdir(parents=True,exist_ok=True);result_path=a.output/'analysis.json'
     if result_path.exists():raise FileExistsError(result_path)

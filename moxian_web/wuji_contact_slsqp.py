@@ -16,7 +16,7 @@ import nlopt
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from .wuji_contact_cost import (ALGORITHM, LEGACY_ALGORITHM, CHAMFER_ALGORITHM, CEM_CONTACT_ALGORITHM, EDGE_LAPLACIAN_ALGORITHM, CONTACT_GRAPH_ALGORITHM, ContactObjective, ContactSLSQPSettings,
+from .wuji_contact_cost import (CONTACT_GRAPH_ALGORITHM, ContactObjective, ContactSLSQPSettings,
                                semantic_joints, distal_skeleton_endpoints,
                                JointProjectionObjective, SeparationRestorationObjective)
 from .wuji_contact_source import MoxianContactSource, closest_triangle, robot_mapping, unit
@@ -156,17 +156,14 @@ class CombinedContactConstraints:
 
 class ContactSLSQPRetarget:
     def __init__(self, topology, cache=None, device='cpu', settings=None, rebuild=False, object_sdf=None,
-                 realtime=False, objective_profile='envelope'):
+                 realtime=False, objective_profile='contact_graph'):
         self.settings = settings or ContactSLSQPSettings(); self.device = str(device)
         self.realtime=bool(realtime)
-        if objective_profile not in ('envelope', 'legacy', 'chamfer', 'cem_contact', 'edge_laplacian', 'contact_graph'):
+        if objective_profile != 'contact_graph':
             raise ValueError('Unknown SLSQP objective profile: '+str(objective_profile))
         self.objective_profile = str(objective_profile)
-        self.algorithm = {'legacy': LEGACY_ALGORITHM, 'chamfer': CHAMFER_ALGORITHM,
-                          'cem_contact': CEM_CONTACT_ALGORITHM,
-                          'edge_laplacian': EDGE_LAPLACIAN_ALGORITHM,
-                          'contact_graph': CONTACT_GRAPH_ALGORITHM}.get(self.objective_profile, ALGORITHM)
-        self.runtime_settings={**self.settings.payload(), 'execution_profile':'realtime_stream' if self.realtime else 'offline_reference',
+        self.algorithm = CONTACT_GRAPH_ALGORITHM
+        self.runtime_settings={**self.settings.payload(), 'algorithm':self.algorithm, 'execution_profile':'realtime_stream' if self.realtime else 'offline_reference',
             'objective_profile':self.objective_profile,
             'cost_implementation':'vectorized_reference' if self.realtime else 'pinned_ordered',
             'frame_budget_ms':25 if self.realtime else None,
@@ -175,11 +172,10 @@ class ContactSLSQPRetarget:
             'slsqp_stage_maxtime_ms':12 if self.realtime else None,'first_frame_budget_ms':50 if self.realtime else None,
             'penetration_recovery':'reserved_restoration_and_certified_continuation_v1' if self.realtime else 'zero_gap_projection',
             'recovery_rounds_per_frame':1 if self.realtime else self.settings.separation_rounds}
-        if self.objective_profile == 'contact_graph':
-            self.runtime_settings.update(tactile_objective='discrete_contact_graph_selection',
-                                         graph_selection='warm_start_edge_score_with_hysteresis',
-                                         graph_selection_top_k=int(self.settings.contact_graph_top_k),
-                                         graph_selection_hysteresis=float(self.settings.contact_graph_hysteresis))
+        self.runtime_settings.update(tactile_objective='discrete_contact_graph_selection',
+                                     graph_selection='warm_start_edge_score_with_hysteresis',
+                                     graph_selection_top_k=int(self.settings.contact_graph_top_k),
+                                     graph_selection_hysteresis=float(self.settings.contact_graph_hysteresis))
         self.source = MoxianContactSource(topology); self.source_topology = topology
         self.surface = WujiSurface(); self.model = self.surface.model
         self.mapping = robot_mapping(self.source, self.surface, cache, rebuild,normal_limit_deg=60.)
@@ -194,7 +190,7 @@ class ContactSLSQPRetarget:
         for owner in np.unique(self.owners): self.pads[int(owner)] = self.surface.contact_surface(int(owner))
         self.patch_sample_cache = {}
         # This reusable checker has no dependency on CEM cost or optimization.
-        from .wuji_collision import WujiMeshCollision
+        from retarget.baseline.card.collision import WujiMeshCollision
         self.mesh_collision = WujiMeshCollision(self.surface, self.device)
         self.audit_local = self.mesh_collision.samples[True][0].numpy()
         self.audit_owners = self.mesh_collision.samples[True][1].numpy()
@@ -215,17 +211,15 @@ class ContactSLSQPRetarget:
         self.session_id = uuid.uuid4().hex
 
     def topology(self):
-        legacy = self.objective_profile in ('legacy', 'edge_laplacian', 'contact_graph')
         return {**self.surface.topology(self.mapping), 'algorithm': self.algorithm, 'solver_backend': 'slsqp',
             'topology_version': self.topology_version, 'settings': self.runtime_settings,
             'source_surface': 'moxian_original_skn', 'object_sdf': self.external_sdf.descriptor() if self.external_sdf else None,
             'retarget_graph': dict(type='unified_weighted_laplacian', skeleton_nodes=21,
-                material_attachment='semantic_segment_endpoints_or_palm' if legacy else 'patch_envelope_surface_samples',
-                contact_edge_gain=('discrete_hysteretic_graph_selection' if self.objective_profile == 'contact_graph'
-                                   else 'sqrt_cost_coefficient_ratio' if legacy else 'explicit_length_and_direction'),
-                skeleton_orientation='reference_graph' if legacy else 'weak_gesture_prior_only',
+                material_attachment='semantic_segment_endpoints_or_palm',
+                contact_edge_gain=('discrete_hysteretic_graph_selection'),
+                skeleton_orientation='reference_graph',
                 temporal_regularization='velocity_and_acceleration'),
-            'contact_graph': dict(nodes='one_per_active_sensor_patch', edges=('selected_hysteretic_candidates' if self.objective_profile == 'contact_graph' else 'different_semantic_links_only'),
+            'contact_graph': dict(nodes='one_per_active_sensor_patch', edges=('selected_hysteretic_candidates'),
                                   within_patch_edges=False, within_semantic_link_edges=False, max_nodes=20, max_edges=175,
                                   envelope_policy='local_oriented_box_no_wrist_exclude_rank_lt_2')}
 
@@ -505,7 +499,7 @@ class ContactSLSQPRetarget:
 
     def step(self, frame, contact_enabled=True):
         began = time.perf_counter(); source = self.source.read(frame, contact_enabled,valid_sids=self.valid_sids,
-            build_envelopes=(self.objective_profile not in ('chamfer', 'cem_contact', 'contact_graph'))); stamp = float(frame['timestamp_ms'])
+            build_envelopes=False); stamp = float(frame['timestamp_ms'])
         epoch=frame.get('input_stream_epoch')
         reset_reason=None
         if self.previous_timestamp is not None:
@@ -552,13 +546,12 @@ class ContactSLSQPRetarget:
         warm_stamp=self.previous_timestamp if not first else None
         start = (self.fk.lower+self.fk.upper)*.5 if first else self.previous.copy()
         self.solve_lower=self.fk.lower.copy();self.solve_upper=self.fk.upper.copy()
-        if self.objective_profile == 'contact_graph':
-            # Wuji2's little-finger PIP/DIP axes have a single useful flexion
-            # branch for retargeting.  Keep the alternative negative branch
-            # out of the discrete graph solver; otherwise a contact edge can
-            # be satisfied by folding the distal link through the palm.
-            pinky = np.asarray([18, 19], dtype=np.int64)
-            self.solve_lower[pinky] = np.maximum(self.solve_lower[pinky], self.settings.pinky_distal_positive_lower_rad)
+        # Wuji2's little-finger PIP/DIP axes have a single useful flexion
+        # branch for retargeting.  Keep the alternative negative branch
+        # out of the discrete graph solver; otherwise a contact edge can
+        # be satisfied by folding the distal link through the palm.
+        pinky = np.asarray([18, 19], dtype=np.int64)
+        self.solve_lower[pinky] = np.maximum(self.solve_lower[pinky], self.settings.pinky_distal_positive_lower_rad)
         if self.realtime:
             self.deadline=began+(.050 if first else .025)
             if not first:
@@ -573,164 +566,26 @@ class ContactSLSQPRetarget:
         # one-step seed tells the objective which redundant joint branch is
         # consistent with the glove skeleton.
         gesture_reference = self._gesture_seed(skeleton, start)
-        if first and self.objective_profile != 'legacy':
+        if first:
             start = gesture_reference
         # Select and freeze a discrete contact graph before the continuous
         # objective is constructed.  Nearest-contact topology therefore cannot
         # switch inside an SLSQP line search.
         selected_graph_edges, graph_selection = self._select_contact_graph(
             anchors, source.get('edges', []), contacts, self.fk.forward(start)[2])
-        active_by_patch = {int(a['patch']): a for a in anchors}
-        optimization_anchors = []
-        # Both geometric profiles keep the complete semantic patch graph.  In
-        # direct Chamfer mode active anchors replace their source patch rows,
-        # while inactive rows use all patch taxels with a low background
-        # weight; no inactive finger disappears from the skeleton objective.
-        candidates = () if self.objective_profile == 'contact_graph' else source.get('patch_envelopes', [])
-        for candidate in candidates:
-            patch_id = int(candidate['patch'])
-            anchor = dict(active_by_patch.get(patch_id, candidate))
-            if 'robot_owner' not in anchor:
-                ids = np.asarray(anchor.get('sids', []), dtype=np.int64)
-                if not len(ids):
-                    continue
-                owner_scores = np.bincount(self.owners[ids], minlength=len(self.surface.body_ids))
-                owner = int(np.argmax(owner_scores))
-                anchor['robot_owner'] = owner
-                anchor['robot_link'] = self.model.body(self.surface.body_ids[owner]).name
-            optimization_anchors.append(anchor)
-        envelopes = []; excluded_envelopes = []; patch_samples = []; patch_weights = []; envelope_anchor_indices = []
-        objective_envelopes = []; objective_patch_samples = []; objective_patch_weights = []; objective_anchor_indices = []
-        for anchor_index, anchor in enumerate(optimization_anchors):
-            env = dict(anchor.get('envelope') or {})
-            if self.objective_profile in ('chamfer', 'cem_contact'):
-                ids = np.asarray(anchor.get('sids', []), dtype=np.int64)
-                direct_points = np.asarray(source['taxels'])[ids] if len(ids) else np.empty((0, 3))
-                direct_normals = np.asarray(source['normals'])[ids] if len(ids) else np.empty((0, 3))
-                direct_weights = np.asarray(source['weights']['response'])[ids] if len(ids) else np.empty(0)
-                if self.objective_profile == 'cem_contact':
-                    direct_points = np.asarray(anchor.get('position_m', direct_points.mean(0) if len(direct_points) else [0., 0., 0.]), dtype=np.float64).reshape(1, 3)
-                    direct_normals = np.asarray(anchor.get('direction', [0., 1., 0.]), dtype=np.float64).reshape(1, 3)
-                    direct_weights = np.ones(1, dtype=np.float64)
-                env = dict(points=direct_points.tolist(), normal=unit(direct_normals.mean(0)).tolist()
-                           if len(direct_normals) else anchor.get('direction', [0., 1., 0.]),
-                           point_weights=np.maximum(direct_weights, 0.).tolist(),
-                           witness=np.asarray(anchor.get('position_m', direct_points.mean(0) if len(direct_points) else [0., 0., 0.]), dtype=np.float64).tolist(),
-                           planes=[], valid=bool(len(direct_points)), fallback=('cem_event_witness' if self.objective_profile == 'cem_contact' else 'direct_point_cloud'),
-                           scale=float(max(np.ptp(direct_points, axis=0).max(), .003)) if len(direct_points) else .003)
-            source_points = np.asarray(env.get('points') if env.get('points') is not None
-                                       else [anchor.get('position_m', [0., 0., 0.])], dtype=np.float64)
-            aligned = (source_points - origin) @ rotation
-            source_normal = unit(np.asarray(env.get('normal') if env.get('normal') is not None
-                                             else anchor.get('direction', [0., 1., 0.]), dtype=np.float64) @ rotation)
-            planes = np.asarray(env.get('planes', []), dtype=np.float64).reshape(-1, 4)
-            if len(planes):
-                # p_aligned = (p_world-origin) @ rotation; transform plane
-                # coefficients without introducing an extra wrist variable.
-                planes = np.c_[planes[:, :3] @ rotation.T, planes[:, 3] + planes[:, :3] @ origin]
-            witness_aligned = (np.asarray(env.get('witness'), dtype=np.float64) - origin) @ rotation if env.get('witness') is not None else np.mean(aligned, axis=0)
-            env.update(points=aligned.tolist(), normal=source_normal.tolist(), planes=planes.tolist(),
-                       witness=witness_aligned.tolist(), center=witness_aligned.tolist())
-            # A visibly degenerate finger patch is retained for diagnostics but
-            # excluded from the optimization graph and all edge targets.
-            if not env.get('valid', True):
-                anchor['envelope_excluded'] = True
-                excluded_envelopes.append(dict(patch=anchor.get('patch'), semantic_link=anchor.get('semantic_link'),
-                                               fallback=env.get('fallback'), rank=env.get('rank'), reason='degenerate_local_envelope'))
-                continue
-            envelope_anchor_indices.append(anchor_index)
-            envelopes.append(env)
-            # Background links remain in the graph and keep the fixed Studio
-            # bone-direction prior, but their weak Chamfer term must not spend
-            # the realtime SLSQP budget on a full surface Jacobian set.  A
-            # single deterministic witness is enough until tactile response
-            # promotes the patch to the high-weight contact set.
-            is_active = int(anchor.get('patch', -1)) in active_by_patch
-            sample_count = int(1 if self.objective_profile == 'cem_contact' else self.settings.patch_sample_count if is_active else 1)
-            sample_key = (int(anchor['robot_owner']), str(anchor.get('patch_side', 'front')), sample_count)
-            samples = self.patch_sample_cache.get(sample_key)
-            if samples is None:
-                samples = self.surface.patch_samples(int(anchor['robot_owner']), str(anchor.get('patch_side', 'front')), sample_count)
-                self.patch_sample_cache[sample_key] = samples
-            local_points = np.asarray(samples['points'], dtype=np.float64)
-            local_normals = np.asarray(samples['normals'], dtype=np.float64)
-            if is_active and anchor.get('robot_local_m') is not None:
-                # CEM event costs are defined at a contact witness.  Include
-                # the mapped witness as the first deterministic robot sample
-                # so patch Chamfer cannot satisfy the cost at a distant native
-                # surface point while the reported anchor remains separated.
-                local_points = np.vstack((np.asarray(anchor['robot_local_m'], dtype=np.float64).reshape(1, 3), local_points))[:sample_count]
-                local_normals = np.vstack((np.asarray(anchor.get('robot_local_normal', [0., 1., 0.]), dtype=np.float64).reshape(1, 3), local_normals))[:sample_count]
-            patch_samples.append(dict(owner=int(anchor['robot_owner']), local_points=local_points.tolist(),
-                                      local_normals=local_normals.tolist(), side=samples.get('side', 'front')))
-            response = source['weights']['response'][np.asarray(anchor.get('sids', []), dtype=np.int64)]
-            strength = float(np.mean(response)) if is_active and len(response) else 0.
-            if is_active:
-                tactile_gain = .25 if anchor.get('semantic_link') == 'palm' else 1.
-                patch_weights.append(1. + tactile_gain * self.settings.active_tactile_gain * np.clip(strength, 0., 1.))
-            else:
-                patch_weights.append(self.settings.inactive_patch_weight)
-            if is_active:
-                objective_envelopes.append(env)
-                objective_patch_samples.append(patch_samples[-1])
-                objective_patch_weights.append(patch_weights[-1])
-                objective_anchor_indices.append(anchor_index)
-        edge_targets = []
-        compact_by_patch = {int(optimization_anchors[original]['patch']): compact
-                            for compact, original in enumerate(objective_anchor_indices)}
-        for i, j in np.asarray(source['edges'], dtype=np.int64).reshape(-1, 2):
-            if self.objective_profile == 'cem_contact':
-                continue
-            if int(i) >= len(anchors) or int(j) >= len(anchors): continue
-            pi, pj = int(anchors[int(i)]['patch']), int(anchors[int(j)]['patch'])
-            # Palm tactile activity is retained in the full background graph,
-            # but it is not a finger-to-finger pinch edge.  Including it here
-            # makes the fingers slide toward the palm when a palm taxel fires.
-            if anchors[int(i)].get('semantic_link') == 'palm' or anchors[int(j)].get('semantic_link') == 'palm':
-                continue
-            if pi not in compact_by_patch or pj not in compact_by_patch: continue
-            ci, cj = compact_by_patch[pi], compact_by_patch[pj]
-            vector = np.asarray(objective_envelopes[cj]['center']) - np.asarray(objective_envelopes[ci]['center'])
-            length = float(np.linalg.norm(vector))
-            if length > 1e-8:
-                edge_targets.append(dict(i=ci, j=cj, length=length, direction=(vector / length).tolist()))
-        graph_edges_for_objective = (selected_graph_edges if self.objective_profile == 'contact_graph'
-                                     else np.asarray(source['edges'], dtype=np.int64).reshape(-1, 2))
         contact_gap_edges = np.asarray([
-            (int(i), int(j)) for i, j in graph_edges_for_objective
+            (int(i), int(j)) for i, j in selected_graph_edges
             if int(i) < len(anchors) and int(j) < len(anchors)
             and anchors[int(i)].get('semantic_link') != 'palm'
             and anchors[int(j)].get('semantic_link') != 'palm'
         ], dtype=np.int64).reshape(-1, 2)
-        if self.objective_profile in ('legacy', 'edge_laplacian', 'contact_graph'):
-            # Exact previous objective profile: source skeleton/material graph,
-            # reference direction terms and the historical contact-edge gain.
-            objective = ContactObjective(skeleton, contacts, normals,
-                selected_graph_edges if self.objective_profile == 'contact_graph' else source['edges'], start.copy(),
-                contact_links=[a['semantic_link'] for a in anchors], settings=self.settings, fast=self.realtime,
-                previous_q=(self.previous if self.objective_profile in ('edge_laplacian', 'contact_graph') else None),
-                previous2_q=(self.previous2 if self.objective_profile in ('edge_laplacian', 'contact_graph') else None),
-                configuration_q=gesture_reference,
-                contact_gap_edges=contact_gap_edges,
-                contact_anchor_position_weight=(self.settings.lambda_contact_anchor_position
-                                                 if self.objective_profile == 'contact_graph' else 0.))
-            envelopes = []; patch_samples = []; patch_weights = []; excluded_envelopes = []
-        else:
-            objective = ContactObjective(skeleton, contacts, normals, source['edges'], start.copy(),
-                contact_links=[optimization_anchors[k]['semantic_link'] for k in objective_anchor_indices], settings=self.settings, fast=self.realtime,
-                patch_envelopes=objective_envelopes if (objective_envelopes or self.objective_profile in ('chamfer', 'cem_contact')) else None,
-                patch_samples=objective_patch_samples if (objective_envelopes or self.objective_profile in ('chamfer', 'cem_contact')) else None,
-                edge_targets=edge_targets if (objective_envelopes or self.objective_profile in ('chamfer', 'cem_contact')) else None,
-                patch_weights=objective_patch_weights if (objective_envelopes or self.objective_profile in ('chamfer', 'cem_contact')) else None,
-                previous_q=self.previous, previous2_q=self.previous2,
-                patch_provider=self.fk,
-                active_contact_links=[a['semantic_link'] for a in anchors],
-                include_laplacian=(self.objective_profile == 'chamfer'),
-                contact_only=(self.objective_profile == 'cem_contact'),
-                configuration_q=gesture_reference,
-                contact_gap_edges=contact_gap_edges,
-                contact_anchor_position_weight=(self.settings.lambda_contact_anchor_position
-                                                 if self.objective_profile == 'contact_graph' else 0.))
+        objective = ContactObjective(skeleton, contacts, normals,
+            selected_graph_edges, start.copy(),
+            contact_links=[a['semantic_link'] for a in anchors], settings=self.settings, fast=self.realtime,
+            previous_q=self.previous, previous2_q=self.previous2,
+            configuration_q=gesture_reference, contact_gap_edges=contact_gap_edges,
+            contact_anchor_position_weight=self.settings.lambda_contact_anchor_position)
+        envelopes = []; patch_samples = []; patch_weights = []; excluded_envelopes = []
         constraints=self.separation.refresh(start,rotation,origin,per_pair=1) if self.realtime else None
         initial_constraint_count=0 if constraints is None else len(constraints.a)
         contact_constraints = (ContactGapConstraints(self.fk, contact_gap_edges, self.settings.contact_gap_tolerance_m)
@@ -749,7 +604,7 @@ class ContactSLSQPRetarget:
             stage2=dict(stage=2,skipped=True,reason='penetration_restoration',fallback=False,converged=False)
         else:
             q1, stage1 = self._solve(objective, start, 1, s.first_stage1_maxeval if first else s.later_stage1_maxeval)
-            graph_edge_count = len(selected_graph_edges) if self.objective_profile == 'contact_graph' else len(source['edges'])
+            graph_edge_count = len(selected_graph_edges)
             stage2_budget = s.first_stage2_maxeval if first else s.contact_stage2_maxeval if graph_edge_count else s.later_stage2_maxeval
             q, stage2 = self._solve(objective, q1, 2, stage2_budget, tracking_constraints)
             if (tracking_constraints is not constraints and stage2.get('error') == 'NoFeasibleConstraintIterate'):
@@ -762,10 +617,6 @@ class ContactSLSQPRetarget:
                 relaxed['contact_constraint_relaxed'] = True
                 stage2 = relaxed
         geometry = self.fk.forward(q); _, _, terms = objective.evaluate(q, geometry)
-        if objective.envelope_mode:
-            # Compatibility diagnostic: the former unified Laplacian is no
-            # longer an optimization term; its exported value is explicitly 0.
-            terms.setdefault('laplacian', 0.)
         solved = time.perf_counter(); collision_ok, collision, p, r = self.audit(rotation, origin, frame)
         repair = []; used_current_frame_restart = False
         for iteration in range(1 if self.realtime else s.separation_rounds):
@@ -870,8 +721,6 @@ class ContactSLSQPRetarget:
                 self.fk.forward(q)
                 break
         geometry = self.fk.forward(q); _, _, terms = objective.evaluate(q, geometry)
-        if objective.envelope_mode:
-            terms.setdefault('laplacian', 0.)
         audited = time.perf_counter()
         separated = collision['max_penetration_mm'] <= s.separation_tolerance_mm
         collision.update(separation_target_mm=0., separation_tolerance_mm=s.separation_tolerance_mm,
@@ -923,75 +772,23 @@ class ContactSLSQPRetarget:
         # Keep the old contact-only metric for comparable diagnostics; it is
         # not an additional loss. Optimization uses the single augmented graph.
         contact_adjacency = np.zeros((len(anchors), len(anchors)))
-        reported_graph_edges = (selected_graph_edges if self.objective_profile == 'contact_graph'
-                                else np.asarray(source['edges'], dtype=np.int64).reshape(-1, 2))
+        reported_graph_edges = (selected_graph_edges)
         for i, j in reported_graph_edges: contact_adjacency[i, j] = contact_adjacency[j, i] = 1.
         degree = contact_adjacency.sum(axis=1); active_rows = degree > 0
         contact_laplacian = np.diag(active_rows.astype(float))-contact_adjacency/np.maximum(degree[:, None], 1.)
         laplacian_error = (contact_laplacian @ (geometry[2]-contacts))[active_rows]
         unified_error = objective.residual(geometry)
         unified_rms = float(np.sqrt(np.sum(objective.row_weights[:, None]*unified_error**2)/objective.row_weights.sum())*1000)
-        if objective.envelope_mode:
-            envelope_graph_edges = []
-            objective_to_full = {int(obj): int(full) for obj, full in enumerate(objective_anchor_indices)}
-            for edge in edge_targets:
-                i, j = int(edge['i']), int(edge['j'])
-                if i in objective_to_full and j in objective_to_full:
-                    envelope_graph_edges.append(dict(nodes=[21 + objective_to_full[i], 21 + objective_to_full[j]], weight=float(self.settings.lambda_contact_edge_direction), kind='contact_edge'))
-            all_envelope_source = np.asarray([e['center'] for e in envelopes], dtype=float)
-            patch_geometry = self.fk.patch_geometry(q, patch_samples)
-            all_envelope_robot = np.asarray([g['points'].mean(0) for g in patch_geometry], dtype=float)
-            all_graph_source = np.vstack((objective.source_nodes, all_envelope_source)) @ rotation.T + origin
-            all_graph_robot = np.vstack((geometry[0], all_envelope_robot)) @ rotation.T + origin
-            # Keep the historical active graph contract for old clients, while
-            # exposing the complete background graph below.  The optimizer
-            # itself still evaluates every valid patch with its row weight.
-            active_patch_ids = {int(a['patch']) for a in anchors}
-            active_env_indices = [env_pos for env_pos, opt_pos in enumerate(envelope_anchor_indices)
-                                  if int(optimization_anchors[opt_pos].get('patch', -1)) in active_patch_ids]
-            graph_source = np.vstack((objective.source_nodes, all_envelope_source[active_env_indices]))
-            graph_robot = np.vstack((geometry[0], all_envelope_robot[active_env_indices]))
-            graph_source = graph_source @ rotation.T + origin
-            graph_robot = graph_robot @ rotation.T + origin
-            # Keep the historical type string for clients that deserialize the
-            # graph contract; `policy` below identifies the new objective.
-            graph_type = 'unified_weighted_laplacian'
-            graph_material_count = len(active_env_indices)
-            graph_rows = np.r_[np.ones(len(objective.source_nodes), dtype=float), np.asarray(patch_weights, dtype=float)[active_env_indices]]
-            # Preserve the historical exported graph contract for old clients;
-            # the actual envelope graph is exposed separately below.
-            link_names = ('thumb_proximal', 'thumb_distal',
-                          'index_proximal', 'index_intermediate', 'index_distal',
-                          'middle_proximal', 'middle_intermediate', 'middle_distal',
-                          'ring_proximal', 'ring_intermediate', 'ring_distal',
-                          'pinky_proximal', 'pinky_intermediate', 'pinky_distal')
-            orientation_edges = {tuple(map(int, edge)): float(self.settings.lambda_studio_direction)
-                                 for edge in getattr(objective, 'studio_direction_edges', ())}
-            for link in link_names:
-                a, b = semantic_joints(link)
-                if b == a + 1:
-                    orientation_edges[(a, b)] = orientation_edges.get((a, b), 0.) + float(self.settings.lambda_gesture_orientation
-                        * (1. + self.settings.active_tactile_gain if link in {x['semantic_link'] for x in anchors} else 1.))
-            graph_edges = [dict(nodes=[i, i + 1], weight=orientation_edges.get((i, i + 1), 0.), kind='skeleton') for i in range(20)]
-            graph_edges.extend(dict(nodes=[0, 21 + i], weight=float(patch_weights[env_pos]), kind='material_attachment')
-                                for i, env_pos in enumerate(active_env_indices))
-            active_compact = {env_pos: local for local, env_pos in enumerate(active_env_indices)}
-            graph_edges.extend(dict(nodes=[21 + active_compact[objective_to_full[int(edge['i'])]], 21 + active_compact[objective_to_full[int(edge['j'])]],], weight=float(self.settings.lambda_contact_edge_direction), kind='contact')
-                                for edge in edge_targets if int(edge['i']) in objective_to_full and int(edge['j']) in objective_to_full
-                                and objective_to_full[int(edge['i'])] in active_compact and objective_to_full[int(edge['j'])] in active_compact)
-            graph_coefficient = 0.
-            unified_rms = 0.
-        else:
-            graph_edges = [dict(nodes=[int(i), int(j)], weight=float(objective.adjacency[i, j]),
-                               kind='skeleton' if i < 21 and j < 21 else 'contact' if i >= 21 and j >= 21 else 'material_attachment')
-                           for i, j in zip(*np.nonzero(objective.adjacency))]
-            graph_source = objective.source_nodes @ rotation.T+origin
-            graph_robot = objective.nodes(geometry)[0] @ rotation.T+origin
-            graph_type = 'unified_weighted_laplacian'
-            graph_material_count = len(anchors) if objective.graph_enabled else 0
-            graph_rows = objective.row_weights
-            envelope_graph_edges = []
-            graph_coefficient = objective.scale
+        graph_edges = [dict(nodes=[int(i), int(j)], weight=float(objective.adjacency[i, j]),
+                           kind='skeleton' if i < 21 and j < 21 else 'contact' if i >= 21 and j >= 21 else 'material_attachment')
+                       for i, j in zip(*np.nonzero(objective.adjacency))]
+        graph_source = objective.source_nodes @ rotation.T+origin
+        graph_robot = objective.nodes(geometry)[0] @ rotation.T+origin
+        graph_type = 'unified_weighted_laplacian'
+        graph_material_count = len(anchors) if objective.graph_enabled else 0
+        graph_rows = objective.row_weights
+        envelope_graph_edges = []
+        graph_coefficient = objective.scale
         for i, j in reported_graph_edges:
             if (self.objective_profile == 'chamfer'
                     and (anchors[i].get('semantic_link') == 'palm' or anchors[j].get('semantic_link') == 'palm')):
@@ -1022,25 +819,16 @@ class ContactSLSQPRetarget:
             contact_anchors=anchors, contact_edges=edge_report, contact_ready=ready,
             patch_envelopes=[{k:v for k,v in e.items() if k not in ('source_points',)} for e in envelopes],
             excluded_patch_envelopes=excluded_envelopes,
-            retarget_graph=dict(type=graph_type, policy=('cem_tolerant_pointcloud_contact_graph' if self.objective_profile == 'chamfer'
-                                                        else 'discrete_hysteretic_contact_graph_laplacian' if self.objective_profile == 'contact_graph'
-                                                        else 'contact_edge_laplacian_graph' if self.objective_profile == 'edge_laplacian'
-                                                        else 'patch_envelope_contact_graph' if objective.envelope_mode else 'legacy'), skeleton_node_count=21,
+            retarget_graph=dict(type=graph_type, policy=('discrete_hysteretic_contact_graph_laplacian'), skeleton_node_count=21,
                 material_node_count=graph_material_count,
-                all_material_node_count=(len(envelopes) if objective.envelope_mode else graph_material_count),
-                all_source_nodes_m=(all_graph_source.tolist() if objective.envelope_mode else graph_source.tolist()),
-                all_robot_nodes_m=(all_graph_robot.tolist() if objective.envelope_mode else graph_robot.tolist()),
-                all_row_weights=(np.r_[np.ones(len(objective.source_nodes)), np.asarray(patch_weights)].tolist()
-                                 if objective.envelope_mode else graph_rows.tolist()),
+                all_material_node_count=(graph_material_count),
+                all_source_nodes_m=(graph_source.tolist()),
+                all_robot_nodes_m=(graph_robot.tolist()),
+                all_row_weights=(graph_rows.tolist()),
                 source_nodes_m=graph_source.tolist(), robot_nodes_m=graph_robot.tolist(), edges=graph_edges,
                 row_weights=graph_rows.tolist(), coefficient=graph_coefficient,
                 laplacian_rmse_mm=unified_rms),
-            envelope_graph=dict(nodes=(all_graph_source.tolist() if objective.envelope_mode else graph_source.tolist()),
-                               robot_nodes=(all_graph_robot.tolist() if objective.envelope_mode else graph_robot.tolist()), edges=envelope_graph_edges,
-                               row_weights=(np.r_[np.ones(len(objective.source_nodes)), np.asarray(patch_weights)].tolist()
-                                            if objective.envelope_mode else graph_rows.tolist()),
-                               policy=('cem_tolerant_witness_plus_bidirectional_soft_chamfer_with_contact_edges'
-                                       if self.objective_profile == 'chamfer' else 'bidirectional_soft_chamfer_with_contact_edges')) if objective.envelope_mode else None,
+            envelope_graph=None,
             contact_mask=source['weights']['mask'].tolist() if ready else [None]*460,
             observed_contact_mask=source['weights']['observed_mask'].tolist(), self_contact_pairs=[],
             contact_weights=source['weights']['response'].tolist(), collision=collision,
@@ -1054,7 +842,7 @@ class ContactSLSQPRetarget:
             solver=dict(backend='nlopt.LD_SLSQP', stages=[stage1, stage2], separation_recovery=repair, timing_ms=timing,
                 execution_mode='penetration_restoration' if restoring else 'tracking',
                 escape_continuation_active=self.escape_reference is not None,
-                initial_guess=('gesture_seed' if self.objective_profile != 'legacy' else 'midrange') if first else 'previous_raw_solution',reset_reason=reset_reason,
+                initial_guess=('gesture_seed') if first else 'previous_raw_solution',reset_reason=reset_reason,
                 warm_start_source_timestamp_ms=warm_stamp,initial_collision_constraints=initial_constraint_count,
                 contact_gap_constraints=int(len(contact_gap_edges)),
                 converged=stage1['converged'] and stage2['converged'], feasible=feasible, used_history_fallback=False,
@@ -1074,11 +862,11 @@ class ContactSLSQPRetarget:
                 contact_distance_max_mm=max(contact_gap_errors) if contact_gap_errors else None,
                 contact_laplacian_rmse_mm=float(np.sqrt(np.mean(np.sum(laplacian_error**2, axis=1)))*1000) if len(laplacian_error) else None,
                 unified_laplacian_rmse_mm=unified_rms,
-                patch_chamfer_rmse_mm=float(np.sqrt(max(0., terms.get('patch_chamfer', 0.)))) if objective.envelope_mode else None,
-                patch_witness_cost=float(terms.get('patch_witness', 0.)) if objective.envelope_mode else None,
-                patch_normal_error_deg=float(np.degrees(np.sqrt(max(0., terms.get('patch_normal', 0.))))) if objective.envelope_mode else None,
-                contact_edge_length_error_mm=float(np.sqrt(2*terms.get('contact_edge_length', 0.)/max(self.settings.lambda_contact_edge_length,1e-12))*1000) if objective.envelope_mode and edge_targets else None,
-                contact_edge_direction_error_deg=float(np.degrees(np.sqrt(2*terms.get('contact_edge_direction', 0.)/max(self.settings.lambda_contact_edge_direction,1e-12)))) if objective.envelope_mode and edge_targets else None,
+                patch_chamfer_rmse_mm=None,
+                patch_witness_cost=None,
+                patch_normal_error_deg=None,
+                contact_edge_length_error_mm=None,
+                contact_edge_direction_error_deg=None,
                 contact_distal_direction_error_deg=float(np.mean(distal_angles)) if distal_angles else None,
                 gesture_prior_cost=float(terms.get('gesture_prior', 0.)), velocity_cost=float(terms.get('velocity', 0.)),
                 configuration_prior_cost=float(terms.get('configuration_prior', 0.)),
@@ -1094,10 +882,7 @@ class ContactSLSQPRetarget:
                 contact_graph_selected_count=int(graph_selection.get('selected_count', 0)),
                 contact_graph_selected_edges=graph_selection.get('selected_edges', []),
                 envelope_fallbacks=[e.get('fallback') for e in envelopes if e.get('fallback')],
-                contact_cost_policy=('cem_tolerant_witness_plus_soft_chamfer' if self.objective_profile == 'chamfer'
-                                     else 'patch_envelope_soft_chamfer' if objective.envelope_mode
-                                     else 'discrete_hysteretic_contact_graph_laplacian' if self.objective_profile == 'contact_graph'
-                                     else 'legacy_graph'),
+                contact_cost_policy=('discrete_hysteretic_contact_graph_laplacian'),
                 cost_terms=terms, processing_ms=timing['total'], source_quality=frame.get('quality'),
                 joint_bounds_saturated=int(((q-self.fk.lower < .01) | (self.fk.upper-q < .01)).sum())))
         timing['report'] = (time.perf_counter()-audited)*1000

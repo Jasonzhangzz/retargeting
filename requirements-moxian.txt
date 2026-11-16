@@ -1,4 +1,0 @@
-pyserial==3.5
-PyYAML==6.0.3
-packaging==26.3
-orjson==3.13.0

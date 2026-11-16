@@ -3,8 +3,8 @@ import numpy as np
 import pytest
 import torch
 
-from moxian_web.card_math import CardSettings,cem
-from moxian_web.wuji_tactile import pinch_hypothesis,pinch_seed
+from retarget.baseline.card.math import CardSettings,cem
+from retarget.baseline.card.tactile import pinch_hypothesis,pinch_seed
 
 
 @pytest.mark.parametrize('target',[6,9,12,15])
@@ -29,7 +29,7 @@ def test_ambiguous_tactile_partners_do_not_force_a_pinch():
     assert pair is None and report['reason']=='ambiguous_partner'
 
 
-def test_cem_can_escape_an_entirely_infeasible_initial_population():
+def test_cem_all_infeasible_does_not_optimize_violation():
     settings=CardSettings(population=256,iterations=16)
     initial=(torch.zeros(3),torch.eye(3),torch.full((20,),.3))
     calls=[]
@@ -38,33 +38,35 @@ def test_cem_can_escape_an_entirely_infeasible_initial_population():
         calls.append(bool((violation==0).any()))
         return (j[:,0]-.06).square(),violation
     best,report=cem(initial,None,-torch.ones(20),torch.ones(20),evaluate,settings,torch.Generator().manual_seed(7))
-    assert not calls[0] and report['feasibility_recovery_iterations']>0
-    assert report['feasible'] and best[2][0]<=.09
+    assert not any(calls) and report['feasibility_recovery_iterations']==0
+    assert not report['feasible']
+    torch.testing.assert_close(best[2],initial[2])
     assert report['sampled_candidates']==4096
     def impossible(t,r,j):return j.square().sum(-1),torch.ones(len(j))
     _,failed=cem(initial,None,-torch.ones(20),torch.ones(20),impossible,settings,torch.Generator().manual_seed(7))
     assert not failed['feasible'] and failed['best_cost'] is None
 
 
-def test_cem_returns_improved_current_finite_candidate_when_no_pose_passes():
+def test_cem_returns_current_projected_initializer_when_no_pose_passes():
     settings=CardSettings(population=128,iterations=8)
     initial=(torch.zeros(3),torch.eye(3),torch.full((20,),.3))
     def evaluate(t,r,j):return (j[:,0]-.2).square(),(j[:,0]-.1).square()+.01
     best,report=cem(initial,None,-torch.ones(20),torch.ones(20),evaluate,settings,torch.Generator().manual_seed(7),verify=lambda t,r,j:torch.zeros(len(j),dtype=torch.bool))
-    assert not report['feasible'] and report['finite_candidate_found']
-    assert report['output_selection']=='least_violation_current_candidate'
-    assert report['fallback_violation']<.02 and best[2][0]<.2
+    assert not report['feasible'] and not report['finite_candidate_found']
+    assert report['output_selection']=='current_initializer_no_finite_objective'
+    assert report['fallback_violation'] is None
+    torch.testing.assert_close(best[2],initial[2])
     assert torch.isfinite(best[2]).all()
 
 
 def test_current_endpoint_can_pass_even_when_path_from_old_pose_intersects_obstacle():
     settings=CardSettings(population=32,iterations=2)
     previous=(torch.zeros(3),torch.eye(3),torch.zeros(20));initial=(previous[0],previous[1],torch.full((20,),.8))
-    # The swept path 0 -> .8 crosses [.2,.6]. Only candidate endpoints matter.
-    def valid(t,r,j):return (j[:,0]<.2)|(j[:,0]>.6)
+    # The swept path 0 -> .8 crosses [.05,.15]. Only candidate endpoints matter.
+    def valid(t,r,j):return (j[:,0]<.05)|(j[:,0]>.15)
     def evaluate(t,r,j):return (j[:,0]-.8).square(),(~valid(t,r,j)).float()
     best,report=cem(initial,previous,-torch.ones(20),torch.ones(20),evaluate,settings,torch.Generator().manual_seed(7),verify=valid)
-    assert report['feasible'] and best[2][0]>.6
+    assert report['feasible'] and .15<best[2][0]<=.25
     assert report['collision_scope']=='candidate_endpoint_only_no_swept_path_check'
 
 
@@ -91,7 +93,7 @@ def test_default_card_preserves_source_contacts_instead_of_inventing_pinch_closu
     from moxian_web.hand_model import DEFAULT_MANO
     from moxian_web.mano_runtime import ManoSurface
     from moxian_web.contact import default_mapping
-    from moxian_web.wuji_retarget import TactileRetarget
+    from retarget.baseline.card.retarget import TactileRetarget
     asset=DEFAULT_MANO.with_name('MANO_RIGHT.pkl')
     if not asset.exists() or not torch.cuda.is_available():pytest.skip('Local MANO and CUDA required')
     torch.set_num_threads(1);m=ManoSurface(asset,'cpu',side='right');m.enable_official_fk()
@@ -109,7 +111,8 @@ def test_default_card_preserves_source_contacts_instead_of_inventing_pinch_closu
         source_contact=dict(ready=True,timestamp_ms=1000.,cell_contact=mask.tolist(),normalized=mask.astype(float).tolist()))
     solver=TactileRetarget(top,tmp_path);off=solver.step(frame,contact_enabled=False)
     solver.reset();on=solver.step(frame)
-    assert off['solution_feasible'] and not off['solver']['tactile_seed']['applied']
+    assert off['display_available'] and not off['solver']['tactile_seed']['applied']
+    assert off['solution_feasible']==(not off['collision']['palm_hard_rejected'] and not off['collision']['object_hard_rejected'])
     assert on['display_available']
     assert not on['settings']['experimental_self_contact'] and not on['solver']['tactile_seed']['applied']
     assert on['solver']['contact_association']['selected'] is None and on['self_contact_pairs']==[]

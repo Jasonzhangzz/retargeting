@@ -79,7 +79,7 @@ SHA256 为 `8041b5ee059de6e8aa44641f5e7f323d0997604ff908d2dc108d18976631300c`
 ```
 
 安装脚本优先使用已有固定版本 wheel，否则从其固定 PyPI URL 下载；同时校验
-wheel 和 ELF SHA256。库及依赖解包到 `.cache/wuji-calibration-native/`。
+wheel 和 ELF SHA256。库及依赖解包到 `moxian_web/vendor/wuji-calibration-native/`。
 也可用 `MOXIAN_WUJI_CALIBRATION_ELF` 指定该版本 ELF，需保留同目录结构下的依赖。
 当前 adapter 支持 Linux x86_64。
 
@@ -134,14 +134,14 @@ mesh worker 读取同一模型 hash；不一致时停止发布 mesh。第一次�
 
 原始观测只读，拟合时复制聚合观测而不再深拷贝整个原始记录；原始记录与拟合分区的 SHA256 共用一次逐行 JSON 编码，输出与原算法相同。
 
-本机同一份采集记录的离线完整拟合：约77.1秒降为13.4秒，其中优化迭代约5秒；单次目标/梯度从约99ms降至8.6ms。新旧均以 ftol_rel=1e-10 正常收敛。运行时间受设备负载、动作数量和观测影响；此时间不包含后续独立复测验收。完整结果见 `results/bone_fit_speed_20261112/summary.json`。基准只保存诊断候选，没有替换活动模型或已保存的用户候选。
+本机同一份采集记录的离线完整拟合：约77.1秒降为13.4秒，其中优化迭代约5秒；单次目标/梯度从约99ms降至8.6ms。新旧均以 ftol_rel=1e-10 正常收敛。运行时间受设备负载、动作数量和观测影响；此时间不包含后续独立复测验收。完整结果见 `output/reports/bone_fit_speed_20261112/summary.json`。基准只保存诊断候选，没有替换活动模型或已保存的用户候选。
 
 可复现命令：
 
 ```bash
 .venv-contact/bin/python scripts/benchmark_bone_extrinsics.py \
   --capture output/moxian/hand_model/<设备目录>/qnbot/motion-capture.json \
-  --output results/bone_fit_benchmark --backend cuda_graph --compare
+  --output output/reports/bone_fit_benchmark --backend cuda_graph --compare
 ```
 
 界面只显示真实评估次数、目标值与评估速度；20000是评估上限，不代表完成百分比。

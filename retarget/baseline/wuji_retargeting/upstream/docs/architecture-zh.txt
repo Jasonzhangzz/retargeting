@@ -1,0 +1,39 @@
+统一离线主链与状态边界
+
+EmfFrame：5个 TX→RX 的位置、XYZW四元数和sensor confidence
+  ↓ float32输入边界，校验，四元数归一化
+HumanIKSession：每指4/5自由度、总共21自由度
+  ↓ 按原生构造规则将TX逆关节XYZ/RPY保留10位小数，再生成TX根模型
+  ↓ TX→RX FK与解析Jacobian，位置/姿态残差
+  ↓ 带阻尼/姿态reference/历史项的5维以内盒约束QP
+  ↓ 步长限制与4档线搜索；40次初次预算，必要时36次重试两档
+  ↓ 按位置残差选解，保存各指状态，融合confidence
+HumanHandKinematics：人手q21 → wrist坐标系21点骨架与5指尖
+  ↓ 姿态/位置跨公开接口时float32化
+  ├→ RetargetSession(WujiHand,left/right) → Wuji1 q20
+  └→ RetargetSession(WujiHand2,left/right) → Wuji2 q20
+
+机器人每条支路独立执行：掌面坐标变换、型号旋转、pinch与图目标准备、
+第一阶段方向拟合、第二阶段含Laplacian的目标、关节限位、float32低通。
+两阶段共用该帧开始时未滤波的warm reference；不能用stage1输出替代reference。
+
+统一管线只缓存最近一个完整输入。header也参与key，+0/-0及q/-q保留差别。
+相同输入连续调用不再推进人手或机器人历史。旧帧在其它帧之后再次出现，会
+当作新求解输入，不是任意历史帧结果数据库。时间序列应由调用者按顺序提交。
+
+process() 用一把管线锁串行推进；同帧人手只解一次，机器人分支各解一次。
+若任一分支抛错，恢复本帧开始前的人手历史、机器人warm/filter和trace。
+这一事务行为是新统一API的契约，不声称复现SDK所有异常后的内部状态。
+reset() 清除所有分支状态和缓存；重放同一序列可用于确定性回归。
+
+模型来源：两个人手CQQ URDF来自ego_fast_retarget，四个机器人URDF来自
+固定SDK版本的内置资源。URDF人手限位不是实际solver限位，人体限位来自
+原生构造状态的独立读取。输入的RX correction当前为None，不添加臆测变换。
+TX逆关节的10位小数格式化是实际构造步骤，不能用“数学上更精确的直接求逆”替代。
+
+human_ik_reference/kinematics.py保留稳定的标准SO(3)数学函数作为参考；
+生产solver调用sdk_rotation.py，复制已观察SDK的零角、pi分支及浮点顺序。
+机器人SLSQP依赖开源NLopt后端，未手工重写其全部求解器源码。
+
+测试分层：构造参数 → FK/J → SO(3) → box QP → 人手EMF IK →
+机器人step → 统一缓存/回滚 → 原始EMF到两代手。局部误差不能替代全链误差。

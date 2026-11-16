@@ -1,3 +1,5 @@
+> 历史实验记录：文中部分脚本已于2026-11-16清理；当前基线入口见 [baseline说明](../retarget/baseline/README.md)。
+
 # Causal and frozen-history Wuji2 comparison
 
 These backends keep the original spatial weights and physical joint limits.

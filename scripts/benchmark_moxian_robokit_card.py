@@ -11,8 +11,8 @@ import numpy as np
 import torch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from moxian_web.card_math import CardSettings
-from moxian_web.wuji_retarget import TactileRetarget
+from retarget.baseline.card.math import CardSettings
+from retarget.baseline.card.retarget import TactileRetarget
 
 
 def main():
@@ -22,7 +22,7 @@ def main():
     ap.add_argument('--seeds',type=int,nargs='+',default=[7,19])
     ap.add_argument('--frames',type=int,default=4)
     args=ap.parse_args();args.output.mkdir(parents=True,exist_ok=False);torch.set_num_threads(1)
-    rows=[];manifest={'budget':[1024,16],'native_self_limit_mm':.5,'frame_labels_used_by_solver':False,'sources':[]}
+    rows=[];manifest={'budget':[1024,16],'native_self_diagnostic_limit_mm':.5,'objective_profile':'paper','frame_labels_used_by_solver':False,'sources':[]}
     with (args.output/'results.ndjson').open('w') as stream:
         for path in args.source:
             raw=path.read_bytes();source=json.loads(raw);frames=source['frames'];half=len(frames)//2
@@ -32,11 +32,10 @@ def main():
                 for seed in args.seeds:
                     settings=replace(CardSettings(),cem_backend=backend,seed=seed)
                     solver=TactileRetarget(source['topology'],args.output/'mappings',settings=settings)
-                    maximum=max((a['force'] for f in frames[:half] for a in solver.extractor.extract(f)[2]),default=1.)
                     # Warm each backend outside measured runs, including graph capture.
                     solver.step(frames[indices[0]])
                     for i in indices:
-                        solver.reset();solver.offline_force_max=maximum;f=frames[i]
+                        solver.reset();f=frames[i]
                         expected=solver.extractor.extract(f)[2]
                         began=time.perf_counter();r=solver.step(f);wall=(time.perf_counter()-began)*1000
                         assert not r['self_contact_pairs'] and not r['solver']['used_history_fallback']

@@ -8,7 +8,7 @@
 
 全量40／36轮与重试预算保持不变；没有用减少迭代或低通来提速。当前同标定60帧数值对照最大关节差约5e-8 rad，原生源求解平均约0.47 ms。该数字为离线源求解测量，完整实时延迟另含设备、SKN、retarget、碰撞验收及传输。
 
-首次构建需要 `g++`、Eigen3 headers 和 NumPy/SciPy，可先运行 `.venv-moxian-ik/bin/python scripts/setup_moxian_studio_qp.py`。构建按 C++ 源码 SHA256 缓存到 `.cache/moxian-studio-qp/`，policy 公布源码hash、solver_dof及 `official_sdk_binary=False`。不会修改已保存标定。
+首次构建需要 `g++`、Eigen3 headers 和 NumPy/SciPy，可先运行 `.venv-moxian-ik/bin/python scripts/setup_moxian_studio_qp.py`。构建按 C++ 源码 SHA256 缓存到 `output/runtime/moxian-studio-qp/`，policy 公布源码hash、solver_dof及 `official_sdk_binary=False`。不会修改已保存标定。
 
 ## 材料绑定与语义图
 
@@ -70,7 +70,7 @@ GPU 每轮修复的各连杆对最深穿透 witness 在设备端归约，仅回�
 
 ## 入口
 
-在 .venv-contact 安装 requirements-wuji-contact.txt。为避免 glove/Wuji2 连杆长度差异诱发翻折，distal skeleton 的位置和 wrist-frame 方向只作为低权重分支先验，接触几何负责最终 distal 定位；Wuji2 每指的中间、远端关节使用更高权重，并对偏离当前弯曲符号的翻折施加软惩罚，以消除指尖位置相同造成的多解跳变。网页提供 `slsqp_edge`（只把 contact anchors 和 contact edges 加入 unified Laplacian，不包含 CEM witness/Chamfer）、`slsqp_graph`（实验性的离散接触图选择后再固定图求解 Laplacian）、`slsqp_cem`（只保留 CEM witness 间隙/法向接触 cost，仍由 LD_SLSQP 求解）和 `cem`。已移除 CEM、Laplacian、骨骼方向和 Chamfer 混合的旧 `slsqp` 入口。切换会重建历史，不发送机器人控制命令。三个 SLSQP 算法版本分别为 `moxian_contact_edge_laplacian_slsqp_v7`、`moxian_discrete_contact_graph_slsqp_v8` 和 `moxian_cem_contact_slsqp_v6`。
+在 .venv-contact 安装 requirements.txt。为避免 glove/Wuji2 连杆长度差异诱发翻折，distal skeleton 的位置和 wrist-frame 方向只作为低权重分支先验，接触几何负责最终 distal 定位；Wuji2 每指的中间、远端关节使用更高权重，并对偏离当前弯曲符号的翻折施加软惩罚，以消除指尖位置相同造成的多解跳变。网页保留五个入口：`cem`（CARD）、`slsqp_graph`（离散接触图选择后固定图求解 Laplacian，默认）、`wuji-retargeting`（已标定 Moxian 骨架 → 原版 Wuji2）、`geort` 和 `cart`（独立接触驱动网络）。切换会重建求解历史。图方法算法版本为 `moxian_discrete_contact_graph_slsqp_v8`。
 
 运行 `scripts/start_moxian_web.sh --port 8890` 后打开 `http://127.0.0.1:8890/?view=wuji2&solver=slsqp_graph`，直接进入并选择实时 SLSQP 双视图。紫色显示材料点，黄色显示有效触觉，机器人端红色标出法向不兼容的材料对应；源端仍显示原始实测激活。橙色显示 patch 代表点、跨语义 link 接触边及材料点到骨架的连接。页面明确显示画面后端、算法版本、求解会话及源帧时间，并报告统一图 Laplacian RMS、仅作比较诊断的接触子图 RMS、边向量 RMS、分项 cost、输出频率、整帧耗时和零间距验收状态；不可行候选、穿透恢复模式、法向拒绝数及未核验SID分区明确标注，同时展示拇指最近跨指的源／机器人材料点距。同后端断流保留最后几何并关闭接触叠层；切换后端时清掉旧后端姿态，直到对应后端的新帧到达。切换求解器、重建映射和设置物体在串口采集线程之外等待 worker。
 
@@ -84,11 +84,11 @@ GPU 每轮修复的各连杆对最深穿透 witness 在设备端归约，仅回�
 
 相同材料点评估姿态 SLSQP、触觉 SLSQP 和 CEM：
 
-    .venv-contact/bin/python scripts/benchmark_moxian_wuji_contact.py --capture raw.jsonl --source-model moxian-model.json --output results/contact-comparison --device cuda:0
+    .venv-contact/bin/python scripts/benchmark_moxian_wuji_contact.py --capture raw.jsonl --source-model moxian-model.json --output output/reports/contact-comparison --device cuda:0
 
 重建要求设备初始化指纹、手侧、SID分区与模型匹配；原始 EMF 重新经过 Moxian QP，再驱动 SKN。动作标签仅用于评估窗口分组，不进入 IK/retargeting。缺少原始数据的 MANO 录制明确拒绝。离线拒绝覆盖输入或已有文件；--pose-only关闭触觉项，--limit限制读取帧数。
 
-Python API 为 `ContactSLSQPRetarget(topology, cache=None, device='cpu', settings=None, object_sdf=None, objective_profile='chamfer')`。可选 `objective_profile='contact_graph'` 先固定离散接触图，再使用旧的统一 Laplacian、骨骼方向、非穿透和时间项；`edge_laplacian` 与 `cem_contact` 保留为两个独立基线。SLSQP 和 CEM 共用碰撞修复和传输协议；SLSQP 输出保留26维qpos，并提供 contact_edges、retarget_graph、图选择分数、方向项、两阶段状态、穿透修复诊断和分段耗时。
+Python API 为 `ContactSLSQPRetarget(topology, cache=None, device='cpu', settings=None, object_sdf=None, objective_profile='contact_graph')`。可选 `objective_profile='contact_graph'` 先固定离散接触图，再使用旧的统一 Laplacian、骨骼方向、非穿透和时间项；此构造器仅用于图方法。原 SLSQP·CARD 入口与专用代码已删除。原版机器人重定向后端独立使用 `create_retarget('wuji-retargeting', ...)`，详见 [接入说明](moxian_wuji_reference.md)。
 
 ## 验证和清理
 

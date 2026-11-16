@@ -14,7 +14,7 @@ from .static_pose import REVISION as POSE_REVISION
 from .qnbot_surface import QnbotSurface,exp_so3
 from .qnbot_reference import initialize_registration
 from .qnbot_lsq_model import observed
-from .card_math import log_so3
+from retarget.baseline.card.math import log_so3
 from .calibration_targets import target
 from .wuji_calibration_solver import WujiCalibrationLbfgs
 from .bone_objective_evaluator import ObjectiveEvaluator
@@ -177,12 +177,12 @@ class Objective:
 
 
 def replay(model,candidate,rows,cancel,progress=None,label='个体模型'):
-    from .emf_qp import QPSkeleton
-    engine=QPSkeleton(candidate);results=[]
+    from .studio_emf_solver import StudioQPSkeleton
+    engine=StudioQPSkeleton(candidate);results=[]
     for index,row in enumerate(rows):
         if cancel.is_set():raise InterruptedError('标定已取消')
-        # Reset at independently held poses. No instructed target or fitted
-        # latent angle enters the live solver, including its first pose.
+        # The engine handles gaps between independent holds. Saved calibration
+        # seeds are initialization only; every target comes from this raw EMF.
         result=engine.step(row);results.append(result)
         if progress and index%20==0:progress(dict(state='running',phase='validation',completed=index,total=len(rows),progress=.78,message=label+'：逐帧原始EMF驱动QP'))
     return results

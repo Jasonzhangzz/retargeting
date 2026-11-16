@@ -12,7 +12,7 @@ def fixture():
     if not (ROOT/'output/dexonomy_shadow_mano_mapping_20261103/data.json').is_file():
         pytest.skip('Requires externally generated reviewed mapping and dataset assets')
     raw=json.loads((ROOT/'output/dexonomy_shadow_mano_mapping_20261103/data.json').read_text())
-    source=ROOT/'results/dexonomy_shadow_grasp_full/7_Prismatic_3_Finger/shards/0000000'
+    source=ROOT/'output/reports/dexonomy_shadow_grasp_full/7_Prismatic_3_Finger/shards/0000000'
     entries=json.loads((source/'manifest.json').read_text())['cases'][:2]
     with np.load(source/'poses.npz') as a:q=a['grasp_qpos'][:2];op=a['object_pose_world'][:2];scale=a['scene_scale'][:2]
     model=ManoDecoder(ROOT/'data/grasp/assets/mano/MANO_RIGHT.pkl');model.configure_contact_vertices(raw['mappings'])

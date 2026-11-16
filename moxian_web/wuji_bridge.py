@@ -14,6 +14,7 @@ import time
 from .skeleton import SkeletonBridge
 from .hand_model import HandModelBridge
 from .wuji_transport import unpack_result_geometry
+from .wuji_backends import SOLVERS, DEFAULT_SOLVER
 
 # The input reader runs independently of CEM. Source timestamps also include
 # upstream MANO/GPU latency; they are not a 500 ms transport heartbeat.
@@ -24,11 +25,11 @@ MAX_RESULT_TIMEOUT_MS=15000
 
 class WujiBridge(SkeletonBridge):
     def control(self,action,data):
-        if action=='solver_set' and data.get('solver') not in ('slsqp','slsqp_cem','slsqp_edge','slsqp_graph','cem'):raise ValueError('Unknown Wuji2 solver')
-        if action=='solver_set' and data.get('solver')=='slsqp':
-            data={**data,'solver':'slsqp_edge'}
+        if action=='solver_set' and data.get('solver') not in SOLVERS:raise ValueError('Unknown Wuji2 solver')
         result=HandModelBridge.control(self,action,data)
         if action=='solver_set':self.backend=data['solver']
+        if action=='model_set' and data.get('solver')=='cart':self.backend='cart'
+        if action in ('solver_set','model_set','rebuild'):self.source_version=None
         return result
 
     def __init__(self,root,folder):
@@ -38,9 +39,9 @@ class WujiBridge(SkeletonBridge):
         self.python=Path(os.environ.get('MOXIAN_MANO_PYTHON',str(default)));self.topology=None
         self.source_version=None;self.last_source_stamp=None;self.last_dispatch=0.
         self.source_epoch=0;self.last_input_stamp=None
-        self.backend=os.environ.get('MOXIAN_WUJI_SOLVER','slsqp_edge')
-        if self.backend not in ('slsqp_cem','slsqp_edge','slsqp_graph','cem'):
-            self.backend='slsqp_edge'
+        self.backend=os.environ.get('MOXIAN_WUJI_SOLVER',DEFAULT_SOLVER)
+        if self.backend not in SOLVERS:
+            self.backend=DEFAULT_SOLVER
 
     def observe_source_input(self,stamp):
         """Observe the raw glove stream, independently of expensive solves."""
@@ -58,7 +59,8 @@ class WujiBridge(SkeletonBridge):
         env.update(OMP_NUM_THREADS='1',MKL_NUM_THREADS='1',OPENBLAS_NUM_THREADS='1')
         try:
             proc=subprocess.Popen([str(self.python),'-I',str(self.root/'moxian_web/wuji_worker.py'),
-                                   '--event-fd',str(write_fd),'--home',str(self.folder/'wuji2'/key),'--solver',self.backend],
+                                   '--event-fd',str(write_fd),'--home',str(self.folder/'wuji2'/key),'--solver',self.backend,
+                                   '--geort-model',getattr(self,'cart_model_path','') if self.backend=='cart' else getattr(self,'geort_model_path','')],
                                   stdin=subprocess.PIPE,stdout=self.log,stderr=self.log,text=True,bufsize=1,pass_fds=(write_fd,),env=env)
         except Exception:
             os.close(read_fd);raise
@@ -71,7 +73,7 @@ class WujiBridge(SkeletonBridge):
 
     def dispatch(self,hand):
         now=time.monotonic()
-        if now-self.last_dispatch<(1/120 if self.backend.startswith('slsqp') else 1/30):return
+        if now-self.last_dispatch<(1/120 if self.backend.startswith('slsqp') or self.backend in ('geort','cart','wuji-retargeting') else 1/30):return
         self.last_dispatch=now
         state=hand.snapshot(copy_state=False,include_audit=False,mesh_transport=True)
         if not state.get('ready'):return
@@ -84,8 +86,9 @@ class WujiBridge(SkeletonBridge):
             try:self.controls.put_nowait({'type':'topology','model':topology})
             except queue.Full:return
             self.source_version=version
-        fields=('vertices_m','joints_m','timestamp_ms','skeleton_timestamp_ms','tactile_timestamp_ms','source_contact','geometry_version','binding_version','model_hash','surface_backend','quality','hand_side','object_transform','self_contact_pairs','tactile_pose_correction','pose_calibration_version','skeleton_runtime_revision','contact_registration','calibrated','sensor_mounting')
+        fields=('vertices_m','joints_m','timestamp_ms','skeleton_timestamp_ms','tactile_timestamp_ms','source_contact','geometry_version','binding_version','model_hash','surface_backend','quality','hand_side','object_transform','self_contact_pairs','tactile_pose_correction','pose_calibration_version','skeleton_runtime_revision','contact_registration','calibrated','sensor_mounting','calibration_fingerprint','skeleton_runtime_revision','preview')
         frame={k:state.get(k) for k in fields}
+        frame['serial']=self.serial
         if self.last_input_stamp is not None:frame['input_stream_epoch']=self.source_epoch
         if state.get('surface_backend')=='qnbot' and state.get('mesh_frame'):
             payload=hand.mesh_frame(sequence=state['mesh_frame']['sequence'])
@@ -126,6 +129,14 @@ class WujiBridge(SkeletonBridge):
         source_age=time.time()*1000-r.get('source_timestamp_ms',0) if r.get('source_timestamp_ms') else None
         if self.proc and self.proc.poll() is not None:r.update(status='error',ready=False,error='Wuji2 worker 已退出；原骨架与触觉仍可使用')
         r['age_ms']=age;r['source_age_ms']=source_age
+        if r.get('solver_backend') in ('geort','cart','wuji-retargeting'):
+            playback=(r.get('playback') or {}).get('active',False)
+            alive=not self.proc or self.proc.poll() is None
+            cart=r.get('solver_backend')=='cart'
+            valid=bool(alive and r.get('status') in (('ready','solving','infeasible') if cart else ('ready','solving')) and r.get('display_available') and
+                       (playback or connected and age is not None and age<(3000 if cart else 500) and source_age is not None and source_age<(5000 if cart else 1000)))
+            r.update(ready=valid,display_available=valid,contact_ready=False,contact_mask=[None]*460,input_live=bool(valid and not playback))
+            return r if mesh_transport else unpack_result_geometry(r)
         if 'input_received_wall_ms' in r:
             input_age=time.time()*1000-r['input_received_wall_ms']
             input_stamp=r.get('input_timestamp_ms')

@@ -3,7 +3,7 @@ import pytest
 import torch
 from scipy.optimize import minimize
 from scipy.spatial.transform import Rotation
-from moxian_web.contact_force import estimate_normal_resultant,fit_coulomb_force
+from retarget.baseline.card.contact_force import estimate_normal_resultant,fit_coulomb_force
 
 
 def test_pressure_resultant_is_relative_and_rotation_covariant():
@@ -54,7 +54,7 @@ def test_force_loss_is_rotation_covariant_and_scale_normalization_is_valid():
 
 
 def test_force_model_rejects_invalid_inputs_and_settings():
-    from moxian_web.card_math import CardSettings
+    from retarget.baseline.card.math import CardSettings
     for response in ([np.nan],[-1.]):
         with pytest.raises(ValueError):estimate_normal_resultant([[0,0,1]],response)
     for kwargs in ({'friction_coefficient':-1},{'normal_force_weight':np.inf},{'contact_direction_model':'pinch'}):

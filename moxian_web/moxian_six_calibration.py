@@ -141,8 +141,7 @@ def fit_capture(profile,mapping,document,progress,cancel):
     with torch.no_grad():
         for k,v in objective.coordinates.geometry(torch.tensor(result[:51],device=model.device,dtype=torch.float64)).items():model.geometry[k].copy_(v)
     model._rest_cache=None;model.fixed=True;candidate=artifact()
-    # Only the neutral thumb base posture is retained, not per-action angles.
-    # Hinge rest angles remain physical straight. Runtime still uses raw EMF.
+    # Retain the neutral thumb base posture; hinge rest stays physical straight.
     flat=[i for i,row in enumerate(train) if row.get('static_endpoint')=='flat']
     if flat:
         neutral=result[51:].reshape(len(train),len(model.joint_names))[flat[-1]]
@@ -151,6 +150,9 @@ def fit_capture(profile,mapping,document,progress,cancel):
                 candidate['bone_extrinsics']['rest_angles_rad'][j]=float(neutral[j])
         candidate['bone_extrinsics']['neutral_reference']='training_flat_thumb_base_v1'
     candidate['model_hash']=model_hash(candidate);validate_candidate(candidate)
+    from .source_ik_initialization import with_calibration_seeds,runtime_revision
+    candidate=with_calibration_seeds(candidate,train,cancel,progress,
+        fitted_angles=result[51:].reshape(len(train),len(model.joint_names)))
     progress(dict(state='running',phase='validation',progress=None,message='核验Moxian原始EMF回放与旋转方向；不使用动作目标驱动IK'))
     fitted=replay(model,candidate,train,cancel);seed=replay(model,baseline,train,cancel)
     def errors(results,key):return np.asarray([[f[key] for f in r['ik_diagnostics']['fingers']] for r in results])
@@ -164,6 +166,12 @@ def fit_capture(profile,mapping,document,progress,cancel):
         reason='Moxian骨长与EMF外参拟合通过' if accepted else '；'.join(reasons),rejection_reasons=reasons,
         capture_protocol=PROTOCOL,capture_session_id=profile.get('capture_session_id'),source_capture_hash=source_hash,
         validation_complete=True,validation_pending=False,validation_scope='collected_six_pose_emf_replay_not_independent_holdout',
+        validation_source_ik=fitted[0]['ik_diagnostics']['algorithm'],
+        validation_branch_recovery=fitted[0]['ik_diagnostics'].get('branch_recovery',{}).get('revision'),
+        source_ik_initialization=dict(revision=candidate['source_ik_initialization']['revision'],
+            sha256=candidate['source_ik_initialization']['sha256'],
+            seeds=len(candidate['source_ik_initialization']['seeds']),serialized_replay_validated=True),
+        source_ik_runtime_revision=runtime_revision(candidate),
         model_family='moxian_native25_plus4_twist',solver_dof=len(model.joint_names),joint_limit_policy=candidate['bone_extrinsics']['joint_limit_policy'],flat_thumb_straight_sigma_deg=3,flat_thumb_hinge_allowance_deg=5,independent_geometry_parameters=51,selected_training_frames=6,
         position_rmse_mm=position,emf_orientation_error_deg=rotation,emf_orientation_max_deg=float(r.max()),
         baseline_position_rmse_mm=float(np.sqrt(np.mean(sp*sp))),baseline_emf_orientation_error_deg=float(sr.mean()),

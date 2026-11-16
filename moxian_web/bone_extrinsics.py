@@ -156,6 +156,8 @@ def validate_candidate(candidate):
         if config[key]<=0:raise ValueError('无效QP配置 '+key)
     for key in ('max_iterations','retry_iterations'):
         if type(config[key]) is not int or not 1<=config[key]<=40:raise ValueError('无效QP迭代数')
+    from .source_ik_initialization import validate_bank
+    validate_bank(candidate)
     return candidate
 
 

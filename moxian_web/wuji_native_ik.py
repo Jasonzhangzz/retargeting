@@ -14,7 +14,7 @@ class WujiNativeSkeleton:
     def __init__(self,candidate):
         validate_native_candidate(candidate);self.candidate=candidate;self.model_hash=candidate['model_hash'];self.personalized=dict(geometry_hash=self.model_hash)
         self.urdf=NativeURDF(candidate['wuji_native']['profiles']['wujihand']['wrist_urdf']);self.c=np.asarray(candidate['display_adapter']['rotation']);self.previous_timestamp=None;self.frames=0
-        root=Path(__file__).resolve().parents[1];home=root/'.cache/wuji-calibration-native/offline-models'/self.model_hash;home.mkdir(parents=True,exist_ok=True)
+        root=Path(__file__).resolve().parents[1];home=root/'output/runtime/wuji-offline-models'/self.model_hash;home.mkdir(parents=True,exist_ok=True)
         self.path=home/'hand.urdf'
         if not self.path.exists():
             temp=home/'hand.pending';temp.write_text(candidate['wuji_native']['profiles']['wujihand']['wrist_urdf']);temp.replace(self.path)

@@ -12,19 +12,18 @@ import time
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import torch
-from moxian_web.wuji_backends import create_retarget
-from moxian_web.card_geometry import TrackedMesh
+from moxian_web.wuji_backends import create_retarget, SOLVERS, SLSQP_PROFILES, DEFAULT_SOLVER
+from retarget.baseline.card.geometry import TrackedMesh
 from moxian_web.wuji_transport import pack_result_geometry, decode_source_frame
 
 
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--event-fd',type=int,required=True);ap.add_argument('--home',type=Path,required=True)
-    configured_solver=os.environ.get('MOXIAN_WUJI_SOLVER','slsqp_edge')
-    if configured_solver == 'slsqp':
-        configured_solver='slsqp_edge'
-    if configured_solver not in ('slsqp_cem','slsqp_edge','slsqp_graph','cem'):
-        configured_solver='slsqp_edge'
-    ap.add_argument('--solver',choices=('slsqp','slsqp_cem','slsqp_edge','slsqp_graph','cem'),default=configured_solver);args=ap.parse_args()
+    ap.add_argument('--geort-model',default='')
+    configured_solver=os.environ.get('MOXIAN_WUJI_SOLVER',DEFAULT_SOLVER)
+    if configured_solver not in SOLVERS:
+        configured_solver=DEFAULT_SOLVER
+    ap.add_argument('--solver',choices=SOLVERS,default=configured_solver);args=ap.parse_args()
     args.home.mkdir(parents=True,exist_ok=True)
     stream=os.fdopen(args.event_fd,'w',buffering=1);stop=threading.Event()
     emit_lock=threading.Lock()
@@ -52,8 +51,9 @@ def main():
                 else:controls.put(m)
         finally:stop.set()
     threading.Thread(target=reader,daemon=True).start();torch.set_num_threads(1)
-    backend='slsqp_edge' if args.solver=='slsqp' else args.solver;device='cuda:0' if torch.cuda.is_available() else 'cpu'
-    solver=None;topology=None;rebuild=False;version=None;object_sdf=None;last_output_wall_ms=None
+    backend=args.solver;device='cuda:0' if torch.cuda.is_available() else 'cpu'
+    manual_cart_action='auto'
+    model_path=args.geort_model or None;replay=None;solver=None;topology=None;rebuild=False;version=None;object_sdf=None;last_output_wall_ms=None
     while not stop.is_set():
         try:m=controls.get_nowait()
         except queue.Empty:m=None
@@ -63,7 +63,24 @@ def main():
                 if new!=version:solver=None;version=new
             else:
                 action=m.get('action');error=None
-                if action=='object_set':
+                if action=='model_set':
+                    model_path=(m.get('data') or {})['model_path'];backend=(m.get('data') or {}).get('solver','geort');solver=None
+                elif action=='cart_action_set':
+                    manual_cart_action=(m.get('data') or {}).get('stage','auto')
+                    if solver and hasattr(solver,'set_action'):solver.set_action(manual_cart_action)
+                elif action=='replay_load':
+                    try:
+                        from retarget.baseline.geort.runtime import Replay
+                        replay=Replay((m.get('data') or {})['folder'],device)
+                        topology=replay.topology;version=(topology['geometry_version'],topology['binding_version'],topology.get('model_hash'));solver=None
+                    except Exception as exc:error=str(exc)
+                elif action=='replay_stop':
+                    replay=None;solver=None;topology=None
+                elif action in ('replay_pause','replay_seek'):
+                    if replay is None:error='尚未加载录制回放'
+                    elif action=='replay_pause':replay.pause(bool((m.get('data') or {}).get('paused',True)))
+                    else:replay.seek((m.get('data') or {}).get('index',0))
+                elif action=='object_set':
                     data=m.get('data') or {}
                     try:object_sdf=TrackedMesh(data['vertices_m'],data['faces'],device,data.get('transform'));solver=None
                     except Exception as exc:error=str(exc)
@@ -73,11 +90,10 @@ def main():
                     if solver:solver.reset()
                 elif action=='solver_set':
                     selected=(m.get('data') or {}).get('solver')
-                    if selected=='slsqp':selected='slsqp_edge'
-                    if selected not in ('slsqp_cem','slsqp_edge','slsqp_graph','cem'):error='Unknown Wuji2 solver'
+                    if selected not in SOLVERS:error='Unknown Wuji2 solver'
                     else:backend=selected;solver=None
                 else:error='Unknown WUJI2 control'
-                if error is None:emit({'type':'state','status':'initializing','ready':False,'solution_feasible':False,'display_available':False,
+                if error is None and action not in ('replay_pause','replay_seek'):emit({'type':'state','status':'initializing','ready':False,'solution_feasible':False,'display_available':False,
                     'requested_solver_backend':backend,'active_solver_backend':backend,'active_solver_session_id':None})
                 emit({'type':'ack','id':m.get('id'),'result':{'scheduled':True},'error':error})
         if topology is None:stop.wait(.02);continue
@@ -85,11 +101,10 @@ def main():
             try:
                 emit({'type':'state','status':'mapping','ready':False,'display_available':False,'error':None,
                       'requested_solver_backend':backend,'active_solver_backend':backend,'active_solver_session_id':None})
-                internal_backend='slsqp' if backend in ('slsqp_cem','slsqp_edge','slsqp_graph') else backend
-                profile=('cem_contact' if backend == 'slsqp_cem' else
-                         'contact_graph' if backend == 'slsqp_graph' else 'edge_laplacian')
-                extra={'realtime':True,'objective_profile':profile} if internal_backend=='slsqp' else {}
-                solver=create_retarget(internal_backend,topology,args.home/'mappings',device,rebuild=rebuild,object_sdf=object_sdf,**extra);rebuild=False
+                extra={'realtime':True} if backend in SLSQP_PROFILES else {'model_path':model_path} if backend in ('geort','cart') else {}
+                solver_device='cpu' if backend=='wuji-retargeting' else device
+                solver=create_retarget(backend,topology,args.home/'mappings',solver_device,rebuild=rebuild,object_sdf=object_sdf,**extra);rebuild=False
+                if backend=='cart':solver.set_action(manual_cart_action)
                 model={**solver.topology(),'solver_backend':backend}
                 emit({'type':'topology','model':model})
                 emit({'type':'state','status':'initializing','ready':False,'mapping_ready':solver.mapping['ready'],
@@ -97,10 +112,15 @@ def main():
                       'active_solver_backend':backend,'active_algorithm':model.get('algorithm'),
                       'active_solver_session_id':solver.session_id,'error':None})
             except Exception as exc:
-                traceback.print_exc();emit({'type':'state','status':'error','ready':False,'error':str(exc)})
+                traceback.print_exc();emit({'type':'state','status':'error','ready':False,'display_available':False,'error':str(exc)})
                 topology=None;continue
-        try:frame=frames.get(timeout=.03)
-        except queue.Empty:continue
+        if replay:
+            frame=replay.frame()
+            if frame is None:
+                emit({'type':'state','playback':replay.snapshot()});stop.wait(.03);continue
+        else:
+            try:frame=frames.get(timeout=.03)
+            except queue.Empty:continue
         if (frame.get('geometry_version'),frame.get('binding_version'),frame.get('model_hash'))!=version:continue
         try:
             emit({'type':'state','status':'solving','processing_source_timestamp_ms':frame['timestamp_ms']})
@@ -112,11 +132,13 @@ def main():
             published=time.time()*1000
             result['quality']['output_hz']=1000/(published-last_output_wall_ms) if last_output_wall_ms and published>last_output_wall_ms else None
             last_output_wall_ms=published
-            emit({'type':'frame',**result,'solver_backend':('slsqp' if backend.startswith('slsqp') else backend),
+            emit({'type':'frame',**result,'solver_backend':backend,
+                'playback':replay.snapshot() if replay else {'active':False},
+                'recorded_timestamp_ms':frame.get('recorded_timestamp_ms'),
                 'requested_solver_backend':backend,'active_solver_backend':backend,
                 'active_algorithm':result['algorithm'],'active_solver_session_id':result['solver_session_id'],'error':None})
         except Exception as exc:
-            traceback.print_exc();emit({'type':'state','status':'error','ready':False,'error':str(exc)})
+            traceback.print_exc();emit({'type':'state','status':'error','ready':False,'display_available':False,'error':str(exc)})
 
 
 if __name__=='__main__':

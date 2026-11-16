@@ -80,6 +80,20 @@ class Runtime:
         self.hand = HandModelBridge(ROOT, OUTPUT)
         self.checkpoints = CheckpointCatalog(OUTPUT)
         self.wuji = WujiBridge(ROOT, OUTPUT)
+        from .geort_service import GeoRTService
+        from .cart_service import CartService
+        self.cart = CartService()
+        self.geort = GeoRTService(workspace=True)
+        self.hand.frame_observer = self.observe_hand_output
+        if self.geort.selected:
+            try:
+                self.wuji.geort_model_path=str(self.geort.model_folder(self.geort.selected))
+                self.wuji.backend='geort'
+            except (OSError,ValueError):pass
+        if self.cart.selected:
+            try:
+                self.wuji.cart_model_path=str(self.cart.model_folder(self.cart.selected));self.wuji.backend='cart'
+            except (OSError,ValueError):pass
         self.contact_prediction = ContactPredictionBridge(ROOT, OUTPUT)
         self.contact_prediction.start()
         self.last_mano_send = 0.
@@ -103,8 +117,23 @@ class Runtime:
         self.recorder=SnapshotRecorder(OUTPUT/'recordings')
         self.view_demand={}
         self.software_control_lock=threading.Lock()
+        self.geort.on_model_published=self.reload_geort_model
+        from .geort_diagnostics_service import DiagnosticService
+        self.geort.diagnostics=DiagnosticService(self.geort_diagnostic_input,self.geort.root)
+        self.geort_diagnostic_context=None
         self.thread = threading.Thread(target=self.run, name="moxian-sdk", daemon=True)
         self.thread.start()
+
+    def reload_geort_model(self,key):
+        with self.software_control_lock:
+            folder=self.geort.model_folder(key);self.wuji.geort_model_path=str(folder)
+            if self.wuji.backend=='geort':
+                try:self.geort_command('geort_model_select',dict(model=key))
+                except (OSError,ValueError) as exc:
+                    self.wuji.stop()
+                    with self.wuji.lock:self.wuji.state=dict(status='model_incompatible',ready=False,display_available=False,solver_backend='geort',error=str(exc))
+                    raise
+            self.geort.model_update=dict(model=key,status='loaded' if self.wuji.backend=='geort' else 'ready',run_id=self.geort.published_run)
 
     def _load_baselines(self):
         try:
@@ -139,12 +168,17 @@ class Runtime:
         bone_hash=(result['skeleton'].get('pose') or {}).get('model_hash')
         if (mesh_hash or bone_hash) and mesh_hash!=bone_hash:
             result['hand_model'].update(ready=False,status='waiting_model',error=None)
-        wuji=self.wuji.snapshot(result["connected"],copy_state=view not in ('mano','raw','skeleton','official_skeleton'),
+        wuji=self.wuji.snapshot(result["connected"] or self.geort.replay_active or self.cart.replay_active,copy_state=view not in ('mano','raw','skeleton','official_skeleton'),
             mesh_transport=packed_wuji or view in ('mano','raw','skeleton','official_skeleton'))
         if view in ('mano','raw','skeleton','official_skeleton'):
             from .web_state import inactive_wuji
             wuji=inactive_wuji(wuji)
         result["wuji2"] = wuji
+        result['geort'] = self.geort.snapshot()
+        result['cart'] = self.cart.snapshot(result['connected'],include_mesh=view=='mano')
+        if (self.geort.replay_active and self.geort.replay_topology) or (self.cart.replay_active and self.cart.replay_topology):
+            top=self.cart.replay_topology if self.cart.replay_active else self.geort.replay_topology
+            result['hand_model'].update(geometry_version=top['geometry_version'],binding_version=top['binding_version'],status='geort_replay')
         if result["skeleton"].get("status")=="input_invalid":
             result["hand_model"].update(ready=False,status="input_invalid",error=result["skeleton"]["error"])
         if hasattr(self,'contact_prediction'):
@@ -156,7 +190,7 @@ class Runtime:
         # worker must never stall delivery of synchronized EMF/ADC packets.
         software={'record_start','record_stop','mano_restart','mano_capture_start','mano_capture_confirm','mano_capture_resume','mano_capture_retry','mano_capture_cancel','mano_checkpoint_preview','mano_checkpoint_end','mano_fit','mano_fit_cancel'}
         software.update(('wuji2_solver_set','wuji2_object_set','wuji2_object_clear','wuji2_mapping_rebuild'))
-        if name in software:
+        if name in software or name.startswith(('geort_','cart_')):
             with self.software_control_lock:return self.apply_command(name,data)
         reply = queue.Queue(maxsize=1)
         self.commands.put((name, data or {}, reply))
@@ -169,6 +203,8 @@ class Runtime:
         return result
 
     def disconnect(self):
+        if hasattr(self,'geort'):self.geort.stop_recording('设备断开，已停止录制')
+        if hasattr(self,'cart'):self.cart.recorder.stop_recording('设备断开，已停止录制');self.cart.stop_preview()
         self.hand_inputs = HandInputSynchronizer()
         if self.shared_recorder:self.shared_recorder.close()
         if hasattr(self, "contact"):
@@ -179,7 +215,7 @@ class Runtime:
             self.official_ik.stop()
         if hasattr(self, "hand"):
             self.hand.stop()
-        if hasattr(self, "wuji"):
+        if hasattr(self, "wuji") and not (getattr(getattr(self,'geort',None),'replay_active',False) or getattr(getattr(self,'cart',None),'replay_active',False)):
             self.wuji.stop()
         try:
             if self.sdk:
@@ -206,6 +242,9 @@ class Runtime:
 
     def apply_command(self, name, data=None):
         data = data or {}
+        if name.startswith('cart_'):return self.cart_command(name,data)
+        if name.startswith('geort_'):
+            return self.geort_command(name,data)
         if name == 'contact_prediction_reset':
             return self.contact_prediction.reset_metrics()
         elif name == 'contact_prediction_restart':
@@ -271,6 +310,10 @@ class Runtime:
             if not self.device or not self.sdk:raise ValueError('请先连接手套')
             self.wuji.stop();self.wuji.start(self.device['serial'])
         elif name in ('wuji2_object_set','wuji2_object_clear','wuji2_solver_set'):
+            if name=='wuji2_solver_set' and data.get('solver')!='cart' and self.cart.replay_active:
+                self.cart_command('cart_replay_stop',{})
+            if name=='wuji2_solver_set' and data.get('solver')!='geort' and self.geort.replay_active:
+                self.geort_command('geort_replay_stop',{})
             return self.wuji.control(name.removeprefix('wuji2_'),data)
         elif name == 'wuji2_mapping_rebuild':
             return self.wuji.control('rebuild',{})
@@ -358,6 +401,172 @@ class Runtime:
             self.wuji.start(self.device['serial'])
         except Exception as exc:
             with self.wuji.lock:self.wuji.state.update(status='error',ready=False,error=str(exc))
+
+    def observe_hand_output(self, frame, topology, joints, serial):
+        self.geort.observe(frame,topology,joints,serial)
+        self.cart.observe(frame,topology,joints,serial)
+        return dict(ready=False,status='cart_contact_v3')
+
+    def geort_diagnostic_input(self):
+        """A sampled paired result, never a fresh Glove mixed with an old robot."""
+        import base64,struct
+        from retarget.baseline.geort.adapter import digest
+        w=self.wuji.snapshot(True,copy_state=False,mesh_transport=True)
+        paired=bool(w.get('solver_backend')=='geort' and w.get('ready'))
+        playback=w.get('playback') or {}
+        if paired:
+            frame=w;stamp=w['source_timestamp_ms'];geometry=w['geometry_version'];binding=w['source_binding_version']
+            replay=bool(playback.get('active'))
+            if replay:
+                from .geort_service import safe_id
+                folder=self.geort.root/'recordings'/safe_id(playback['id'])
+                profile_path=folder/'profile.json';topology=self.geort.replay_topology
+            else:profile_path=None;topology=None
+        else:
+            hand=self.hand.snapshot(copy_state=False,include_audit=False,mesh_transport=True)
+            if not hand.get('ready') or not hand.get('calibrated') or hand.get('preview'):return
+            stamp=hand['timestamp_ms'];geometry=hand['geometry_version'];binding=hand['binding_version'];replay=False
+            payload=self.hand.mesh_frame(sequence=(hand.get('mesh_frame') or {}).get('sequence'))
+            if not payload or abs(struct.unpack_from('<d',payload,24)[0]-stamp)>.01:return
+            frame=dict(timestamp_ms=stamp,geometry_version=geometry,binding_version=binding,
+                       mesh_f32_b64=base64.b64encode(payload).decode('ascii'))
+            profile_path=None;topology=None
+        if profile_path is None:
+            serial=self.hand.serial
+            if not serial:return
+            profile_path=OUTPUT/'hand_model'/hashlib.sha256(serial.encode()).hexdigest()[:16]/'qnbot/current.json'
+        key=(geometry,binding,str(profile_path))
+        cached=self.geort_diagnostic_context
+        if not cached or cached[0]!=key:
+            topology=topology or self.hand.model()
+            if topology.get('geometry_version')!=geometry or topology.get('binding_version')!=binding:return
+            profile=json.loads(profile_path.read_text())
+            context=dict(topology=topology,profile=profile)
+            cached=(key,digest([geometry,binding,profile.get('model_hash')]),context)
+            self.geort_diagnostic_context=cached
+        return dict(context_key=cached[1],context=cached[2],frame=frame,robot=paired,timestamp_ms=stamp,
+                    input_kind='replay' if replay else 'live',
+                    robot_reason=None if paired else '当前没有有效的GeoRT结果，仅诊断源Glove')
+
+    def cart_command(self,name,data):
+        from .geort_service import safe_id
+        from .cart_protocol import STAGES,stage
+        if name in ('cart_recordings_delete','cart_models_delete'):
+            return self.delete_learning_assets(self.cart,'recordings' if name=='cart_recordings_delete' else 'models',
+                                               data.get('ids'),'cart')
+        if name=='cart_record_start':
+            if self.geort.replay_active or self.cart.replay_active:raise ValueError('请先返回实时输入')
+            if self.geort.recording.get('active') or self.geort.recording.get('saving'):raise ValueError('GeoRT 正在录制或保存')
+            return self.cart.start_recording(data)
+        if name=='cart_record_stop':return self.cart.recorder.stop_recording()
+        if name=='cart_stage_set':
+            result=self.cart.configure(data);self.cart.start_preview();return result
+        if name=='cart_stage_next':
+            motion=self.cart.motion
+            if motion.get('cycles',0)<2:raise ValueError('请完成两次闭合—张开后再进入下一动作')
+            index=stage(self.cart.stage_id)['index']+1
+            if index>=len(STAGES):return dict(complete=True)
+            return self.cart.configure(dict(stage=STAGES[index]['id']))
+        if name=='cart_preview_stop':self.cart.stop_preview();return dict(stopped=True)
+        if name in ('cart_preprocess','cart_train','cart_evaluate'):
+            return self.cart.start_job(name.removeprefix('cart_'),data)
+        if name=='cart_cancel':return self.cart.cancel()
+        if name=='cart_action_set':
+            mode=data.get('stage','auto')
+            if mode!='auto':stage(mode)
+            self.cart.manual=mode
+            if self.wuji.proc and self.wuji.backend=='cart':self.wuji.control('cart_action_set',dict(stage=mode))
+            return dict(stage=mode)
+        if name=='cart_model_select':
+            key=safe_id(data.get('model'));folder=self.cart.model_folder(key)
+            config=json.loads((folder/'config.json').read_text())
+            if self.cart.recorder.latest and config['source']!=self.cart.recorder.latest[0]['source']:raise ValueError('CART 模型与当前标定／设备不匹配')
+            if not self.wuji.proc or self.wuji.proc.poll() is not None:self.wuji.start(config['source']['serial'])
+            self.wuji.control('model_set',dict(model_path=str(folder),solver='cart'))
+            self.wuji.backend='cart';self.wuji.source_version=None;self.wuji.cart_model_path=str(folder);self.cart.activate(key)
+            return dict(selected_model=key,solver='cart')
+        if name=='cart_replay_load':
+            from .cart_data import manifest
+            if not self.cart.selected:raise ValueError('请先选择完整训练成功的 CART 模型')
+            folder,meta=manifest(self.cart.root,safe_id(data.get('dataset')))
+            config=json.loads((self.cart.model_folder(self.cart.selected)/'config.json').read_text())
+            if config['source']!=meta['source']:raise ValueError('回放与模型源不兼容')
+            if self.cart.recorder.recording.get('active'):raise ValueError('请先停止录制')
+            if self.geort.replay_active:self.geort_command('geort_replay_stop',{})
+            if self.wuji.backend!='cart':self.cart_command('cart_model_select',dict(model=self.cart.selected))
+            self.wuji.control('replay_load',dict(folder=str(folder)))
+            self.cart.replay_active=True;self.cart.replay_topology=json.loads((folder/'topology.json').read_text())
+            return dict(loaded=meta['id'])
+        if name in ('cart_replay_pause','cart_replay_seek'):
+            if name.endswith('seek') and (isinstance(data.get('index'),bool) or not isinstance(data.get('index'),int) or data['index']<0):raise ValueError('定位帧号必须为非负整数')
+            return self.wuji.control(name.removeprefix('cart_'),data)
+        if name=='cart_replay_stop':
+            self.wuji.control('replay_stop',{});self.cart.replay_active=False;self.cart.replay_topology=None;self.wuji.source_version=None
+            return dict(stopped=True)
+        raise ValueError('未知 CART 命令')
+
+    def geort_command(self, name, data):
+        from .geort_service import safe_id
+        from retarget.baseline.geort.training import load_recordings
+        if name=='geort_diagnostics_set':return self.geort.diagnostics.configure(data.get('enabled'))
+        if name=='geort_coverage_select':return self.geort.select_coverage(data.get('datasets',[]))
+        if name=='geort_workspace_rebuild':
+            self.geort.poll_workspace(force=True);return dict(status='starting')
+        if name in ('geort_recordings_delete','geort_models_delete'):
+            return self.delete_learning_assets(self.geort,'recordings' if name=='geort_recordings_delete' else 'models',
+                                               data.get('ids'),'geort')
+        if name=='geort_record_start':
+            if self.geort.replay_active or self.cart.replay_active:raise ValueError('请先返回实时输入再录制动作')
+            if self.cart.recorder.recording.get('active') or self.cart.recorder.recording.get('saving'):raise ValueError('CART 正在录制或保存')
+            return self.geort.start_recording(data.get('label',''))
+        if name=='geort_record_stop':return self.geort.stop_recording()
+        if name=='geort_train':return self.geort.start_training(data.get('datasets',[]),data.get('epochs',200),data.get('fk_epochs',200),data.get('mode','official'))
+        if name=='geort_train_cancel':return self.geort.cancel_training()
+        if name=='geort_evaluate':return self.geort.start_evaluation(data.get('model'),data.get('datasets',[]))
+        if name=='geort_model_select':
+            key=safe_id(data.get('model'));folder=self.geort.model_folder(key)
+            config=json.loads((folder/'config.json').read_text())
+            if self.geort.latest and not self.geort.replay_active and config['source']!=self.geort.latest[0]['source']:
+                raise ValueError('模型与当前 Moxian 设备或标定不兼容')
+            if not self.wuji.proc or self.wuji.proc.poll() is not None:
+                serial=config['source']['serial'];self.wuji.start(serial)
+            self.wuji.control('model_set',dict(model_path=str(folder)))
+            self.wuji.backend='geort';self.wuji.source_version=None;self.wuji.geort_model_path=str(folder);self.geort.activate(key)
+            return dict(selected=key,solver='geort')
+        if name=='geort_replay_load':
+            if not self.geort.selected:raise ValueError('请先选择 GeoRT 模型')
+            key=safe_id(data.get('dataset'))
+            _,source,_=load_recordings(self.geort.root,[key])
+            config=json.loads((self.geort.model_folder(self.geort.selected)/'config.json').read_text())
+            if source!=config['source']:raise ValueError('回放录制与所选模型不兼容')
+            folder=self.geort.root/'recordings'/key
+            self.wuji.control('replay_load',dict(folder=str(folder)))
+            self.geort.replay_active=True
+            self.geort.replay_topology=json.loads((folder/'topology.json').read_text())
+            return dict(loaded=key)
+        if name in ('geort_replay_pause','geort_replay_seek'):
+            if name=='geort_replay_seek' and (isinstance(data.get('index'),bool) or not isinstance(data.get('index'),int) or data['index']<0):
+                raise ValueError('回放位置必须为非负整数帧号')
+            if name=='geort_replay_pause' and not isinstance(data.get('paused',True),bool):
+                raise ValueError('暂停状态必须为布尔值')
+            return self.wuji.control(name.removeprefix('geort_'),data)
+        if name=='geort_replay_stop':
+            self.wuji.control('replay_stop',{})
+            self.geort.replay_active=False;self.geort.replay_topology=None;self.wuji.source_version=None
+            return dict(stopped=True)
+        raise ValueError('未知 GeoRT 操作')
+
+    def delete_learning_assets(self,service,kind,ids,solver):
+        def unload():
+            if kind!='models' or service.selected not in ids:return
+            if self.wuji.backend==solver:
+                self.wuji.stop();self.wuji.topology=None;self.wuji.source_version=None
+                with self.wuji.lock:
+                    self.wuji.state=dict(status='model_missing',ready=False,display_available=False,
+                                         solver_backend=solver,error='已删除当前模型，请选择或训练新模型')
+            setattr(self.wuji,'cart_model_path' if solver=='cart' else 'geort_model_path','')
+            service.replay_active=False;service.replay_topology=None
+        return service.delete_assets(kind,ids,before_delete=unload)
 
     def start_official_reference(self):
         if not hasattr(self, 'official_ik'):
@@ -500,7 +709,7 @@ class Runtime:
                         self.dispatch_hand_input()
                         from .web_state import needs_wuji
                         with self.lock:views=dict(self.view_demand)
-                        if needs_wuji(views,time.monotonic(),self.recorder.active):self.wuji.dispatch(self.hand)
+                        if not (self.geort.replay_active or self.cart.replay_active) and needs_wuji(views,time.monotonic(),self.recorder.active):self.wuji.dispatch(self.hand)
                         self.contact_prediction.dispatch(self.hand)
                         if time.monotonic() - (self.last_frame or connected_at) > 3:
                             raise ValueError("数据流中断，正在重新连接")
@@ -516,6 +725,9 @@ class Runtime:
             self.stop_recording(wait=True)
             self.disconnect()
             self.contact_prediction.stop()
+            self.geort.close()
+            self.cart.close()
+            self.wuji.stop()
 
 def handler(runtime):
     class Handler(BaseHTTPRequestHandler):
@@ -546,6 +758,43 @@ def handler(runtime):
             if route == "/api/state":
                 query=parse_qs(urlparse(self.path).query);view=query.get('view',[None])[0]
                 return self.respond(200, runtime.snapshot(view=view,packed_wuji=query.get('geometry',[None])[0]=='packed'),fast=True)
+            if route in ('/api/geort/recordings','/api/geort/models'):
+                return self.respond(200,{'items':runtime.geort.catalog(route.rsplit('/',1)[-1])})
+            if route=='/api/geort/coverage':
+                finger=parse_qs(urlparse(self.path).query).get('finger',['thumb'])[0]
+                if finger not in ('thumb','index','middle','ring','pinky'):return self.respond(400,{'error':'无效手指'})
+                return self.respond(200,runtime.geort.coverage_snapshot(include_cloud=True,finger=finger))
+            if route in ('/api/geort/workspace/pose','/api/geort/workspace/model'):
+                query=parse_qs(urlparse(self.path).query)
+                try:
+                    sample_id=int(query.get('sample_id',[''])[0]) if route.endswith('/pose') else None
+                    return self.respond(200,runtime.geort.workspace_preview(
+                        query.get('reference_id',[''])[0],sample_id,query.get('finger',['thumb'])[0]))
+                except (ValueError,OSError) as exc:return self.respond(400,{'error':str(exc)})
+            if route in ('/api/cart/recordings','/api/cart/models'):
+                return self.respond(200,{'items':runtime.cart.catalog(route.rsplit('/',1)[-1])})
+            if route=='/api/cart/preview':
+                return self.respond(200,runtime.cart.preview_packet())
+            if route=='/api/cart/preview/topology':
+                return self.respond(200,runtime.cart.preview_topology or {'ready':False})
+            if route=='/api/cart/recording':
+                from .geort_service import safe_id
+                try:
+                    key=safe_id(parse_qs(urlparse(self.path).query).get('id',[None])[0])
+                    folder=runtime.cart.root/'recordings'/key
+                    if not folder.exists():folder=runtime.geort.root/'recordings'/key
+                    meta=json.loads((folder/'manifest.json').read_text())
+                    if meta.get('capture_mode') not in ('cart','cart_v2','cart_v3'):return self.respond(404,{'error':'不是 CART 录制'})
+                    if not meta.get('complete'):return self.respond(409,{'error':'请先停止录制并等待保存完成'})
+                    path=folder/'cart_targets.jsonl' if (folder/'cart_targets.jsonl').exists() else folder/'frames.jsonl'
+                    with path.open('rb') as stream:
+                        self.send_response(200);self.send_header('Content-Type','application/x-ndjson')
+                        self.send_header('Content-Length',str(path.stat().st_size));self.send_header('Cache-Control','no-store')
+                        self.send_header('Content-Disposition',f'attachment; filename="cart_{key}.jsonl"');self.end_headers()
+                        import shutil
+                        shutil.copyfileobj(stream,self.wfile,64*1024)
+                    return
+                except (OSError,ValueError) as exc:return self.respond(400,{'error':str(exc)})
             if route == "/api/ports":
                 return self.respond(200, {"ports": ports()})
             if route == "/api/diagnostics/pose":
@@ -569,7 +818,7 @@ def handler(runtime):
                 try:return self.respond(200,runtime.hand.training_history_snapshot(after,query.get('run_id',[None])[0],query.get('method',[None])[0]))
                 except ValueError as exc:return self.respond(400,{'error':str(exc)})
             if route == "/api/hand_model/model":
-                return self.respond(200, runtime.hand.model())
+                return self.respond(200, runtime.cart.replay_topology if runtime.cart.replay_active else runtime.geort.replay_topology if runtime.geort.replay_active else runtime.hand.model())
             if route == '/api/hand_model/mesh':
                 query=parse_qs(urlparse(self.path).query)
                 try:
@@ -614,7 +863,7 @@ def handler(runtime):
                              "/gestures/together.png": "gestures/together.png",
                              "/gestures/spread.png": "gestures/spread.png",
                              "/gestures/knuckle-and-fist.png": "gestures/knuckle-and-fist.png"}.get(route, "__missing__")
-            extra = {"/training-view.js":"training-view.js","/contact-prediction-view.js":"contact-prediction-view.js","/wuji-view.js":"wuji-view.js","/mano-view.js": "mano-view.js", "/taxel-view.js": "taxel-view.js", "/checkpoint-view.js":"checkpoint-view.js", "/curved-surface.js": "curved-surface.js", "/vendor/three.module.min.js": "vendor/three.module.min.js",
+            extra = {"/geort-workspace-fk.js":"geort-workspace-fk.js","/geort-workspace-pose.js":"geort-workspace-pose.js","/cart-preview.js":"cart-preview.js","/geort-coverage.js":"geort-coverage.js","/geort.js":"geort.js","/cart.js":"cart.js","/cart-overlay.js":"cart-overlay.js","/training-view.js":"training-view.js","/contact-prediction-view.js":"contact-prediction-view.js","/wuji-view.js":"wuji-view.js","/mano-view.js": "mano-view.js", "/taxel-view.js": "taxel-view.js", "/checkpoint-view.js":"checkpoint-view.js", "/curved-surface.js": "curved-surface.js", "/vendor/three.module.min.js": "vendor/three.module.min.js",
                      "/vendor/OrbitControls.js": "vendor/OrbitControls.js"}
             if route in extra:
                 file = STATIC / extra[route]
@@ -638,7 +887,7 @@ def handler(runtime):
                     raise ValueError("Invalid request size")
                 body = json.loads(self.rfile.read(size))
                 self.respond(200, runtime.command(body["command"], body))
-            except (ValueError, KeyError, TypeError) as exc:
+            except (ValueError, KeyError, TypeError, OSError) as exc:
                 self.respond(400, {"error": str(exc)})
     return Handler
 

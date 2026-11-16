@@ -173,7 +173,7 @@ def prepare_templates(model,rows,cancel=None,steps=80):
     selected=[r for r in rows if r.get('capture_protocol')==PROTOCOL and r.get('partition')=='train' and r.get('contact_confirmed') and not r.get('initialization')]
     if not selected:raise ValueError('新协议缺少训练接触事件')
     m=_standard_copy(model);regions=region_faces(m);device=m.device
-    from .card_math import exp_so3
+    from retarget.baseline.card.math import exp_so3
     from .mano_gpu_objective import tip_emf_directions
     from .mano_contact_loss import vertex_normals,normal_residual
     from scipy.spatial.transform import Rotation

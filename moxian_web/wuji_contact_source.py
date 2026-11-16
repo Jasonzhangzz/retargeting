@@ -379,8 +379,8 @@ class MoxianCARDSource:
         return origin, axis, normal, tri
 
     def extract(self, frame, enabled=True):
-        from .card_geometry import contact_weights
-        from .contact_force import estimate_normal_resultant
+        from retarget.baseline.card.geometry import contact_weights
+        from retarget.baseline.card.contact_force import estimate_normal_resultant
         v, j, p, n = self.source(frame)
         weights = contact_weights(frame.get('source_contact') or {}, self.patches, float(frame['timestamp_ms']),
             frame.get('tactile_timestamp_ms') if isinstance(frame.get('tactile_timestamp_ms'), (int, float)) else -1e20, enabled)
@@ -402,7 +402,7 @@ class MoxianCARDSource:
         return (v, j, p, n), weights, anchors
 
     def relocate(self, anchor, uv, vertices, joints):
-        from .card_geometry import chart_point
+        from retarget.baseline.card.geometry import chart_point
         a = dict(anchor); o, x, n, tri = self.chart(a['region'], vertices, joints)
         point, f, bc = chart_point(tri, o, x, n, uv, np.asarray(a['position_m']))
         a.update(position_m=point.tolist(), uv_m=np.asarray(uv).tolist(),

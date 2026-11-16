@@ -67,6 +67,8 @@ function update(state,visible){
  if(!renderer){init();if(error)return;}
  if(!visible)return;
  let m=state?.hand_model;
+ const cartFrame=state?.cart?.preview_frame;
+ if(window.cartHullVisible&&state.cart.ready&&cartFrame?.geometry_version===m?.geometry_version){m={...m,...cartFrame,mesh_frame:null,input_targets:null};}
  const wanted=m&&modelVersion(m);
  if(m?.ready&&completeModel(m)&&version!==wanted)loadTopology(wanted);
  const canPresent=!!m?.ready&&version===wanted&&!!topology&&completeModel(m,topology);
@@ -93,7 +95,7 @@ function update(state,visible){
  document.getElementById('poseEmpty').hidden=canPresent||holding;
  window.manoViewHasFrame=canPresent||holding;
  if(holding){m=displayedModel;document.getElementById('poseStatus').textContent=snapshot?`等待新姿态 · 保留上帧及历史叠层（${Math.round(age)} ms）`:(state?.hand_model?.error||'等待新姿态')+' · 保留最后画面，接触状态未知';}
- if(!(canPresent||holding)){render();return;}
+ if(!(canPresent||holding)){window.updateCartHullOverlay?.(scene,null,basis);render();return;}
  if(!mesh||!topology)return;
  const contact=(canPresent||snapshot)?displayedContact:null;
  const prediction=state?.contact_prediction;
@@ -104,7 +106,8 @@ function update(state,visible){
  }
  const overlay=predictionEnabled&&predictionSnapshot?.binding_version===m.binding_version&&now-predictionReceivedAt<500;
  const heat=overlay?predictionSnapshot:null;
- const signature=JSON.stringify([key,contact?.ready===true,contact?.ready===true?contact.cell_contact:null,document.getElementById('manoWire').checked,showTargets,overlay,overlay?heat.timestamp_ms:null]);
+ window.updateCartHullOverlay?.(scene,canPresent&&m.cart_hull?.timestamp_ms===m.timestamp_ms?m.cart_hull:null,basis);
+ const signature=JSON.stringify([key,window.cartHullVisible,contact?.ready===true,contact?.ready===true?contact.cell_contact:null,document.getElementById('manoWire').checked,showTargets,overlay,overlay?heat.timestamp_ms:null]);
  if(signature===drawSignature){if(activated)render();return;}
  drawSignature=signature;
  const positions=mesh.geometry.attributes.position;

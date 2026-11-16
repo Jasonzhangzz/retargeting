@@ -51,7 +51,7 @@ def require_upstream():
         obj_loader = importlib.import_module("dexonomy.data.obj_loader")
         hand_loader = importlib.import_module("dexonomy.data.hand_loader")
     except ImportError as error:
-        raise RuntimeError("GraspADMM requires requirements-graspadmm.txt in .venv-graspadmm") from error
+        raise RuntimeError("GraspADMM requires requirements.txt in .venv-graspadmm") from error
     return SimpleNamespace(
         core=core, init=initializer, sim=sim, qp=qp, traj=traj,
         obj_loader=obj_loader, hand_loader=hand_loader, OmegaConf=OmegaConf,

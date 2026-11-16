@@ -31,3 +31,14 @@ select{font:11px var(--sans);border:1px solid var(--line);border-radius:3px;padd
 #manoMotionTrajectory svg{display:block;width:100%;height:auto;max-height:110px}#manoMotionTrajectory{margin:8px 0}
 
 #manoMotionPhase.static-passed{color:#16803c;background:#edf9ef;border-left:4px solid #22a447;padding:8px 12px;border-radius:4px}
+.workspace-coverage{margin:14px 0;padding:12px;border:1px solid #d6dacd;border-radius:6px;background:#fafbf7}
+.coverage-table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.coverage-table th,.coverage-table td{text-align:left;padding:8px;border-bottom:1px solid #d6dacd;white-space:nowrap}
+.cart-preview-wrap{height:360px;background:#29342d;border-radius:5px;overflow:hidden;margin:10px 0}
+#cartPreviewCanvas{width:100%;height:100%;display:block;touch-action:none}
+#cartPreviewStatus{font-size:12px}
+.geort-workspace-inspector{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:12px}
+#geortWorkspacePoseCanvas{width:100%;height:360px;display:block;background:#29342d;border-radius:8px;touch-action:none}
+#geortWorkspacePoseStatus{font-size:12px;line-height:1.7}
+@media(max-width:700px){.geort-workspace-inspector{grid-template-columns:minmax(0,1fr)}}
+#geortDiagnosticsRows td{font-size:12px}.coverage-table td.diagnostic-penetrating{color:#b44738;font-weight:600}.coverage-table td.diagnostic-contact{color:#26794d}.coverage-table td.diagnostic-normal_mismatch{color:#a56723}.coverage-table td.diagnostic-unknown{color:#758078}.coverage-table td.diagnostic-separated{color:#58634d}

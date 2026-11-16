@@ -4,11 +4,11 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#eeeae3">
   <title>墨现 · 手套感知控制台</title>
-  <link rel="stylesheet" href="/style.css?v=contact-v3">
+  <link rel="stylesheet" href="/style.css?v=surface-diagnostics-v1">
   <link rel="stylesheet" href="/contact-prediction.css">
   <script defer src="/motion-guide.js?v=qnbot-link-contact-1"></script>
   <script defer src="/calibration-workflow.js?v=qnbot-link-contact-1"></script>
-  <script defer src="/app.js?v=wuji-native-qp-20261113"></script>
+  <script defer src="/app.js?v=wuji-moxian-skeleton-v2-20261116"></script>
   <script defer src="/contact-prediction-view.js?v=qnbot-link-contact-1"></script>
   <script defer src="/checkpoint-view.js?v=qnbot-link-contact-1"></script>
   <script defer src="/training-view.js?v=qnbot-link-contact-1"></script>
@@ -33,10 +33,68 @@
         <div class="pose-toolbar"><span id="coordinateLabel">WRIST LOCAL · 25 JOINTS</span><label><input id="showTipTargets" type="checkbox"> 指尖匹配检查</label><div class="segmented" aria-label="相机视角"><button class="selected" data-camera="orbit">透视</button><button data-camera="top">俯视</button><button data-camera="front">正视</button></div></div>
         <div class="pose-stage"><canvas id="manoCanvas" hidden aria-label="MANO 手部曲面模型"></canvas><canvas id="poseCanvas" aria-label="可旋转的官方骨架或指尖姿态"></canvas><div class="stage-top"><span><i class="dot"></i><b id="poseStatus">等待骨架</b></span><span id="poseSource">OFFICIAL SKELETON IK</span></div><div class="stage-scale"><span id="frameLabel">腕部局部坐标系</span><span>单位 mm</span></div><button id="resetCamera" class="reset-camera" title="重置相机" aria-label="重置相机">↺</button><div id="poseEmpty" class="empty-state"><span>⌁</span><b id="poseEmptyText">等待骨架标定</b></div><div class="stage-help">拖动旋转 <span>·</span> 滚轮缩放 <span>·</span> 仅显示腕部局部手型</div></div>
         <section id="wujiCompare" hidden>
-          <div class="wuji-tools"><label>求解器 <select id="wujiSolver"><option value="slsqp_edge">SLSQP · 接触 edges + Laplacian</option><option value="slsqp_graph">SLSQP · 离散接触图 + Laplacian（实验）</option><option value="slsqp_cem">SLSQP · 纯 CEM 接触 cost</option><option value="cem">CEM · CARD</option></select></label><label>SID <input id="wujiSid" type="number" min="0" max="459" value="0"></label><label><input id="wujiNormals" type="checkbox"> 法向 · 8 mm</label><label><input id="wujiRays" type="checkbox"> 关节原点射线</label><label><input id="wujiErrors" type="checkbox"> 接触误差连线</label><button id="wujiRestart" class="text-button">重启求解</button><button id="wujiRebuild" class="text-button">重建映射</button></div>
+          <div class="wuji-tools"><label>求解器 <select id="wujiSolver"><option value="slsqp_graph">SLSQP · 离散接触图 + Laplacian</option><option value="wuji-retargeting">wuji-retargeting</option><option value="cem">CEM · CARD</option><option value="geort">GeoRT · 已训练网络</option><option value="cart">CART · 接触驱动网络</option></select></label><label>SID <input id="wujiSid" type="number" min="0" max="459" value="0"></label><label><input id="wujiNormals" type="checkbox"> 法向 · 8 mm</label><label><input id="wujiRays" type="checkbox"> 关节原点射线</label><label><input id="wujiErrors" type="checkbox"> 接触误差连线</label><button id="wujiRestart" class="text-button">重启求解</button><button id="wujiRebuild" class="text-button">重建映射</button></div>
+          <details id="geortPanel" class="ik-guide" open>
+            <summary>GeoRT · 动作录制与网络训练</summary>
+            <p class="footnote">完成六动作手型标定后，自由伸展、弯曲各指并自然对指，覆盖日常使用的活动范围。可录制多段，再选择训练数据。建议另录一段独立动作进行评估。</p>
+            <div class="guide-actions"><input id="geortLabel" aria-label="录制名称" placeholder="录制名称（可选）"><button id="geortRecordStart" class="button">开始录制动作</button><button id="geortRecordStop" class="button" disabled>停止并保存</button><button id="geortRefresh" class="text-button">刷新数据与模型</button></div>
+            <p id="geortRecordingStatus" role="status">等待标定后的手部模型</p>
+            <label>录制数据（可多选用于训练或独立评估）<select id="geortDatasets" multiple size="5" style="width:100%"></select></label>
+            <div class="guide-actions"><button id="geortDeleteDatasets" class="text-button">删除所选录制</button><button id="geortCoverageSelect" class="button">叠加所选录制散点</button><button id="geortCoverageReset" class="text-button">清空叠加录制</button></div>
+            <details class="workspace-coverage" open>
+              <summary>采集散点 · 手套与Wuji2参考</summary>
+              <p class="footnote">绿色：已录制的手套指尖（1 mm网格去重）；灰色：训练样本中同时满足当前网络输出角度范围与最大自穿透≤5 mm的Wuji2原始FK指尖。两者均使用掌部坐标，不缩放。机器人手指长度和关节结构不同，灰点不代表手套必须达到的位置。</p>
+              <div class="guide-actions"><label>查看手指 <select id="geortWorkspaceFinger"><option value="thumb">拇指</option><option value="index">食指</option><option value="middle">中指</option><option value="ring">无名指</option><option value="pinky">小指</option></select></label><label><input id="geortShowReference" type="checkbox" checked> 显示Wuji2姿态参考</label><button id="geortWorkspaceRebuild" class="text-button">重建姿态参考</button></div>
+              <p id="geortWorkspaceStatus" role="status">等待GeoRT训练姿态参考</p>
+              <p id="geortCoverageScope">仅显示当前一段录制</p>
+              <p id="geortCoverageStatus" role="status">开始录制或叠加已有录制，查看采集散点。</p>
+              <p id="geortCoverageLegend" class="footnote">绿色为采集点；橙色参考点所在的5 mm单元尚未采集，灰色已采集。点击参考点查看对应Wuji2整手姿态；参考仅为有限机器人样本，不是人体可达空间。</p>
+              <div class="guide-actions"><label><input id="geortOnlyMissing" type="checkbox"> 仅显示未采集参考点</label><button id="geortMissingPose" class="button">查看下一个未采集点</button><button id="geortClearPose" class="text-button">清除姿态预览</button></div>
+              <div class="geort-workspace-inspector">
+              <canvas id="geortCoverageCanvas" aria-label="可拖动旋转的采集指尖与Wuji2姿态参考散点图" style="width:100%;height:360px;touch-action:none"></canvas>
+              <canvas id="geortWorkspacePoseCanvas" aria-label="点选参考样本的Wuji2整手姿态，可拖动旋转"></canvas>
+              </div>
+              <p id="geortWorkspacePoseStatus" role="status">点击参考点，查看生成该点的Wuji2整手姿态。</p>
+              <p id="geortScatterStatus" class="footnote"></p>
+              <p class="footnote">拖动旋转。参考仅保留原训练样本中的合格完整姿态，数量可能稀疏；≤5 mm仍允许轻微穿透，不表示无碰撞或人体关节耦合有效。原生网格顶点及面心密集检查不构成连续无穿透证明，连接关节的机械重叠区域沿用模型排除规则。</p>
+            </details>
+            <details class="workspace-coverage" open>
+              <summary>网格穿透与表面接触诊断 · 只读</summary>
+              <div class="guide-actions"><button id="geortDiagnosticsToggle" class="button">开始表面诊断</button></div>
+              <p id="geortDiagnosticsStatus" role="status">诊断未启动</p>
+              <p id="geortDiagnosticsSummary"></p>
+              <div style="overflow:auto"><table class="coverage-table"><thead><tr><th>指对</th><th>源 Glove：状态／间隙／穿透／法向误差</th><th>Wuji2：状态／间隙／穿透／法向误差</th></tr></thead><tbody id="geortDiagnosticsRows"></tbody></table></div>
+              <p class="footnote">独立进程抽样诊断，Glove与Wuji2使用同一源帧。间隙估计由指定distal表面的顶点和面心双向查询得到，可能漏检小面积接触，穿透深度检查对应两指的全部部位；全手最大值另行显示。间隙≤2 mm、穿透≤0.1 mm且法向误差≤30°标为几何接触近邻。相交网格的间隙也可能为0，穿透不会被标成接触。检测基于原始网格顶点和面心采样，不构成连续无穿透证明。不修改录制、loss或网络输出；collision=0仍表示官方未启用。</p>
+            </details>
+            <div class="guide-actions"><label>训练模式 <select id="geortMode"><option value="contact_v1">接触约束 · 自然屈曲与原生网格</option><option value="official">官方目标 · 禁止反伸</option></select></label><label>网络轮数 <input id="geortEpochs" type="number" min="1" max="2000" value="200"></label><label>首次 FK 轮数 <input id="geortFkEpochs" type="number" min="1" max="2000" value="200"></label><button id="geortTrain" class="button">重新训练并替换 GeoRT</button><button id="geortCancel" class="text-button">取消训练</button></div>
+            <p class="footnote">所有模式均禁止四指MCP屈伸／PIP／DIP及拇指MCP／IP反伸，采样和网络输出下限均为物理伸直位0°；拇指CMC及外展轴保留原生范围。接触约束模式另外改变官方训练目标，加入同帧有符号屈伸角、骨段朝向、真实网格穿透（penetration，权重10，0.5 mm归一化）、表面接触（权重2）及法向（权重0.2）损失，均参与反向传播。增加真实FK的归一化对指距离项；接触按指对平衡，闭合时优先表面贴合；整手摊平时同步加强姿态约束，并单独约束末节朝向（权重5）。推理直接使用网络，无追加求解或滤波。成功后仅保留一个当前模型；失败或取消保留原模型。不同模式或目标集的total不可直接比较，接触以独立几何诊断为准。</p>
+            <p id="geortTrainingStatus" role="status">默认：100,000 标定范围 FK 样本 · FK 200轮 · 网络200轮</p><pre id="geortLosses" style="white-space:pre-wrap"></pre>
+            <div class="guide-actions"><label>模型 <select id="geortModels"></select></label><button id="geortSelect" class="button">启用网络预览</button><button id="geortEvaluate" class="button">用所选独立数据评估</button><button id="geortDeleteModel" class="text-button">删除所选模型</button></div>
+            <div class="guide-actions"><button id="geortReplayLoad" class="button">回放所选一段动作</button><button id="geortReplayPause" class="button">暂停／继续</button><button id="geortReplayStop" class="text-button">返回实时输入</button></div>
+            <input id="geortReplaySeek" aria-label="GeoRT 回放进度" type="range" min="0" max="1" value="0" style="width:100%"><p id="geortReplayStatus" role="status">实时输入</p>
+            <p id="geortError" role="alert" style="color:#b44738">录制控件加载中…</p><pre id="geortEvaluation" style="white-space:pre-wrap"></pre>
+          </details>
           <div class="wuji-canvas-wrap"><canvas id="wujiCanvas" aria-label="同步视角的 Moxian glove 与 Wuji2 触觉对照"></canvas><span class="wuji-left-label">Moxian · 源手套模型</span><span class="wuji-right-label">WUJI2.2 · 虚拟触觉映射</span></div>
-          <p id="wujiStatus" role="status">等待 Moxian 输入</p><p id="wujiFrameIdentity" role="status">画面后端：等待首帧</p><p id="wujiError"></p><p id="wujiSidInfo" class="footnote"></p><p id="wujiSourceQuality" class="footnote"></p><p class="footnote">共同虚拟世界 · 相同单位与比例 · 紫色：阵列；黄色：手套二值接触标签。SLSQP 使用骨架与接触点统一图，跨语义 link 接触边高权重；橙线显示接触边及材料点到骨架的连接。CEM 保留独立 CARD 代价。实时显示原始候选，动力学关闭，力权重仅为相对触觉强度。</p>
+          <p id="wujiStatus" role="status">等待 Moxian 输入</p><p id="wujiFrameIdentity" role="status">画面后端：等待首帧</p><p id="wujiError"></p><p id="wujiSidInfo" class="footnote"></p><p id="wujiSourceQuality" class="footnote"></p><p class="footnote">共同虚拟世界 · 相同单位与比例 · 紫色：阵列；黄色：手套二值接触标签。离散图 SLSQP 使用骨架与接触点统一图，跨语义 link 接触边高权重；橙线显示接触边及材料点到骨架的连接。wuji-retargeting 使用当前已标定 Moxian 骨架和原版两阶段机器人重定向。各后端按自身时序策略输出，动力学关闭，力权重仅为相对触觉强度。</p>
         </section>
+        <details id="cartPanel" class="ik-guide" open>
+          <summary>CART · 五类抓取与三维接触</summary>
+          <p class="footnote">每个子动作自然完成两次张开→闭合→张开。非对指动作请让拇指参与对向夹持或包围。根据当前手型估计球或圆柱尺寸，必要时局部补形；每根关键手指至少有一处指定表面接触即可。低置信度或接触不全时放弃该帧目标；机器人保持源手同帧目标的形状与尺寸。</p>
+          <div class="guide-actions"><label>分区 <select id="cartSplit"><option value="train">训练会话</option><option value="validation">独立验证会话</option></select></label><label>引导动作 <select id="cartStage"></select></label><button id="cartPreview" class="button">预览当前接触目标</button><button id="cartNext" class="button">下一子动作</button></div>
+          <p id="cartPrompt" role="status">等待动作协议</p>
+          <div class="guide-actions"><label><input id="cartShowHull" type="checkbox" checked> 显示 primitive／接触点</label><strong id="cartVolume">—</strong><span id="cartArea">—</span></div>
+          <p id="cartHullStatus" role="status">等待接触几何</p>
+          <div class="cart-preview-wrap"><canvas id="cartPreviewCanvas" aria-label="CART 录制时的源手网格与三维接触目标，可拖动旋转"></canvas></div>
+          <p id="cartPreviewStatus" role="status">独立采集预览 · 不需要已训练模型。绿色显示接触区域与有效 primitive；橙色为诊断候选，不用于训练监督。</p>
+          <div class="guide-actions"><input id="cartLabel" aria-label="CART录制名称" placeholder="会话名称（可选）"><button id="cartRecordStart" class="button" disabled>录制当前子动作／重录</button><button id="cartRecordStop" class="button" disabled>停止并保存</button><button id="cartRefresh" class="text-button">刷新数据与模型</button></div>
+          <p id="cartRecordStatus" role="status">未录制</p>
+          <label>五类抓取会话（多选训练与验证数据）<select id="cartDatasets" multiple size="6" style="width:100%"></select></label><button id="cartDeleteDatasets" class="text-button">删除所选 CART 录制</button><ul id="cartRecordings"></ul>
+          <div class="guide-actions"><button id="cartPreprocess" class="button">完整接触目标预处理</button><label>轮数 <input id="cartEpochs" type="number" min="1" max="2000" value="200"></label><button id="cartTrain" class="button">训练独立 CART 网络</button><button id="cartCancel" class="text-button">取消后台任务</button></div>
+          <p id="cartJob" role="status">需要训练和验证各8个子动作，每段两次完整周期</p><pre id="cartLosses" style="white-space:pre-wrap"></pre>
+          <div class="guide-actions"><label>模型 <select id="cartModels"></select></label><button id="cartSelect" class="button">启用 CART 网络</button><button id="cartEvaluate" class="button">评估所选验证会话</button><button id="cartDeleteModel" class="text-button">删除所选 CART 模型</button><label>实时动作 <select id="cartAction"><option value="auto">自动识别</option></select></label></div>
+          <div class="guide-actions"><button id="cartReplayLoad" class="button">回放所选一段</button><button id="cartReplayPause" class="button">暂停／继续</button><button id="cartReplayStop" class="text-button">返回实时</button></div><input id="cartSeek" aria-label="CART 回放进度" type="range" min="0" max="1" value="0" style="width:100%">
+          <p id="cartContactStatus" role="status"></p><p id="cartError" role="alert" style="color:#b44738">CART 控件加载中…</p>
+        </details>
         <div class="pose-footer"><span><i class="legend-dot"></i><b id="poseLegend">官方 25 节点 / 24 骨段</b></span><span id="skeletonAge">QnBot SDK 1.7.0</span></div>
         <div class="ik-guide" id="ikGuide"><div class="guide-top"><strong>官方骨架初始化（兼容八动作）</strong><span id="ikStep">LEFT HAND</span></div><div id="gestureGuide" class="gesture-guide"><div id="gestureImage" class="gesture-image"></div><div class="gesture-copy"><span id="gestureView" class="gesture-view"></span><h3 id="gestureTitle"></h3><p id="gestureHint"></p><span id="gestureSource" class="gesture-note">动作示意 · 非实时骨架</span></div></div><p id="ikPrompt">初始化官方 IK 运行时…</p><progress id="ikProgress" max="30" value="0"></progress><div class="guide-actions"><button id="ikConfirm" class="button primary" disabled>已就位，采集此动作</button><button id="ikRetry" class="button" disabled>重试此动作</button><button id="ikCancel" class="text-button" disabled>取消</button><button id="ikRestart" class="text-button">重启骨架</button><button id="ikRecalibrate" class="button">Wuji 原生六动作标定</button><button id="ikLegacyInitialize" class="text-button">重做八动作初始化</button><button id="ikRestoreCalibration" class="text-button">恢复上一份骨架标定</button></div><details class="gesture-overview"><summary>八动作示意总览 <span>按顺序采集，每步 30 帧</span></summary><div id="gestureSteps" class="gesture-steps"></div><p class="gesture-credit">前四步：厂商包原图；后四步：对指补充示意。<a href="https://docs.qnbot.com/zh-CN/docs/vetra-glove-pro/sdk/python/latest/capture" target="_blank" rel="noopener">官方采集说明 ↗</a></p></details><p class="footnote">首次需完成八个动作；重启会复用记录。“重新八动作标定”先备份旧记录，新采集可取消并恢复上一份。八动作仅用于初始化；个体标定另采集 Wuji 原生六个静态动作，随后点击 EMF 与骨架拟合。已有记录无需重做初始化；触觉去皮独立。</p></div>
 
@@ -116,6 +174,12 @@
   </main><div id="toast" class="toast" role="status" hidden></div>
 <script type="importmap">{"imports":{"three":"/vendor/three.module.min.js"}}</script>
 <script type="module" src="/mano-view.js"></script>
-<script type="module" src="/wuji-view.js?v=wuji-normal-recovery-20261113"></script>
+<script type="module" src="/wuji-view.js?v=geort-contact-v2"></script>
+<script src="/geort-coverage.js?v=clickable-reference-v6"></script>
+<script type="module" src="/geort-workspace-pose.js?v=1"></script>
+<script src="/geort.js?v=pair-balanced-contact-v2-flat"></script>
+<script src="/cart.js?v=primitive-delta-v5"></script>
+<script type="module" src="/cart-preview.js?v=primitive-delta-v5"></script>
+<script type="module" src="/cart-overlay.js?v=collection-preview-v1"></script>
 </body>
 </html>

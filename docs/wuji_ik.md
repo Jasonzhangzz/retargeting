@@ -1,3 +1,5 @@
+> 历史实验记录：文中部分脚本已于2026-11-16清理；当前基线入口见 [baseline说明](../retarget/baseline/README.md)。
+
 # EMF → Wuji2 并行 IK 初值网络
 
 代码位于 `retarget/learning/wuji_ik`，入口为 `python -m retarget.learning.wuji_ik`。
@@ -62,7 +64,7 @@ PyTorch 2.10+ 内置 Muon、Flash SDPA 和 FlexAttention；不要求第三方 `f
 # GPU 选择通过 CUDA_VISIBLE_DEVICES 控制；按当前资源情况设置进程数。
 $PYTHON -m torch.distributed.run --standalone --nproc-per-node=4 \
   -m retarget.learning.wuji_ik train \
-  --prepared "$IK_DATA" --output results/wuji_ik/temporal_causal \
+  --prepared "$IK_DATA" --output output/reports/wuji_ik/temporal_causal \
   --variant temporal_causal --batch-size 1 --accumulation 8 --checkpoint-blocks
 ```
 
@@ -86,9 +88,9 @@ DDP 按全局有效关节元素数归一化梯度，不平均各 rank 各自的�
 ```bash
 $PYTHON -m torch.distributed.run --standalone --nproc-per-node=4 \
   -m retarget.learning.wuji_ik train \
-  --prepared "$IK_DATA" --output results/wuji_ik/temporal_causal \
+  --prepared "$IK_DATA" --output output/reports/wuji_ik/temporal_causal \
   --variant temporal_causal --checkpoint-blocks \
-  --resume results/wuji_ik/temporal_causal/latest.pt
+  --resume output/reports/wuji_ik/temporal_causal/latest.pt
 ```
 
 `--max-steps` 限制完整训练预算；`--stop-after-steps` 用于提前保存退出的冒烟测试，保留原 scheduler 总预算以便恢复。
@@ -107,8 +109,8 @@ $PYTHON -m torch.distributed.run --standalone --nproc-per-node=4 \
 
 ```bash
 $PYTHON -m retarget.learning.wuji_ik evaluate \
-  --prepared "$IK_DATA" --checkpoint results/wuji_ik/frame_flow/best.pt \
-  --split test --flow-steps 1 4 8 16 --output results/wuji_ik/frame_flow/test.json
+  --prepared "$IK_DATA" --checkpoint output/reports/wuji_ik/frame_flow/best.pt \
+  --split test --flow-steps 1 4 8 16 --output output/reports/wuji_ik/frame_flow/test.json
 ```
 
 也可通过 torchrun 分片评估。报告弧度 MAE/RMSE、每关节误差、左右手/数据集误差、相邻帧增量误差、吞吐量、延迟、峰值分配显存及实际 attention 后端。
@@ -121,7 +123,7 @@ $PYTHON -m retarget.learning.wuji_ik evaluate \
 
 ```bash
 $PYTHON -m retarget.learning.wuji_ik predict \
-  --checkpoint results/wuji_ik/temporal_bidirectional/best.pt \
+  --checkpoint output/reports/wuji_ik/temporal_bidirectional/best.pt \
   --input wrist_emf.npz --side right --output initial_q.npz
 ```
 
@@ -153,7 +155,7 @@ python -m pytest tests/learning/test_wuji_ik.py -q
 
 ```bash
 $PYTHON scripts/smoke_wuji_ik.py --prepared "$IK_DATA" --device cuda:0 \
-  --max-frames 8 --memory-limit-gib 4 --output results/wuji_ik/production_smoke.json
+  --max-frames 8 --memory-limit-gib 4 --output output/reports/wuji_ik/production_smoke.json
 ```
 
 该脚本明确取一条真实训练段的短前缀用于冒烟；正式 train/evaluate/predict 不截断完整段。
@@ -172,7 +174,7 @@ $PYTHON -m retarget.learning.wuji_ik resplit --prepared "$IK_DATA" \
 
 $PYTHON scripts/launch_wuji_ik_queue.py \
   --prepared /mnt/cpfs/zbl-cpfs-new/dataset/jasonzhang/WUJI2_ik_segments_val5_v1 \
-  --output results/wuji_ik_4gpu_bs8192_val5_20261110 \
+  --output output/reports/wuji_ik_4gpu_bs8192_val5_20261110 \
   --frames-per-gpu 8192 --epochs 200 --memory-limit-gib 12
 ```
 
@@ -188,7 +190,7 @@ GPU 空闲显存不足时等待；任务失败会停止队列，后续任务保�
 ```bash
 $PYTHON -m wandb login --host https://wandb.plat.x2robot.com
 $PYTHON scripts/sync_wuji_ik_wandb.py \
-  --campaign results/wuji_ik_4gpu_bs8192_val5_20261110 \
+  --campaign output/reports/wuji_ik_4gpu_bs8192_val5_20261110 \
   --entity x2robot --project 'ik policy' --name-prefix 'ik policy' --follow
 ```
 

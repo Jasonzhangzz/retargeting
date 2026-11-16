@@ -33,3 +33,7 @@ def test_moxian_binary_source_decodes_exact_same_frame_without_json_vertex_expan
     np.testing.assert_array_equal(decoded['joints_m'],joints)
     assert 'mesh_f32_b64' not in decoded
     with pytest.raises(ValueError,match='identity mismatch'):decode_source_frame({**frame,'timestamp_ms':1001.})
+    separate = {**frame, 'timestamp_ms':1020., 'source_display_timestamp_ms':1000., 'emf_input':{'seq':9}}
+    # Raw-EMF headers can no longer bypass the current skeleton/mesh identity.
+    with pytest.raises(ValueError,match='identity mismatch'):
+        decode_source_frame(separate)

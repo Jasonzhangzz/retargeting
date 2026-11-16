@@ -4,7 +4,7 @@ import torch
 from .mano_gpu_collision import BatchedSurfaceCollision
 from .contact import FINGERS,PATCH_IDS
 from .motion_capture import confirmed_touch,bilateral
-from .card_geometry import contact_weights
+from retarget.baseline.card.geometry import contact_weights
 from .calibration_targets import pinch_patches
 from scripts.calibrate_wuji_mano import CHAINS
 

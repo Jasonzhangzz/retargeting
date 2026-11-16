@@ -7,8 +7,8 @@ remains an external-object target. No mesh vertices or shape are displaced.
 import numpy as np
 import torch
 from .contact import PATCH_IDS,FINGERS
-from .card_geometry import contact_weights,chart_point
-from .card_math import exp_so3,log_so3
+from retarget.baseline.card.geometry import contact_weights,chart_point
+from retarget.baseline.card.math import exp_so3,log_so3
 from .wuji_surface import CHAINS,unit
 from .calibration_targets import pinch_patches
 

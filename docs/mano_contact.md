@@ -1,3 +1,5 @@
+> 历史实验记录：文中部分脚本已于2026-11-16清理；当前基线入口见 [baseline说明](../retarget/baseline/README.md)。
+
 # Pose-only MANO contact prediction
 
 The predictor accepts only `pose51[B,T,51]`, `1 <= T <= 8`. Each frame is the
@@ -112,7 +114,7 @@ replace source-specific shape blend shapes with a different MANO template.
 
 ## Commands
 
-Install `requirements-mano-contact.txt`. The existing remote `pi0` environment
+Install `requirements.txt`. The existing remote `pi0` environment
 already has the required runtime packages. Use the new module inside the
 existing retarget checkout; no simulation job needs to be interrupted.
 

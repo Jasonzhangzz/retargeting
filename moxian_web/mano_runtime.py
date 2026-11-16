@@ -304,7 +304,7 @@ class ManoSurface:
         if not torch.is_grad_enabled() and (self.model.glove_parameters is not None or self.model.surface_residual_enabled):
             # Inference owns the current frozen rest geometry already. Keep
             # pose correctives/LBS, without rebuilding individual shape/size.
-            from .card_math import exp_so3
+            from retarget.baseline.card.math import exp_so3
             batch=len(pose)
             v,j,rotations=self.model.official_batched_rest_forward(exp_so3(pose),self.rest[None].expand(batch,-1,-1),self.rest_j[None].expand(batch,-1,-1))
         else:v,j,rotations=self.model.official_forward(self.rest,self.rest_j,self.shape[:10],pose)
@@ -709,7 +709,7 @@ class ManoSurface:
         t=lambda x:torch.tensor(np.array(x),device=self.device,dtype=torch.float32)
         pose=t([v[0] for v in values])
         if np.any(self.calibration_pose_offsets):
-            from .card_math import exp_so3,log_so3
+            from retarget.baseline.card.math import exp_so3,log_so3
             pose=log_so3(exp_so3(pose)@exp_so3(t(self.calibration_pose_offsets)))
         return pose,t([v[1] for v in values]),t([v[2] for v in values]),t([v[4] for v in values])
 

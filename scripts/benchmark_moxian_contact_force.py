@@ -11,9 +11,9 @@ import numpy as np
 import torch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from moxian_web.card_math import CardSettings
-from moxian_web.card_geometry import closest_surface_points
-from moxian_web.wuji_retarget import TactileRetarget
+from retarget.baseline.card.math import CardSettings
+from retarget.baseline.card.geometry import closest_surface_points
+from retarget.baseline.card.retarget import TactileRetarget
 
 
 VARIANTS={

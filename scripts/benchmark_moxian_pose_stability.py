@@ -12,8 +12,8 @@ from scipy.spatial.transform import Rotation
 import torch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from moxian_web.card_math import CardSettings
-from moxian_web.wuji_retarget import TactileRetarget
+from retarget.baseline.card.math import CardSettings
+from retarget.baseline.card.retarget import TactileRetarget
 from moxian_web.wuji_surface import CHAINS
 
 
@@ -82,7 +82,7 @@ def main():
     args=ap.parse_args();args.output.mkdir(parents=True,exist_ok=False);torch.set_num_threads(1)
     variants={'baseline':replace(CardSettings(),wmotion_joint=0,contact_style_weight=0,motion_sample_fraction=0),
               'style_only':replace(CardSettings(),wmotion_joint=0,motion_sample_fraction=0),
-              'motion_global':replace(CardSettings(),motion_sample_fraction=0),'online':CardSettings()}
+              'motion_global':replace(CardSettings(),wmotion_joint=300.,motion_sample_fraction=0),'online':CardSettings()}
     manifest={'sources':{},'variants':{k:variants[k].payload() for k in args.variants},'source_pose_noise_rad_per_axis':None if args.recorded else .0008,
               'labels_used_in_solver':False,'budget':[1024,16],'units':'m/rad'};summary={}
     for path in args.source:

@@ -10,7 +10,7 @@ import json
 from .mano_calibrate_delta import DeltaPolicy,FEATURES
 from .mano_mixed_training import MixedGPUManoObjective,masked_geometry
 from .mano_objective import anatomical_rotations,pose_angles,neutral_rotations,rotation_log
-from .card_math import exp_so3
+from retarget.baseline.card.math import exp_so3
 from .contact import FINGERS,PATCH_IDS
 from .glove_geometry import CHAINS
 

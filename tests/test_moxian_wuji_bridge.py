@@ -111,3 +111,24 @@ def test_raw_source_epoch_ignores_solver_frame_skips_and_detects_real_stream_gap
     assert bridge.source_epoch==0
     bridge.observe_source_input(2300);assert bridge.source_epoch==1
     bridge.observe_source_input(2290);assert bridge.source_epoch==2
+
+
+def test_supported_solver_entries_and_removed_edge_is_rejected(tmp_path):
+    import pytest
+    from moxian_web.wuji_backends import SOLVERS, DEFAULT_SOLVER, create_retarget
+    assert SOLVERS == ('cem', 'slsqp_graph', 'wuji-retargeting', 'geort', 'cart')
+    assert DEFAULT_SOLVER == 'slsqp_graph'
+    bridge = WujiBridge(tmp_path, tmp_path)
+    for removed in ('slsqp_edge', 'slsqp_cem', 'slsqp', 'edge_laplacian'):
+        with pytest.raises(ValueError): bridge.control('solver_set', {'solver': removed})
+        with pytest.raises(ValueError): create_retarget(removed, {})
+
+
+def test_slsqp_factory_selects_the_requested_objective():
+    from unittest.mock import patch
+    from moxian_web.wuji_backends import create_retarget
+    with patch('moxian_web.wuji_contact_slsqp.ContactSLSQPRetarget') as graph, patch('retarget.baseline.wuji_retargeting.runtime.WujiReferenceRetarget') as reference:
+        create_retarget('slsqp_graph', {}, objective_profile='removed')
+        assert graph.call_args.kwargs['objective_profile']=='contact_graph'
+        create_retarget('wuji-retargeting', {})
+        reference.assert_called_once()

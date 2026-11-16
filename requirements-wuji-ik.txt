@@ -1,9 +1,0 @@
-# Remote pi0 already has torch 2.10.0+cu128, including native Muon and Flash SDPA.
-torch>=2.10
-numpy>=1.24
-scipy>=1.10
-h5py>=3.8
-# Optional curve synchronization: scripts/sync_wuji_ik_wandb.py.
-wandb>=0.18
-# CUDA FlexAttention uses the Triton runtime supplied with a compatible PyTorch wheel.
-# Third-party flash_attn is not required.

@@ -1,7 +1,0 @@
-# Isolated native validation worker; do not install into the GPU runtime.
-mujoco==4.0.0
-numpy==2.4.6
-scipy==1.17.1
-
--e ./third_party/robokit
-warp-lang==1.16.0

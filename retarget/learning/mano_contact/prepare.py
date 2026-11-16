@@ -21,7 +21,7 @@ def snapshot_generated(root, output):
         return json.loads(target.read_text())
     sources=[]; seen=set(); model_hashes={}
     for name in ['mano_personalized_cem_20261105','mano_personalized_cem_20261105_b2048','mano50_wuji_success_20261108']:
-        folder=root/'results'/name
+        folder=root/'output/reports'/name
         if not folder.exists():continue
         for receipt in sorted(folder.rglob('verification.json')):
             v=json.loads(receipt.read_text())

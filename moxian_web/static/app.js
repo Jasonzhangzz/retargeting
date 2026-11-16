@@ -46,6 +46,7 @@ $('clearBaseline').onclick = () => command('clear_baseline');
 $('record').onclick = () => command(state?.recording?.active ? 'record_stop' : 'record_start');
 
 function updateUI() {
+  if (!state) return;
   const live = !!(apiAlive && state?.connected);
   if(returnToManoAfterCalibration&&state?.skeleton?.ready&&state.skeleton.capture?.session_state==='completed'){poseMode='mano';$('poseMode').value='mano';returnToManoAfterCalibration=null;sceneInitialized=false;}
   const messages = {connecting:'重新连接中', waiting:'等待数据', disconnected:'已断开', stale:'数据已过期', streaming:'数据流在线'};
@@ -106,7 +107,7 @@ function updateUI() {
     }
   }
   updateModes(live);
-  window.currentMoxianState=state;window.updateCheckpointComparison?.(state);window.updateContactPrediction?.(state);updateHandUI(live);if(poseMode!=='mano')window.updateManoView?.(state,false);if(poseMode!=='wuji2')window.updateWujiView?.(state,false);
+  window.currentMoxianState=state;window.updateGeortUI?.(state);window.updateCartUI?.(state);window.updateCheckpointComparison?.(state);window.updateContactPrediction?.(state);updateHandUI(live);if(poseMode!=='mano')window.updateManoView?.(state,false);if(poseMode!=='wuji2')window.updateWujiView?.(state,false);
   if(replaying){$('liveText').textContent='录制回放 · 本地文件';$('deviceStatus').textContent='录制回放';$('footerState').textContent='REPLAY · 不操作设备';}
 }
 
@@ -122,7 +123,7 @@ async function poll() {
     const nextState=await response.json();if(replaying){statePollPending=false;scheduleStatePoll(100);return;}
     if(poseMode==='mano')await hydrateNativeMesh(nextState);
     state=nextState; apiAlive = true; lastFetch = performance.now();
-    if(!initialSolverApplied&&poseMode==='wuji2'&&state.connected&&state.wuji2?.solver_backend&&['slsqp_cem','slsqp_edge','slsqp_graph','cem'].includes(requestedSolver)&&!busy){
+    if(!initialSolverApplied&&poseMode==='wuji2'&&state.connected&&state.wuji2?.solver_backend&&['slsqp_graph','cem','wuji-retargeting','geort','cart'].includes(requestedSolver)&&!busy){
      initialSolverApplied=true;if(state.wuji2.solver_backend!==requestedSolver)void selectWujiSolver(requestedSolver);
     }
     if (!mappingDirty && state.contact?.mapping_version && mapping?.version !== state.contact.mapping_version) loadMapping();
@@ -289,6 +290,8 @@ $('manoGoSkeleton').onclick=()=>{$('poseMode').value='skeleton';$('poseMode').di
 $('wujiRestart').onclick=()=>command('wuji2_restart');
 $('wujiRebuild').onclick=()=>command('wuji2_mapping_rebuild');
 async function selectWujiSolver(solver){
+ if(state?.cart?.replay_active&&solver!=='cart'){await command('cart_replay_stop');}
+ if(state?.geort?.replay_active&&solver!=='geort'){await command('geort_replay_stop');}
  if(busy||replaying)return;
  window.wujiRequestedSolver=solver;window.updateWujiView?.(state,poseMode==='wuji2');
  const result=await command('wuji2_solver_set',{solver});

@@ -1,5 +1,5 @@
 import pytest
-pytest.importorskip("serial", reason="Moxian service requires requirements-moxian.txt")
+pytest.importorskip("serial", reason="Moxian service requires requirements.txt")
 """Run using .venv-moxian/bin/python -m unittest discover -s tests -p test_moxian_protocol.py."""
 import struct
 import unittest

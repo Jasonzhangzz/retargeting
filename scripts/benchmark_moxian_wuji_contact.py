@@ -80,7 +80,7 @@ def run(capture, source_model, output, *, per_stage=5, device='cuda:0', include_
     evaluator = ContactSLSQPRetarget(topology, output/'mappings', device)
     for variant in variants:
         print('Starting '+variant, flush=True)
-        engine = create_retarget('cem' if variant == 'cem' else 'slsqp', topology, output/'mappings', device)
+        engine = create_retarget('cem' if variant == 'cem' else 'slsqp_graph', topology, output/'mappings', device)
         measurements = []; joints = []
         for stage, frames in windows:
             engine.reset(); previous = None

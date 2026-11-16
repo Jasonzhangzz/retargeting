@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from retarget.env.grasp.hand import hand_tree
 
-PACKAGED_DATA = ROOT / 'datasets/dex_grasping_primitives_20261115'
+PACKAGED_DATA = ROOT / 'data/datasets/dex_grasping_primitives_20261115'
 
 PRESETS = {
     '圆盘环握 · RL 对照': ('10_Power_Disk', 27),

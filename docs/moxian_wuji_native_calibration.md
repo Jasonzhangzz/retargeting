@@ -30,7 +30,7 @@
 `0.00002 m²`，随后稳定阈值为 `0.0002 m²`，稳定保持1秒再采集1秒。
 稳定或姿态失效会重新计时；无效输入或250ms断流清空窗口。每动作120秒超时暂停，
 已完成动作保留。阈值与计时的机器码证据见
-[原生采集器笔记](../results/wuji_studio_rea_20261112/sdk/collector_optimizer_followup.md)。
+[原生采集器笔记](../output/reports/wuji_studio_rea_20261112/sdk/collector_optimizer_followup.md)。
 
 原始六组采样帧全部交给原生拟合入口，由其求位置均值及 `Σqqᵀ` 主特征向量旋转平均。
 显示用聚合记录不参与替代原生聚合。原17动作与连续轨迹不会转换为六动作输入。
@@ -47,7 +47,7 @@ NLopt 数值接口。原生函数负责观测聚合、内置模型初始化、�
 优化器由原函数内部创建 NLopt `LD_LBFGS`，`ftol_rel=1e-10`、`maxeval=20000`。
 骨长、外参和姿态的具体参数化、bounds及正则均执行该版原生实现，**不再使用旧Moxian
 log骨长±15%、±20mm/±0.3rad等自定配置**。变量与调用链证据见
-[联合拟合取证](../results/wuji_studio_rea_20261112/native/fit_notes.md)。
+[联合拟合取证](../output/reports/wuji_studio_rea_20261112/native/fit_notes.md)。
 
 与该版未指定 hand_profile 的默认分支一致，分别生成 `wujihand` 和 `wujihand2` 两套结果，
 活动配置为 `wujihand`。两个配置的原始 wrist-root 与 TX-root URDF 原样保存。

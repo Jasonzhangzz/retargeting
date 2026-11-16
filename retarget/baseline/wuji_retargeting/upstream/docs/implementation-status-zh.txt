@@ -1,0 +1,66 @@
+独立 EMF→Wuji1/Wuji2 项目：当前实现与验证状态
+日期：2026-10-21；Frank conda retarget；对照 SDK 2026.8.31。
+
+当前入口
+  python -m emf_retarget INPUT.h5 --side both --models wuji1 wuji2 --output OUTPUT.npz
+  Python：EmfFrame + EmfRetargetPipeline.process()/reset()。
+项目结构及输入/输出含义见根目录 README.txt 和 docs/architecture-zh.txt。
+生产路径不导入SDK，不读取SDK角度、骨架或优化状态；对照双方只共享原始EMF输入和明确的URDF。
+
+已实现且验证通过
+1. 原始已解码EMF位姿→人手21角度：模型、精确默认参数/人体限位、FK/J、姿态残差、
+   盒约束QP、阻尼、姿态/历史正则、40/36预算、线搜索、重试和跨帧状态。
+2. 人手q→wrist坐标系21点骨架、5指尖及置信度；保留位置/姿态/骨架置信度f32边界。
+3. 骨架→Wuji1/Wuji2 20角度：完整RetargetSession，两代×左右手各有独立warm/filter。
+4. 统一帧缓存、header/符号零语义、reset、结果隔离、失败回滚、H5/NPZ读写和CLI。
+
+最终原始EMF端到端对照
+共384帧、768组机器人20维输出；实际测试源码与当前源码SHA256一致。
+  left [0..63]：64帧，Wuji1=0rad，Wuji2=0rad
+  right [0..63]：64帧，Wuji1=0rad，Wuji2=0rad
+  left [256..319]：64帧，Wuji1=0rad，Wuji2=0rad
+  right [256..319]：64帧，Wuji1=0rad，Wuji2=0rad
+  left [512..575]：64帧，Wuji1=0rad，Wuji2=0rad
+  right [512..575]：64帧，Wuji1=0rad，Wuji2=0rad
+全体最大差：人手q=2.9773406e-13rad；Wuji1=0rad；Wuji2=0rad。
+骨架位置=1.3877788e-17m，骨架旋转=1.0408341e-17rad，骨架confidence=0。
+指尖位置=0m，旋转=0rad。
+0/256段用于回归；512段是修复冻结后追加的新输入段。每个片段分别冷启动，不冒充完整长时连续录制验证。
+证据：end-to-end-verification.json，包含输入、双方逐帧输出和源码hash。
+
+分层验证
+盒QP：729组原生结果逐位一致；另29组数学active-set枚举验证。
+SO(3)兼容分支：240组原生数学函数对照误差0，另覆盖小theta的非有限输出模式。
+人手IK：56帧既有边界样本重放最大q差6.77e-14rad；覆盖近限位、不可达目标、重试、
+非整步线搜索、非单位/反号四元数和范围外sensor confidence；human-ik-boundaries.json。
+RetargetSession旧独立同骨架验证：1120次step；常规最大7.45e-9rad，退化/近共线最大5.05e-7rad。
+统一接口与IO：11项unittest通过。wheel隔离加载及阻止SDK导入的CLI实跑见project-release-verification.json。
+这些数值是指定版本、模型、环境、样本的测量结果，不是所有输入的误差上界。
+
+本次关键修复及证据
+最初完整链路曾出现约0.041rad机器人误差，不能用人手q仅1e-9的小差异掩盖。
+原因是SDK将URDF重设根节点到TX时，逆向emf_tx_to_wrist关节xyz/rpy会写成10位小数XML。
+直接在原URDF上双精度求逆遗漏了这个构造步骤，使每帧骨架舍入略不同，随后SLSQP状态链放大差异。
+现在参数由URDF逆变换和相同序列化规则计算，无拟合常量。原生constructor XML直接捕获、
+修改过TX的新URDF验证与最终整链对照相互印证。此前“高精度外部标定参数”猜测已被排除。
+证据：human-tx-reroot-evidence.txt、human-tx-reroot-constructor.json、human-f64-fk-changed-verification.json。
+旧误差和敏感性诊断保存在 *-before-tx-fix.json；不能将它们当成当前实现的误差。
+
+当前仍未实现
+1. 原始磁场信号→6D接收器位姿：当前输入已经是EmfPoseArray语义的5个位置/四元数。
+2. 按SN/用户注册表自动搜索标定模型、calibration_file/builtin_default选择、标定训练及RX校正配置加载。
+   当前显式使用CQQ模型，输入RX correction为None；不需要这些功能即可运行已验证主链。
+3. SDK原生对象/PyO3绑定、WujiException类型/文字的完整兼容层。新API不是原SDK类型的逐项替身。
+4. 六路IMU融合、设备通信/连接/控制、在线订阅、触觉及录制管理等其它SDK功能。
+
+已实现但验证仍有边界
+1. 非CQQ人手模型、不同RX校正、自定义机器人URDF/非零backoff未获同等验证。
+   后两项不是原公开RetargetSession.for_hand暴露的参数，不算漏掉该接口的功能。
+2. Retarget依赖NLopt2.11的SLSQP，并非手工重写整个内嵌求解器。负状态回退有机器码证据和注入测试，
+   未在原生SDK动态触发所有错误状态；所有非法输入、并发、长期运行和其它平台/版本也未穷举。
+3. 任意非有限EMF、极端旋转分支与所有URDF树结构不能由有限测试宣称完全等价。
+
+对RetargetSession核心缺口的结论
+内置两代手×左右手的预处理、FK/J、目标及梯度、两阶段优化、失败回退、warm/低通/reset均已实现。
+当前没有已确认的正常主路径算法空缺。剩余工作属于上述绑定兼容、扩展配置或验证覆盖，
+不再把EMF→人手IK列作尚未实现，也不把本项目说成整个SDK已经复现。

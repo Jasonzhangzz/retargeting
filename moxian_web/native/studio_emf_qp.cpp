@@ -110,16 +110,20 @@ void* studio_qp_create(int nb,int nq,int wrist,const int* parent,const int* join
  }catch(...){return nullptr;}
 }
 void studio_qp_destroy(void* p){delete static_cast<Model*>(p);}
-int studio_qp_step(void* p,const double* initial,const double* reference,int history,double dt,
- const double* targets,const double* rotations,double* result,double* reports){
+static int step_impl(void* p,const double* initial,const double* reference,int history,double dt,
+ const double* targets,const double* rotations,double* result,double* reports,bool motion_limited){
  try{
   const auto& m=*static_cast<Model*>(p);VectorXd start=Eigen::Map<const VectorXd>(initial,m.nq),q=start;
   VectorXd ref=Eigen::Map<const VectorXd>(reference,m.nq);
   for(int f=0;f<5;f++){
    const auto& ids=m.ids[f];int n=ids.size();VectorXd rest=m.rest,lo(n),hi(n);
-   for(int a=0;a<n;a++){int j=ids[a];if(m.periodic[j])rest[j]+=2*M_PI*std::round((start[j]-rest[j])/(2*M_PI));
-    lo[a]=m.periodic[j]?start[j]-M_PI:m.lower[j];hi[a]=m.periodic[j]?start[j]+M_PI:m.upper[j];
-    if(history){lo[a]=std::max(lo[a],start[j]-m.config[0]*dt);hi[a]=std::min(hi[a],start[j]+m.config[0]*dt);}}
+   // Every seed uses the same frame reference, posture chart and objective.
+   // Exploratory solves may inspect the native joint range; published poses
+   // must retain the one motion box around the previous accepted output.
+   for(int a=0;a<n;a++){int j=ids[a];if(m.periodic[j])rest[j]+=2*M_PI*std::round((ref[j]-rest[j])/(2*M_PI));
+    lo[a]=m.periodic[j]?ref[j]-M_PI:m.lower[j];hi[a]=m.periodic[j]?ref[j]+M_PI:m.upper[j];
+    if(history&&motion_limited){lo[a]=std::max(lo[a],ref[j]-m.config[0]*dt);hi[a]=std::min(hi[a],ref[j]+m.config[0]*dt);}
+    q[j]=std::clamp(q[j],lo[a],hi[a]);}
    VectorXd origin=q,best=q;auto evaluateq=[&](const VectorXd& x){return evaluate(m,f,x,vec(targets+3*f),mat(rotations+9*f),rest,ref,history);};
    double bestcost=evaluateq(q).cost;int iterations=0;
    for(int retry=0;retry<3;retry++){
@@ -143,6 +147,27 @@ int studio_qp_step(void* p,const double* initial,const double* reference,int his
    q=best;auto v=evaluateq(q);reports[5*f]=v.ep;reports[5*f+1]=v.er;reports[5*f+2]=iterations;reports[5*f+3]=bestcost;reports[5*f+4]=1;
   }
   if(!q.allFinite())return -2;Eigen::Map<VectorXd>(result,m.nq)=q;return 0;
+ }catch(...){return -1;}
+}
+int studio_qp_step(void* p,const double* initial,const double* reference,int history,double dt,
+ const double* targets,const double* rotations,double* result,double* reports){
+ return step_impl(p,initial,reference,history,dt,targets,rotations,result,reports,true);
+}
+int studio_qp_probe(void* p,const double* initial,const double* reference,int history,double dt,
+ const double* targets,const double* rotations,double* result,double* reports){
+ return step_impl(p,initial,reference,history,dt,targets,rotations,result,reports,false);
+}
+int studio_qp_score(void* p,const double* angles,const double* reference,int history,
+ const double* targets,const double* rotations,double* reports){
+ try{
+  const auto& m=*static_cast<Model*>(p);VectorXd q=Eigen::Map<const VectorXd>(angles,m.nq);
+  VectorXd ref=Eigen::Map<const VectorXd>(reference,m.nq),rest=m.rest;
+  for(int j=0;j<m.nq;j++)if(m.periodic[j])rest[j]+=2*M_PI*std::round((ref[j]-rest[j])/(2*M_PI));
+  for(int f=0;f<5;f++){
+   auto v=evaluate(m,f,q,vec(targets+3*f),mat(rotations+9*f),rest,ref,history);
+   reports[5*f]=v.ep;reports[5*f+1]=v.er;reports[5*f+2]=0.;reports[5*f+3]=v.cost;reports[5*f+4]=1.;
+  }
+  return 0;
  }catch(...){return -1;}
 }
 int studio_qp_forward(void* p,const double* angles,double* positions,double* rotations){

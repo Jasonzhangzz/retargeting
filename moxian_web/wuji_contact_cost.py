@@ -13,11 +13,6 @@ import numpy as np
 from third_party.emf_wuji_reference.objectives import FrameObjective, direction_loss, thumb_relative_loss
 from third_party.emf_wuji_reference.targets import prepare_targets
 
-ALGORITHM = 'moxian_patch_envelope_slsqp_v4'
-LEGACY_ALGORITHM = 'moxian_unified_graph_slsqp_v3'
-CHAMFER_ALGORITHM = 'moxian_pointcloud_chamfer_slsqp_v5'
-CEM_CONTACT_ALGORITHM = 'moxian_cem_contact_slsqp_v6'
-EDGE_LAPLACIAN_ALGORITHM = 'moxian_contact_edge_laplacian_slsqp_v7'
 CONTACT_GRAPH_ALGORITHM = 'moxian_discrete_contact_graph_slsqp_v8'
 
 
@@ -144,7 +139,7 @@ class ContactSLSQPSettings:
             raise ValueError('Chamfer temperature and patch sample count must be positive')
 
     def payload(self):
-        return dict(**asdict(self), algorithm=ALGORITHM, position_units='m', angle_units='rad',
+        return dict(**asdict(self), algorithm=CONTACT_GRAPH_ALGORITHM, position_units='m', angle_units='rad',
                     contact_reduction='skeleton_row_sum_material_row_mean', coefficient_policy='direct_not_squared',
                     wrist_policy='fixed_source_wrist', postprocessing='none',
                     tactile_objective='cem_tolerant_witness_plus_bidirectional_soft_chamfer', normal_tracking=True, absolute_contact_tracking=False,
