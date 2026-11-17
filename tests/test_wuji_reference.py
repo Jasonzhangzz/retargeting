@@ -236,18 +236,3 @@ def test_only_supported_solver_options_exist_in_page():
     select=html.split('id="wujiSolver"', 1)[1].split('</select>', 1)[0]
     assert set(re.findall(r'<option value="([^"]+)"', select))==set(SOLVERS)
     assert not (Path(__file__).resolve().parents[1]/'moxian_web/card_slsqp.py').exists()
-
-
-def test_baselines_own_implementations_and_old_imports_are_same_modules():
-    import importlib
-    root=Path(__file__).resolve().parents[1]/'retarget/baseline'
-    for old, new in (
-        ('moxian_web.card_math', 'retarget.baseline.card.math'),
-        ('moxian_web.wuji_retarget', 'retarget.baseline.card.retarget'),
-        ('moxian_web.geort_training', 'retarget.baseline.geort.training'),
-        ('moxian_web.geort_runtime', 'retarget.baseline.geort.runtime'),
-        ('moxian_web.wuji_reference_runtime', 'retarget.baseline.wuji_retargeting.runtime'),
-    ):
-        module=importlib.import_module(new)
-        assert importlib.import_module(old) is module
-        assert Path(module.__file__).resolve().is_relative_to(root)

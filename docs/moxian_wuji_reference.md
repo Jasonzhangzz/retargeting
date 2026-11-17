@@ -44,15 +44,15 @@
 
 旧路径的原版默认CQQ模型不适配当前Moxian的TX/RX外参：真实采样曾出现约33/167/186/185/155mm的五指接收器位置残差，多个人手关节达到限位。用户选择使用当前标定骨架，保留原版机器人部分。此前16帧合成EMF的远端逐位一致验证仅证明原码数值一致，不代表设备外参适配；历史记录仍位于 `output/reports/wuji_reference_integration_20261116` 和 `output/reports/wuji_reference_display_20261116`。
 
-本次回归覆盖左右手真实Qnbot拓扑、原版连续角度／热启动／float32滤波／完整优化trace逐位一致、重复帧、重置、非法输入不推进历史、显示逆变换、离线回放、worker后端切换与网页。当前验证结果位于 `output/reports/wuji_moxian_skeleton_20261116`。
+本次回归覆盖左右手真实Qnbot拓扑、原版连续角度／热启动／float32滤波／完整优化trace逐位一致、重复帧、重置、非法输入不推进历史、显示逆变换、离线回放、worker后端切换与网页。当前回归入口为 `tests/test_wuji_reference.py`。
 
 
 ## 对指适用边界
 
-2026-11-16 对当前模型的四组静态标定动作复测发现：源骨架指尖间距约11.65／13.27／13.59／18.13mm，均未触发原版9mm pinch修正。骨架末端标记距离不等于指腹表面间距；显示几何中食指／中指复测已出现相交。原版没有指腹接触、法向或非穿透目标，`thumb_free=True`还放松了拇指中间姿态。因此原码数值一致不保证Moxian对指接触质量。测量方法、提高预算对照、标记差异及回放字段修复见[对指检查报告](../output/reports/wuji_pinch_audit_20261116/README.md)。
+2026-11-16 对当前模型的四组静态标定动作复测发现：源骨架指尖间距约11.65／13.27／13.59／18.13mm，均未触发原版9mm pinch修正。骨架末端标记距离不等于指腹表面间距；显示几何中食指／中指复测已出现相交。原版没有指腹接触、法向或非穿透目标，`thumb_free=True`还放松了拇指中间姿态。因此原码数值一致不保证Moxian对指接触质量。
 
 
-源IK的错误分支恢复已单独修复，版本为 `moxian_studio_native_qp_v2_branch_recovery`；机器人 `RetargetSession` 原始文件保持原SHA256。此前对指审计中的源IK残差属于修复前数据，修复后的静态与876帧原始EMF比较见[源分支恢复报告](../output/reports/moxian_source_branch_fix_20261116/README.md)。
+源IK的错误分支恢复已单独修复，版本为 `moxian_studio_native_qp_v2_branch_recovery`；机器人 `RetargetSession` 原始文件保持原SHA256。此前对指审计中的源IK残差属于修复前数据。
 
 
-标定初值保存已纳入正式六动作流程，当前源版本为 `moxian_studio_native_qp_v3_calibration_seeds`。每次拟合自动生成、序列化并重载验证初值库；在线仅作为原目标函数的求解起点。源运行版本与几何hash分开，旧骨架数据已清理且禁止训练／回放复用，见[标定初值与清理报告](../output/reports/moxian_calibration_seeds_20261116/README.md)。
+标定初值保存已纳入正式六动作流程，当前源版本为 `moxian_studio_native_qp_v3_calibration_seeds`。每次拟合自动生成、序列化并重载验证初值库；在线仅作为原目标函数的求解起点。源运行版本与几何hash分开，旧骨架数据已清理且禁止训练／回放复用。

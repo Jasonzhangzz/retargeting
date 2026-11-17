@@ -36,36 +36,15 @@
 
 此前撤销胶囊碰撞覆盖时只恢复了网格，漏恢复原模型相邻连杆的碰撞排除规则。覆盖层原本会删除这些规则，L1 网格重新启用后导致掌根与手指产生约 14 mm 的虚假穿透和振荡。现在从原始 Wuji2 模型恢复全部排除规则，并通过回归检查。因此上一版报告的原生动态失败不能作为抓姿不可行的证据。本目录的结果已使用修复配置。
 
-## 运行
+## 保留范围
 
-在服务器 `/home/zhangzhe/Dex-Supermimic` 下运行，`--output` 必须指向尚不存在的新目录。默认启用原生网格和虚拟模式。
-
-```bash
-CUDA_VISIBLE_DEVICES=1 .venv/bin/python experiments/refine_primitives_staged_gravity.py \
-  --pose-file /home/zhangzhe/retarget/output/primitives_robokit_20261115/wuji2/grids/10_Power_Disk.npz \
-  --row 27 --num-envs 128 --iterations 100 \
-  --gravity-mode virtual --output logs/new-virtual-run
-```
-
-加载本目录 checkpoint 进行独立真实扰动评估：
-
-```bash
-CUDA_VISIBLE_DEVICES=1 .venv/bin/python experiments/refine_primitives_staged_gravity.py \
-  --pose-file /home/zhangzhe/retarget/output/primitives_robokit_20261115/wuji2/grids/10_Power_Disk.npz \
-  --row 27 --num-envs 128 --gravity-mode disturbance --evaluate-only \
-  --actor-checkpoint /home/zhangzhe/retarget/output/primitives_robokit_20261115/rl-staged-gravity/model_final.pt \
-  --output logs/new-physical-evaluation
-```
-
-将模式改为 `staged` 即可在稳定后逐渐启用持续重力。`--evaluate-only` 不带 checkpoint 时测试原始 retarget 控制目标。
+仅保留历史实验摘要和查看器使用的评估数组。训练 checkpoint 与远端脚本快照已清理；本目录不再提供训练恢复入口。下文数值是历史结果。
 
 ## 文件与验证
 
 - `summary.json`：最终复测、力预算、适用范围。
 - `virtual-evaluation/`：纯虚拟扳手最终评估，包含逐方向 LP 标记、接触力、实际关节角、控制目标及准备阶段轨迹。
 - `physical-validation/`：同一虚拟训练策略的独立真实扰动验证及原生网格几何检查。
-- `model_final.pt`：虚拟模式训练的最终 PPO checkpoint。
-- `sources/`：脚本和回归检查快照。另已部署到远端 retarget/scripts 与 Dex-Supermimic/experiments。
 - `sha256.json`：文件校验。
 
 5 项检查通过：连续稳定门槛与撤去支撑、丢失接触与超时、持续重力加载、原生相邻连杆排除规则恢复、虚拟模式无真实扰动及 LP 能区分承重与力矩抵抗。并完成 128 环境训练、checkpoint 重载复测与独立真实扰动测试，状态均为有限值。

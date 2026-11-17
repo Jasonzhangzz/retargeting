@@ -8,7 +8,7 @@
 | `wuji_retargeting` | 已标定 Moxian 骨架 → 原版 Wuji2；`upstream` 保存用户指定远端的未修改源码、6份URDF及许可证。主适配类 `retarget.baseline.wuji_retargeting.runtime.WujiReferenceRetarget`。 |
 | `geort` | 数据适配、GPU FK、覆盖／可达空间、训练、模型发布、推理、CLI；`upstream` 保存固定版本的原始网络、数据集和损失。CLI 为 `python -m retarget.baseline.geort.cli`。 |
 
-`moxian_web` 保留设备与 HTTP/worker 调度、共享显示曲面和服务接口。原算法模块现在只是兼容导入，指向此处的同一模块对象，没有第二份实现；旧 GeoRT CLI 和原参考目录链接兼容迁移前的后台任务。现有调用点和文档已改用上述路径。
+`moxian_web` 保留设备与 HTTP/worker 调度、共享显示曲面和服务接口。所有算法调用直接使用上述路径；迁移前的兼容导入模块和旧目录链接已移除。
 
 网页支持 `cem`、`slsqp_graph`、`wuji-retargeting`、`geort`、`cart`。离散接触图 SLSQP 和 CART 不属于本次迁移的三个 baseline；SLSQP·CARD 已移除。
 

@@ -1,5 +1,3 @@
-> 历史实验记录：文中部分脚本已于2026-11-16清理；当前基线入口见 [baseline说明](../retarget/baseline/README.md)。
-
 # Pose-only MANO contact prediction
 
 The predictor accepts only `pose51[B,T,51]`, `1 <= T <= 8`. Each frame is the
@@ -155,25 +153,6 @@ Keep the corpus and training configuration fixed when resuming. Resume skips
 sampled indices without rereading past HDF5 samples and preserves the model RNG
 independently of DataLoader setup.
 
-For an authorized full-data run, `scripts/train_mano_contact_full.py` consumes
-a frozen `MANIFEST.json` and chains CPU/GPU numerical prechecks (zero optimizer
-updates), stage 1, stage 2, full natural validation/test and EMA export. Its
-`CONTROL.json` chooses idle-only admission or explicitly authorized resource
-sharing. A controller lock prevents duplicate launch. Source hashes, corpus
-SHA256, device process inventories, worker receipts and complete stage
-checkpoints are retained. A `STOP` file requests a checkpoint at the next
-optimizer boundary and prevents the following stage from starting.
-
-The 2026-11-10 full run uses one GPU with an actual batch of 8192, FP32, and
-10 effective epochs per stage. An effective epoch counts weighted replacement
-sample draws divided by the size of that stage's complete train pool; the
-75/25 temporal/static sampler remains active. It does not mean visiting every
-row once. The exact update budgets are in the run's frozen config. `--preload`
-caches only pose, labels and reconstruction weights in host RAM to avoid many
-small HDF5 reads; data, losses and gradients match the ordinary reader exactly.
-Prechecks and startup receipts determine whether the requested batch fits;
-do not infer a successful GPU launch from configuration alone.
-
 Small verification uses 16 distinct real contact and 16 real noncontact
 windows from train only, both full objectives, and the complete HACO head:
 
@@ -225,11 +204,6 @@ python -m retarget.learning.mano_contact.cli infer \
   --pose-npy pose51.npy --output contacts.npz
 ```
 
-The delivered `output/mano_contact_20261109/export/model.pt` is a **32-example
-verification model**, not a model trained on the consolidated corpus. Its
-training-set overfit metrics must be read separately from natural validation
-and test metrics in the accompanying report.
-
 ## Assets and attribution
 
 Supply licensed standard `MANO_RIGHT.pkl` / `MANO_LEFT.pkl`. `assets` builds the
@@ -242,7 +216,6 @@ not included in source control.
 
 HACO decoder code is derived from upstream commit
 `c774211b968bdf836f9511dbd5ff23bb19fe1c44`; source hashes are recorded in
-`retarget/learning/mano_contact/UPSTREAM.json`. Its CC BY-NC 4.0 license is
-preserved in `third_party/HACO_CONTACT_LICENSE.txt`. See
+`retarget/learning/mano_contact/UPSTREAM.json`. The upstream license hash is recorded in that manifest. See
 [HACO](https://github.com/dqj5182/HACO_RELEASE) and
 [CARD](https://arxiv.org/html/2610.36539) for the contact formulation.

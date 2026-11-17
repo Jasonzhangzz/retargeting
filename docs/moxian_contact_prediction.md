@@ -1,10 +1,8 @@
 # 手套 MANO 接触预测对照
 
 运行 `.venv-moxian/bin/python -m moxian_web.server --port 8890`，打开
-<http://127.0.0.1:8890/#contactPrediction>。权重位于
-`checkpoints/mano_contact_full_20261110/`：`stage2_last.pt` 是完整训练检查点，
-`model.pt` 是用于实时推理的完整 EMA 模型，来自两阶段各约 10 轮的全量训练。
-SHA256 和来源记录在同目录的 `SOURCE.json`。
+<http://127.0.0.1:8890/#contactPrediction>。推理权重由本机通过
+`MOXIAN_CONTACT_CHECKPOINT` 提供，仓库不附带训练检查点。
 
 网络由独立 CPU worker 加载，不阻塞串口采样。默认使用 `.venv-contact/bin/python`；
 可通过 `MOXIAN_CONTACT_PYTHON` 和 `MOXIAN_CONTACT_CHECKPOINT` 更改路径。

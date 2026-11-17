@@ -134,7 +134,7 @@ class GeoRTService:
                 try:
                     command=Path('/proc')/str(int(cached['pid']))/'cmdline'
                     args=command.read_bytes().decode().split('\0')
-                    adopted=any(name in args for name in ('retarget.baseline.geort.cli','moxian_web.geort_cli')) and 'workspace' in args and str(folder) in args
+                    adopted='retarget.baseline.geort.cli' in args and 'workspace' in args and str(folder) in args
                 except (OSError,ValueError,KeyError):pass
             if (cached.get('status')!='completed' or force) and not adopted:
                 write_json(folder/'source.json',source);write_json(folder/'reference_spec.json',spec)
@@ -429,7 +429,7 @@ class GeoRTService:
                     for entry in Path('/proc').glob('[0-9]*'):
                         try:
                             args=(entry/'cmdline').read_bytes().split(b'\0')
-                            if any(name in args for name in (b'retarget.baseline.geort.cli',b'moxian_web.geort_cli')) and b'train' in args and job['run_id'].encode() in args:
+                            if b'retarget.baseline.geort.cli' in args and b'train' in args and job['run_id'].encode() in args:
                                 os.kill(int(entry.name),15)
                         except (OSError,ValueError):continue
         return dict(cancellation_requested=True)

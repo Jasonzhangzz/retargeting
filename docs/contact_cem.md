@@ -1,5 +1,3 @@
-> 历史实验记录：文中部分脚本已于2026-11-16清理；当前基线入口见 [baseline说明](../retarget/baseline/README.md)。
-
 # Contact-space CEM
 
 `solver.type: contact_cem` selects an explicit `ContactProblem`, rather than
@@ -56,13 +54,7 @@ CUDA_VISIBLE_DEVICES=0 uv run --no-project --python .venv-contact/bin/python \
 
 Use `--campaign --resume --output-name contact_campaign` to continue unfinished
 jobs; retries receive new directories and do not replace existing artifacts.
-After the campaign, add executed contact/object metrics and joint actuator
-torques derived from the recorded forces, transmission and joint force limits:
-
-```bash
-uv run --no-project --python .venv-contact/bin/python python \
-  scripts/analyze_contact_benchmark.py output/contact_campaign
-```
+Review each job’s `summary.json` and recorded contact/object metrics after the campaign.
 
 ## Search and physics
 
@@ -84,8 +76,6 @@ regularization by body weight, and make zero contact residuals preserve the
 whole-body nominal exactly. Stance normal velocity is zero; the separately
 recorded `approach_normal_velocity` describes pre-impact motion. Unused event,
 plane-normal and stick-tangent variables have zero sampling spread.
-The original failure evidence and finite-difference replay are in
-[`output/contact_failure_audit_20261110/REPORT.md`](../output/contact_failure_audit_20261110/REPORT.md).
 The continuous variables are surface-point offsets, start time, duration,
 approach direction, normal velocity and tangent velocity. Surface points are
 projected onto primitives or the convex hull of a mesh part. Nonconvex objects

@@ -3,7 +3,6 @@
 *.npy binary
 # Frozen exports/resources keep their original bytes for SHA-256 verification.
 /data/datasets/dex_grasping_primitives_20261115/** -text -whitespace
-/data/datasets/dex_grasping_primitives_20261115/**/*.pt filter=lfs diff=lfs merge=lfs -text
 # Keep pinned upstream sources byte-identical, including original whitespace.
 /retarget/baseline/geort/upstream/** -text -whitespace
 /retarget/baseline/wuji_retargeting/upstream/** -text -whitespace

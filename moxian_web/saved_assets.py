@@ -23,7 +23,7 @@ def running_cli(root):
     for entry in Path('/proc').glob('[0-9]*'):
         try:
             args = (entry/'cmdline').read_bytes().decode().split('\0')
-            if not any(name in args for name in ('retarget.baseline.geort.cli', 'moxian_web.geort_cli', 'moxian_web.cart_cli')):
+            if not any(name in args for name in ('retarget.baseline.geort.cli', 'moxian_web.cart_cli')):
                 continue
             if not any(action in args for action in ('train', 'evaluate', 'preprocess', 'import-raw')):
                 continue

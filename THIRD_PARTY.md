@@ -25,6 +25,6 @@
 
 - `moxian_web/mano_calibrate_flashsac.py`：参考 Holiday-Robot/FlashSAC 的设备常驻 tensor buffer 与编译更新组织，固定 revision `87edc9061150ae9e962dd84e6544e27a1554b3ab`（MIT）。此处是直接损失参数辨识实验，不是 SAC；来源见 `licenses/FlashSAC-SOURCE.json`，许可见 `licenses/FlashSAC-LICENSE`。
 
-- Wuji 完整原生标定固定使用官方 `wuji-sdk==2026.7.1` 发行wheel（SDK项目MIT许可证见 [上游许可证](https://github.com/wuji-technology/wuji-sdk/blob/main/LICENSE)，已解包的依赖保留原声明）；原生库不纳入仓库。`moxian_web/static/gestures/wuji_native/` 的12张动作图及 `tests/fixtures/wuji_2026_7_1_wrist.urdf` 来自本机同版 Wuji Studio，保留原始内容及 `SOURCE.json` 来源/哈希；用于当前本地界面和离线验证，不将这些素材声明为本项目原创。实现与版本边界见 `docs/moxian_wuji_native_calibration.md`。
+- Wuji 完整原生标定固定使用官方 `wuji-sdk==2026.7.1` 发行wheel（SDK项目MIT许可证见 [上游许可证](https://github.com/wuji-technology/wuji-sdk/blob/main/LICENSE)，已解包的依赖保留原声明）；原生库不纳入仓库。`moxian_web/static/gestures/wuji_native/` 的12张动作图及 `tests/fixtures/wuji_2026_7_1_wrist.urdf` 来自本机同版 Wuji Studio，保留原始内容及 `SOURCE.json` 来源/哈希；用于当前本地界面和离线验证，不将这些素材声明为本项目原创。当前标定流程见 `docs/moxian_six_calibration.md`。
 
 - `retarget/baseline/wuji_retargeting/upstream`：用户指定的 `ssh -p 1016 8.147.67.185:/mnt/cpfs/zbl-cpfs-new/USERS/jasonzhang/emf_wuji_retarget` 原版生产 EMF、人手 IK 和机器人重定向链路。45份原始文件逐字节引入，来源和 SHA256 见目录内 `SOURCE.json`；保留 `retarget_reference/NOTICE.txt`、`LICENSE-nalgebra.txt` 及 URDF 来源清单。资产许可范围沿用原声明，不据此重新授予许可。输入与网页显示适配位于 `retarget/baseline/wuji_retargeting`。

@@ -43,13 +43,7 @@ python visualization/viser_primitive_retarget.py --check
 python data/datasets/dex_grasping_primitives_20261115/verify.py
 ```
 
-两个 `model_final.pt` 使用 Git LFS。首次拉取请确保安装 Git LFS，并运行：
-
-```bash
-git lfs pull --include="data/datasets/dex_grasping_primitives_20261115/**/*.pt"
-```
-
-普通 NPZ 数据与 Viser 查看均不需要 checkpoint。
+仓库保留查看器使用的姿态和 RL 末帧数组；训练 checkpoint 与历史脚本快照已清理。
 
 ## Python 读取
 
