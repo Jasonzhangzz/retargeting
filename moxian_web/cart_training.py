@@ -29,6 +29,7 @@ def implementation_identity():
     return dict(geometry_identity(),batch_execution=file_hash(Path(__file__).with_name('cart_fast.py')),
         contact_field=file_hash(Path(__file__).with_name('cart_contact_field.py')),
         kinematics=file_hash(Path(__file__).with_name('cart_kinematics.py')),
+        pretrained_sdf=file_hash(Path(__file__).with_name('cart_pretrained_sdf.py')),
         initialization=file_hash(Path(__file__).with_name('cart_initialization.py')))
 
 
@@ -306,13 +307,15 @@ def full_session(model,objective,sessions,check=lambda:None):
 def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DEFAULT_BATCH_SIZE,length=16,
           smoke=False,architecture='attention',resume=False,warmup_steps=None,device=None,micro_batch_size=0,initialize_from=None,
           initial_noise_rad=DEFAULT_INITIAL_NOISE_RAD,attention_precision='auto',validation_interval=10,validation_window_budget=32,
-          initialize_geometry_from=None,wandb_project=None,wandb_entity=None,wandb_base_url=None,wandb_mode='online',window_stride=0):
+          initialize_geometry_from=None,wandb_project=None,wandb_entity=None,wandb_base_url=None,wandb_mode='online',window_stride=0,
+          initialize_sdf_from=None):
     if architecture not in ARCHITECTURES:raise ValueError('architecture must be attention or fsq')
     from .geort_service import safe_id
     run_id=safe_id(run_id)
     if initialize_from:initialize_from=safe_id(initialize_from)
     if initialize_geometry_from:initialize_geometry_from=safe_id(initialize_geometry_from)
     if sum(map(bool,(resume,initialize_from,initialize_geometry_from)))>1:raise ValueError('恢复、策略初始化与仅几何初始化不能同时指定')
+    if initialize_sdf_from and (resume or initialize_from):raise ValueError('Neural SDF 导入用于新策略；恢复时从 checkpoint 自动还原')
     root=Path(root);folder=root/'models'/run_id
     folder.mkdir(parents=True,exist_ok=resume)
     lockpath=root.parent/'geort/training.lock';lockpath.parent.mkdir(parents=True,exist_ok=True)
@@ -362,6 +365,18 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         hand=CartHand(device);collision=CollisionModel(hand);objective=CartObjective(hand,policy_settings(),collision)
         mean,scale=position_statistics(sessions)
         model=CartNetwork(hand.low,hand.high,architecture,position_mean=mean,position_scale=scale).to(device)
+        sdf_spec={'kind':'link_sdf_v1'}
+        # Construct replacement geometry after policy initialization, preserving
+        # the same seed and initial attention policy in the comparison run.
+        from .cart_pretrained_sdf import load_pretrained,restore_geometry
+        devices=[torch.device(device)] if str(device).startswith('cuda') else []
+        with torch.random.fork_rng(devices=devices):
+            if initialize_sdf_from:
+                collision.model,sdf_spec=load_pretrained(hand,initialize_sdf_from)
+            elif resume or initialize_from or initialize_geometry_from:
+                origin_folder=folder if resume else root/'models'/(initialize_from or initialize_geometry_from)
+                sdf_spec=json.loads((origin_folder/'config.json').read_text()).get('sdf_backend',sdf_spec)
+                if sdf_spec['kind']!='link_sdf_v1':collision.model=restore_geometry(hand,sdf_spec)
         requested_precision=attention_precision
         if attention_precision not in ('auto','float32','bfloat16'):raise ValueError('无效 attention 精度')
         if attention_precision=='auto':
@@ -392,6 +407,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             policy_output=POLICY_OUTPUT,delta_normalization='2*delta_rad/(upper-lower)',state_transition='clamp(normalize(q)+delta,-1,1)',
             gradient_accumulation=False,parallel_batch_size=parallel_size,
             window_stride=window_stride or max(1,length//2),training_windows=len(train_windows),
+            sdf_backend=sdf_spec,
             attention_precision_request=requested_precision,policy_attention_precision=attention_precision,geometry_precision='float32',
             observation_checkpointing=model.checkpoint_observations,
             geometry_activation_recomputation=str(device).startswith('cuda'),
@@ -457,9 +473,14 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 if initialize_from:
                     model.load_state_dict(initial['model']);optimizer.load_state_dict(initial['policy_optimizer'])
                 if origin.get('contact_field')==CONTACT_FIELD_VERSION:
-                    collision.model.load_state_dict(initial['collision']);learner.load_state_dict(initial['sdf_learner'])
+                    if initialize_sdf_from:
+                        collision.model.load_contact_state(initial['collision'])
+                        learner.load_state_dict(initial['sdf_learner'],load_optimizer=False)
+                    else:
+                        collision.model.load_state_dict(initial['collision']);learner.load_state_dict(initial['sdf_learner'])
                     first_warmup=min(learner.steps,warmup_steps)
                 elif 'contact_field' not in origin:
+                    if initialize_sdf_from:raise ValueError('Neural SDF 比较需要已有连续接触头，或不指定几何 checkpoint 并完成接触热启动')
                     # Explicit new-run transfer only. The new contact head and
                     # geometry optimizer/replay need their complete warmup.
                     mismatch=collision.model.load_state_dict(initial['collision'],strict=False)
@@ -563,7 +584,8 @@ class Predictor:
         self.model=CartNetwork(domain['lower'],domain['upper'],self.config['architecture_name'],self.config['levels'],
             self.config['position_mean'],self.config['position_scale']).to(device)
         self.model.set_attention_precision(self.config.get('policy_attention_precision','float32'))
-        self.collision=CollisionModel(self.hand)
+        from .cart_pretrained_sdf import restore_geometry
+        self.collision=CollisionModel(self.hand,restore_geometry(self.hand,self.config.get('sdf_backend',{'kind':'link_sdf_v1'})))
         checkpoint=torch.load(self.folder/'last.pth',map_location=device,weights_only=True)
         self.model.load_state_dict(checkpoint['model']);self.model.eval()
         self.collision.model.load_state_dict(checkpoint['collision']);self.collision.model.eval()

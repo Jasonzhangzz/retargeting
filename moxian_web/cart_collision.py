@@ -177,7 +177,7 @@ class CollisionModel:
             self.contact_collected.append(tuple(v.detach().reshape(n,-1)[ids] if v.ndim==local.ndim else v.detach().reshape(n)[ids]
                 for v in (local,direction,links,palmar)))
 
-    def distance(self,local,links,valid=None):
+    def distance(self,local,links,valid=None,*,configuration=None,pose_ids=None,frames=None):
         if self.auditing:
             return self.oracle.label(local,links)[0].reshape(links.shape)
         shape=links.shape
@@ -185,9 +185,19 @@ class CollisionModel:
         flat=local.reshape(-1,3);ids=links.reshape(-1)
         chunk=65536 if local.is_cuda else 8192
         recompute=local.is_cuda and torch.is_grad_enabled() and local.requires_grad and not any(p.requires_grad for p in self.model.parameters())
-        def evaluate(x,l):
-            return checkpoint(self.model,x,l,use_reentrant=False,preserve_rng_state=False) if recompute else self.model(x,l)
-        values=torch.cat([evaluate(x,l) for x,l in zip(flat.split(chunk),ids.split(chunk))]).reshape(shape) if len(flat) else local.new_empty(shape)
+        articulated=hasattr(self.model,'at_frames') and configuration is not None
+        if articulated:
+            if pose_ids is None or frames is None:raise ValueError('Articulated SDF queries require pose IDs and native frames')
+            poses=pose_ids.reshape(-1)
+            if poses.shape!=ids.shape:raise ValueError('SDF query/pose correspondence changed')
+            def evaluate(x,l,b):
+                args=(x,l,b,configuration,frames[3],frames[4])
+                return checkpoint(self.model.at_frames,*args,use_reentrant=False,preserve_rng_state=False) if recompute else self.model.at_frames(*args)
+            values=torch.cat([evaluate(x,l,b) for x,l,b in zip(flat.split(chunk),ids.split(chunk),poses.split(chunk))]).reshape(shape) if len(flat) else local.new_empty(shape)
+        else:
+            def evaluate(x,l):
+                return checkpoint(self.model,x,l,use_reentrant=False,preserve_rng_state=False) if recompute else self.model(x,l)
+            values=torch.cat([evaluate(x,l) for x,l in zip(flat.split(chunk),ids.split(chunk))]).reshape(shape) if len(flat) else local.new_empty(shape)
         if self.collecting:self.collect_local(local,links,valid)
         return values
 
@@ -231,7 +241,11 @@ class CollisionModel:
         shapes=[local.numel()//3]+[x.numel()//3 for x,_ in tactile]
         points=torch.cat([local.reshape(-1,3)]+[x.reshape(-1,3) for x,_ in tactile])
         owners=torch.cat([links.flatten()]+[l.flatten() for _,l in tactile])
-        values=self.distance(points,owners).split(shapes)
+        poses=None
+        if hasattr(self.model,'at_frames'):
+            poses=torch.cat((torch.arange(len(q),device=q.device).repeat_interleave(shapes[0]//len(q)),
+                torch.arange(len(q),device=q.device).repeat_interleave(torch.as_tensor(shapes[1:],device=q.device))))
+        values=self.distance(points,owners,configuration=q,pose_ids=poses,frames=frames).split(shapes)
         sdf=values[0].reshape(links.shape)
         if self.auditing:self_depth=torch.where(valid,(-sdf).clamp_min(0),0.).amax(-1)
         else:
@@ -304,7 +318,7 @@ class CollisionModel:
         world=(r[batch,source.clamp_min(0)]@point[...,None]).squeeze(-1)+p[batch,source.clamp_min(0)]
         world=torch.where((source>=0)[:,None],world,point)
         local=(r[batch,target].transpose(-1,-2)@(world-p[batch,target])[...,None]).squeeze(-1)
-        cost=(self.distance(local,target)/scale).square()
+        cost=(self.distance(local,target,configuration=q,pose_ids=batch,frames=frames)/scale).square()
         minimum=q.new_full((segment_count,),torch.inf).scatter_reduce(0,segment,cost.detach(),reduce='amin',include_self=True)
         weight=torch.exp(-(cost-minimum[segment]));reward=torch.exp(-.5*cost)
         denominator=q.new_zeros(segment_count).index_add(0,segment,weight)
@@ -326,7 +340,11 @@ class CollisionModel:
 class SDFLearner:
     def __init__(self,collision,capacity=200000,batch_size=2048):
         self.collision=collision;self.model=collision.model;self.oracle=collision.oracle
-        self.optimizer=torch.optim.AdamW(self.model.parameters(),lr=1.e-3)
+        if hasattr(self.model,'pretrained'):
+            self.optimizer=torch.optim.AdamW([
+                dict(params=self.model.pretrained.parameters(),lr=self.model.pretrained_lr),
+                dict(params=[*self.model.links.parameters(),*self.model.contact_field.parameters()],lr=1.e-3)])
+        else:self.optimizer=torch.optim.AdamW(self.model.parameters(),lr=1.e-3)
         self.capacity=capacity;self.batch_size=batch_size;self.cursor=0;self.size=0;self.steps=0
         self.points=torch.empty(capacity,3);self.links=torch.empty(capacity,dtype=torch.long)
         self.distances=torch.empty(capacity);self.normals=torch.empty(capacity,3)
@@ -381,7 +399,7 @@ class SDFLearner:
         ids=torch.randint(self.size,(min(self.size,self.batch_size),))
         x=self.points[ids].to(self.oracle.device).requires_grad_();links=self.links[ids].to(self.oracle.device)
         target=self.distances[ids].to(self.oracle.device);normal=self.normals[ids].to(self.oracle.device)
-        prediction=self.model(x,links)
+        prediction=self.model.training_distance(x,links) if hasattr(self.model,'training_distance') else self.model(x,links)
         gradient=torch.autograd.grad(prediction.sum(),x,create_graph=True)[0]
         weights=1/(1+(target/.01).square())
         fit=(weights*F.smooth_l1_loss(prediction/.001,target/.001,reduction='none')).mean()
@@ -410,17 +428,18 @@ class SDFLearner:
             contact_size=self.contact_size,contact_cursor=self.contact_cursor,
             optimizer=self.optimizer.state_dict())
 
-    def load_state_dict(self,state):
+    def load_state_dict(self,state,*,load_optimizer=True):
         if state['capacity']!=self.capacity or state['batch_size']!=self.batch_size:raise ValueError('SDF replay configuration changed')
         self.size=state['size'];self.cursor=state['cursor'];self.steps=state['steps']
         for key in ('points','links','distances','normals'):getattr(self,key)[:self.size].copy_(state[key])
         self.contact_size=state['contact_size'];self.contact_cursor=state['contact_cursor']
         for key,value in state['contact_replay'].items():self.contact_replay[key][:self.contact_size].copy_(value)
-        self.optimizer.load_state_dict(state['optimizer'])
+        if load_optimizer:self.optimizer.load_state_dict(state['optimizer'])
 
     @torch.no_grad()
     def validate(self,points,links):
-        truth,_=self.oracle.label(points,links);pred=self.model(points,links)
+        truth,_=self.oracle.label(points,links)
+        pred=self.model.training_distance(points,links,validation=True) if hasattr(self.model,'training_distance') else self.model(points,links)
         error=(pred-truth).abs();inside=truth<-.0005
         # Generate a fresh, reproducible holdout without consuming training RNG.
         with torch.random.fork_rng(devices=[torch.device(self.oracle.device)] if str(self.oracle.device).startswith('cuda') else []):

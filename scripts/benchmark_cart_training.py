@@ -22,6 +22,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root',type=Path,default=ROOT/'output/moxian/cart')
     parser.add_argument('--geometry-only',action='store_true',help='Transfer geometry/replay only, leaving the delta policy freshly initialized')
+    parser.add_argument('--initialize-sdf-from',type=Path,help='Benchmark the pretrained articulated SDF distance backend')
     parser.add_argument('--dataset',required=True);parser.add_argument('--model')
     parser.add_argument('--architecture',choices=('attention','fsq'),default='attention')
     parser.add_argument('--batch-size',type=int,default=16);parser.add_argument('--micro-batch-size',type=int,default=0)
@@ -48,6 +49,9 @@ def main():
         args.attention_precision,args.checkpoint_observations)
     batch=[selected[i] for i in np.linspace(0,len(selected)-1,min(parallel,len(selected))).astype(int)]
     hand=CartHand(args.device);collision=CollisionModel(hand)
+    if args.initialize_sdf_from:
+        from moxian_web.cart_pretrained_sdf import load_pretrained
+        collision.model,_=load_pretrained(hand,args.initialize_sdf_from)
     objective=CartObjective(hand,policy_settings(),collision);objective.cache_rows=True
     mean,scale=position_statistics(sessions)
     model=CartNetwork(hand.low,hand.high,args.architecture,position_mean=mean,position_scale=scale).to(args.device)
@@ -55,6 +59,9 @@ def main():
     if args.model:
         folder=args.root/'models'/args.model;config=json.loads((folder/'config.json').read_text())
         if config['architecture_name']!=args.architecture or config['source']!=meta['source']:raise ValueError('Benchmark checkpoint does not match architecture/source')
+        if not args.initialize_sdf_from and config.get('sdf_backend',{}).get('kind','link_sdf_v1')!='link_sdf_v1':
+            from moxian_web.cart_pretrained_sdf import restore_geometry
+            collision.model=restore_geometry(hand,config['sdf_backend']);learner=SDFLearner(collision)
         model=CartNetwork(hand.low,hand.high,args.architecture,position_mean=config['position_mean'],position_scale=config['position_scale']).to(args.device)
         optimizer=torch.optim.AdamW(model.parameters(),lr=1.e-4)
         path=folder/('resume.pth' if (folder/'resume.pth').exists() else 'warmup.pth')
@@ -63,7 +70,10 @@ def main():
             if config.get('policy_output')!=POLICY_OUTPUT:raise ValueError('Absolute-q checkpoint cannot initialize a delta policy; use --geometry-only')
             model.load_state_dict(state['model'])
         if config.get('contact_field'):
-            collision.model.load_state_dict(state['collision']);learner.load_state_dict(state['sdf_learner'])
+            if args.initialize_sdf_from:
+                collision.model.load_contact_state(state['collision']);learner.load_state_dict(state['sdf_learner'],load_optimizer=False)
+            else:
+                collision.model.load_state_dict(state['collision']);learner.load_state_dict(state['sdf_learner'])
         else:
             missing=collision.model.load_state_dict(state['collision'],strict=False)
             expected={k for k in collision.model.state_dict() if k.startswith('contact_field.')}
@@ -93,6 +103,7 @@ def main():
         policy_attention_precision=args.attention_precision,geometry_precision='float32',
         observation_checkpointing=args.checkpoint_observations,
         policy_output=POLICY_OUTPUT,geometry_only_initialization=args.geometry_only,
+        sdf_backend='configuration_sdf_v1' if hasattr(collision.model,'at_frames') else 'link_sdf_v1',
         geometry_activation_recomputation=args.device.startswith('cuda'),
         initialization='offline_wuji_retargeting_ik',initial_noise_rad=args.initial_noise_rad,
         contact_loss_frames=sum(bool(row['contacts']['self_pairs'] or row['contacts']['object_contacts'])

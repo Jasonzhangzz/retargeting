@@ -54,6 +54,7 @@ def main():
             p.add_argument('--resume-run');p.add_argument('--sdf-warmup-steps',type=int)
             p.add_argument('--initialize-from',help='Initialize a new run from a compatible v5 checkpoint; not exact resume')
             p.add_argument('--initialize-geometry-from',help='Reuse geometry and its optimizer/replay; initialize a fresh delta policy')
+            p.add_argument('--initialize-sdf-from',type=Path,help='Load a q-conditioned Neural SDF checkpoint; may combine with contact/replay initialization')
             p.add_argument('--wandb-project');p.add_argument('--wandb-entity')
             p.add_argument('--wandb-base-url',help='Self-hosted W&B origin, without /home')
             p.add_argument('--wandb-mode',choices=('online','offline'),default='online')
@@ -115,7 +116,8 @@ def run(args):
                 initial_noise_rad=args.initial_noise_rad,attention_precision=args.attention_precision,
                 validation_interval=args.validate_every,validation_window_budget=args.validation_windows,
                 initialize_geometry_from=args.initialize_geometry_from,wandb_project=args.wandb_project,wandb_entity=args.wandb_entity,
-                wandb_base_url=args.wandb_base_url,wandb_mode=args.wandb_mode,window_stride=args.window_stride)))
+                wandb_base_url=args.wandb_base_url,wandb_mode=args.wandb_mode,window_stride=args.window_stride,
+                initialize_sdf_from=args.initialize_sdf_from)))
         else:
             from .cart_training import evaluate
             result=evaluate(args.root,safe_id(args.model),args.datasets,check=check)

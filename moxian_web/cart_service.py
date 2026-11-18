@@ -225,6 +225,7 @@ class CartService:
             command+=['--window-stride',str(stride)]
             if data.get('initialize_from'):command+=['--initialize-from',safe_id(data['initialize_from'])]
             if data.get('initialize_geometry_from'):command+=['--initialize-geometry-from',safe_id(data['initialize_geometry_from'])]
+            if data.get('initialize_sdf_from'):command+=['--initialize-sdf-from',str(data['initialize_sdf_from'])]
             for field in ('wandb_project','wandb_entity','wandb_base_url'):
                 if data.get(field):command+=['--'+field.replace('_','-'),str(data[field])]
             self.stop_preview()

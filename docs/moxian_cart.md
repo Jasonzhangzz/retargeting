@@ -250,3 +250,18 @@ python -m moxian_web.cart_cli --root /path/to/cart train \
 在线模式初始化失败会报告错误，不会静默开始无曲线训练。单元测试覆盖禁用分支、服务器地址、真实步数、分项 loss 和恢复参数；CUDA 端到端仍检查两个 Δq 分支的 BPTT、保存恢复和闭环回放。
 
 大显存设备可通过 `--window-stride 2 --batch-size 4096` 使用更密集的真实窗口起点。默认步长仍为 `length//2`（16 步 rollout 时为 8）；步长 2 使当前录制产生约 5302 个不同窗口，不复制窗口凑 batch，不做梯度累积。相邻窗口会重叠，初始 IK 状态各自取对应帧并加独立噪声。验证采样、断流边界、十帧真实未来观测和轨迹缓存不变。配置及 W&B 中记录窗口步长、总窗口数和每次实际并行数；最后不足一个 batch 的窗口仍单独更新。改变采样密度会增加每轮 transition 数，应按实际 optimizer step 和耗时比较曲线。
+
+第二种几何初始化可用 `--initialize-sdf-from output/wuji2_sdf/mlp100k_v1/best.pt`。它直接加载已有的 `d(q,x,link)` 网络（四层 256 宽、16 维 link embedding），不是重解释成 CART 三层 128 宽的局部 SDF，也不经过蒸馏。导入检查原生 mesh SHA、关节 / link 顺序、父链 mask、归一化关节域、腕部坐标、米制和内负外正约定。查询使用实际 rollout q；CART 的局部查询先转回模型原生固定腕部坐标，q 和查询点的梯度都保留。源权重 SHA、训练轮次、结构及坐标约定写入配置和 W&B。
+
+该预训练文件只有距离头，没有方向接触头。与 `--initialize-geometry-from OLD_CART_RUN` 同时使用时，仅从旧 CART 导入接触头、它自己的 embedding 和 mesh 回放，保留预训练距离权重；结构不同的几何 optimizer 重新建立。预训练距离参数以 `1e-5` 微调，接触头继续使用 `1e-3`，每个策略 batch 前仍更新两次。原来统一的 `1e-3` 在合成检查中会明显破坏已学距离，不能直接用于预训练头。局部 mesh 标签在刚性 link 的所有 q 下均成立，因此每次更新将回放点配到新的随机 q 后转换到原生坐标，继续监督距离、符号、法向和 Eikonal；验证使用固定随机 q，并保持训练随机状态不变。
+
+新 checkpoint 包含完整距离网络和两个 optimizer，恢复及 Predictor 不依赖原来的 `best.pt` 路径。策略初始化使用相同 seed，导入网络在单独的 RNG 上下文内构造。该比较同时改变距离网络结构和初始化，不能将全部差异只归因于预训练。正式启用仍以独立真实 mesh 验收为准。
+
+```bash
+python -m moxian_web.cart_cli --root /path/to/second/cart train \
+  --datasets TRAIN_ID VALIDATION_ID --architecture attention \
+  --batch-size 4096 --window-stride 2 --length 16 \
+  --initialize-geometry-from OLD_CART_RUN \
+  --initialize-sdf-from /path/to/mlp100k_v1/best.pt \
+  --wandb-project cart --wandb-base-url https://wandb.plat.x2robot.com
+```

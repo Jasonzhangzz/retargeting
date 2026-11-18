@@ -103,6 +103,7 @@ def main():
     parser.add_argument('--recording',type=Path);parser.add_argument('--output',type=Path)
     parser.add_argument('--architecture',choices=('both','attention','fsq'),default='both')
     parser.add_argument('--device',default='cpu');parser.add_argument('--length',type=int,default=2)
+    parser.add_argument('--initialize-sdf-from',type=Path,help='Also validate importing/restoring an articulated Neural SDF')
     args=parser.parse_args();torch.set_num_threads(1)
     # Compare checkpoint recovery under controlled reductions. Fast BF16 CUDA
     # attention may use nondeterministic backward reductions; two fresh runs
@@ -115,7 +116,7 @@ def main():
     reports={}
     for architecture in ('attention','fsq') if args.architecture=='both' else (args.architecture,):
         model=train(root,['train'],['validation'],architecture,epochs=1,batch_size=1,length=args.length,smoke=True,
-            architecture=architecture,device=args.device)
+            architecture=architecture,device=args.device,initialize_sdf_from=args.initialize_sdf_from)
         # Reload the entire training state, including the replay and optimizers.
         train(root,['train'],['validation'],architecture,epochs=1,batch_size=1,length=args.length,smoke=True,
             architecture=architecture,resume=True,device=args.device)
@@ -131,7 +132,7 @@ def main():
         with patch.object(cart_training,'save_checkpoint',interrupt):
             try:
                 train(root,['train'],['validation'],interrupted,epochs=1,batch_size=1,length=args.length,smoke=True,
-                    architecture=architecture,device=args.device)
+                    architecture=architecture,device=args.device,initialize_sdf_from=args.initialize_sdf_from)
             except InterruptedError:pass
         train(root,['train'],['validation'],interrupted,epochs=1,batch_size=1,length=args.length,smoke=True,
             architecture=architecture,device=args.device,resume=True)
