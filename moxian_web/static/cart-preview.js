@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {OrbitControls} from '/vendor/OrbitControls.js';
-import './cart-overlay.js?v=collection-preview-v1';
+import './cart-overlay.js?v=observed-contacts-v4';
 
 // Source collection geometry has its own viewer, independent of robot inference.
 const canvas=document.getElementById('cartPreviewCanvas'),status=document.getElementById('cartPreviewStatus');
@@ -58,14 +58,14 @@ async function updateFrame(frame,hull){
  if(!hull?.ready&&hull?.diagnostic_candidate)shown={...hull.diagnostic_candidate,preview_only:true,timestamp_ms:hull.timestamp_ms,geometry_version:hull.geometry_version};
  mesh.visible=true;window.updateCartHullOverlay?.(scene,shown,basis);render();
  window.cartPreviewRenderError=null;
- status.textContent=hull?.contact_mode==='hand'?'源手套 · 绿色为指定真实表面区域，亮点与连线为当前最近目标；完全闭合时显示真实手部接触。':hull?.ready?'源手套 · primitive + delta 已通过全部关键手指接触及碰撞检查。':hull?.diagnostic_candidate?'源手套 · 橙色 primitive 为诊断候选，不作为有效训练目标。':hull?.status==='low_confidence'?'源手套 · 几何置信度低，已放弃拟合。':'源手套 · 当前没有通过检查的 primitive，请让拇指参与对向夹持或包围。';
- const primitive=shown?.primitive;if(primitive)status.textContent+=` type ${primitive.reference_type} · ${primitive.kind} + delta · 几何置信度 ${(primitive.confidence*100).toFixed(0)}% · ${hull.processing_ms?.toFixed(1)||'—'} ms`;
+ status.textContent=`手套接触 · 自接触 ${hull?.self_contacts||0} · 物体接触 ${hull?.object_contacts||0} · 触觉 ${hull?.tactile_status==='valid'?'有效':'未知／过期'} · ${hull?.processing_ms?.toFixed(1)||'—'} ms。黄色为观测接触点，蓝色为显示用局部 patch。`;
 
  window.cartPreviewStats={visible:true,timestamp_ms:frame.timestamp_ms,vertices:frame.vertices_m.length,contact_mode:hull?.contact_mode,hull_visible:!!shown?.ready,diagnostic:!!shown?.preview_only,solver_independent:true};
 }
 async function refresh(){
  if(pending)return;
  const c=current?.cart;
+ if(c?.protocol&&c.protocol!=='cart_diff_v5')return hide('CART 服务版本不匹配，请重启网页服务以加载同步触觉接触检测。');
  if(!c?.ready||window.cartHullVisible===false||!document.getElementById('cartPanel').open){
   if(window.cartPreviewStats)window.cartPreviewStats.visible=false;
   return hide(c?.error|| (c?.recording?.active?'接触预览初始化或等待有效几何；原始动作持续录制。':'点击“预览当前接触目标”或开始录制，显示独立三维预览。'));

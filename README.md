@@ -206,3 +206,5 @@ bash scripts/start_moxian_web.sh --host 0.0.0.0 --port 8890
 算法与进一步使用：[六动作标定](docs/moxian_six_calibration.md) · [接触注册](docs/moxian_contact_registration.md) · [SLSQP 重定向](docs/moxian_wuji_contact_slsqp.md) · [CARD／CEM](docs/moxian_robokit_card.md) · [wuji-retargeting](docs/moxian_wuji_reference.md) · [GeoRT](docs/moxian_geort.md) · [CART](docs/moxian_cart.md)。
 
 目录与来源：[目录说明](docs/repository_layout.md) · [baseline 代码](retarget/baseline/README.md) · [第三方来源与许可](THIRD_PARTY.md)。
+
+Wuji2 手型重建与分类：[RVQ 双输出头联合训练、编码与解码](docs/wuji2_rvq.md)。 在“Moxian／Wuji2 对照”中可查看实时手势类别与蓝色线框重建手型。

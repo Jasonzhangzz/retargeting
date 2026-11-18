@@ -15,6 +15,7 @@ import torch
 from moxian_web.wuji_backends import create_retarget, SOLVERS, SLSQP_PROFILES, DEFAULT_SOLVER
 from retarget.baseline.card.geometry import TrackedMesh
 from moxian_web.wuji_transport import pack_result_geometry, decode_source_frame
+from moxian_web.wuji_rvq import WujiRVQ
 
 
 def main():
@@ -51,8 +52,8 @@ def main():
                 else:controls.put(m)
         finally:stop.set()
     threading.Thread(target=reader,daemon=True).start();torch.set_num_threads(1)
+    rvq=WujiRVQ()
     backend=args.solver;device='cuda:0' if torch.cuda.is_available() else 'cpu'
-    manual_cart_action='auto'
     model_path=args.geort_model or None;replay=None;solver=None;topology=None;rebuild=False;version=None;object_sdf=None;last_output_wall_ms=None
     while not stop.is_set():
         try:m=controls.get_nowait()
@@ -66,8 +67,7 @@ def main():
                 if action=='model_set':
                     model_path=(m.get('data') or {})['model_path'];backend=(m.get('data') or {}).get('solver','geort');solver=None
                 elif action=='cart_action_set':
-                    manual_cart_action=(m.get('data') or {}).get('stage','auto')
-                    if solver and hasattr(solver,'set_action'):solver.set_action(manual_cart_action)
+                    error='CART 可微策略不使用动作类别条件'
                 elif action=='replay_load':
                     try:
                         from retarget.baseline.geort.runtime import Replay
@@ -104,8 +104,7 @@ def main():
                 extra={'realtime':True} if backend in SLSQP_PROFILES else {'model_path':model_path} if backend in ('geort','cart') else {}
                 solver_device='cpu' if backend=='wuji-retargeting' else device
                 solver=create_retarget(backend,topology,args.home/'mappings',solver_device,rebuild=rebuild,object_sdf=object_sdf,**extra);rebuild=False
-                if backend=='cart':solver.set_action(manual_cart_action)
-                model={**solver.topology(),'solver_backend':backend}
+                model={**solver.topology(),'solver_backend':backend,'rvq':rvq.metadata()}
                 emit({'type':'topology','model':model})
                 emit({'type':'state','status':'initializing','ready':False,'mapping_ready':solver.mapping['ready'],
                       'failed_sids':solver.mapping['failed_sids'],'requested_solver_backend':backend,
@@ -125,8 +124,16 @@ def main():
         try:
             emit({'type':'state','status':'solving','processing_source_timestamp_ms':frame['timestamp_ms']})
             frame=decode_source_frame(frame)
+            if replay and backend=='cart':frame['cart_future_frames']=replay.future_frames(frame)
             processing_started=time.time()*1000
             result=solver.step(frame)
+            if result.get('status')=='buffering':
+                emit({'type':'state',**result,'solver_backend':backend,
+                      'playback':replay.snapshot() if replay else {'active':False}})
+                continue
+            annotation=rvq.infer(result,model)
+            result['rvq']=annotation
+            result['quality']['rvq_inference_ms']=annotation.get('inference_ms')
             result['quality'].update(input_queue_ms=processing_started-frame['input_received_wall_ms'],
                 input_source_age_ms=processing_started-frame['timestamp_ms'])
             published=time.time()*1000
@@ -134,7 +141,7 @@ def main():
             last_output_wall_ms=published
             emit({'type':'frame',**result,'solver_backend':backend,
                 'playback':replay.snapshot() if replay else {'active':False},
-                'recorded_timestamp_ms':frame.get('recorded_timestamp_ms'),
+                'recorded_timestamp_ms':result.get('recorded_timestamp_ms',frame.get('recorded_timestamp_ms')),
                 'requested_solver_backend':backend,'active_solver_backend':backend,
                 'active_algorithm':result['algorithm'],'active_solver_session_id':result['solver_session_id'],'error':None})
         except Exception as exc:

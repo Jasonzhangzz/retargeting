@@ -86,7 +86,7 @@ class WujiBridge(SkeletonBridge):
             try:self.controls.put_nowait({'type':'topology','model':topology})
             except queue.Full:return
             self.source_version=version
-        fields=('vertices_m','joints_m','timestamp_ms','skeleton_timestamp_ms','tactile_timestamp_ms','source_contact','geometry_version','binding_version','model_hash','surface_backend','quality','hand_side','object_transform','self_contact_pairs','tactile_pose_correction','pose_calibration_version','skeleton_runtime_revision','contact_registration','calibrated','sensor_mounting','calibration_fingerprint','skeleton_runtime_revision','preview')
+        fields=('emf_observation','source_joint_positions_rad','vertices_m','joints_m','timestamp_ms','skeleton_timestamp_ms','tactile_timestamp_ms','source_contact','geometry_version','binding_version','model_hash','surface_backend','quality','hand_side','object_transform','self_contact_pairs','tactile_pose_correction','pose_calibration_version','skeleton_runtime_revision','contact_registration','calibrated','sensor_mounting','calibration_fingerprint','skeleton_runtime_revision','preview')
         frame={k:state.get(k) for k in fields}
         frame['serial']=self.serial
         if self.last_input_stamp is not None:frame['input_stream_epoch']=self.source_epoch

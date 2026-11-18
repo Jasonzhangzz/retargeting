@@ -1,44 +1,36 @@
-/* CART contact protocol: explicit action capture, independent network jobs. */
+/* Arbitrary-motion capture, differentiable training jobs and pure-network inference. */
 (()=>{
  const el=id=>document.getElementById(id);
- let state={},pending=null,refreshing=false,lastRefresh=0,stageKey='';
+ let state={},pending=null,refreshing=false,lastRefresh=0,recordings=[];
  window.cartHullVisible=el('cartShowHull').checked;el('cartError').textContent='';
  const selected=()=>Array.from(el('cartDatasets').selectedOptions).map(o=>o.value);
  function render(){
   const c=state.cart||{},r=c.recording||{},w=state.wuji2||{};
-  const live=!!(state.connected&&state.hand_model?.ready&&state.hand_model?.calibrated&&!c.replay_active&&!state.geort?.replay_active);
-  const stages=c.stages||[];
-  if(stages.length&&stageKey!==JSON.stringify(stages)){
-   stageKey=JSON.stringify(stages);el('cartStage').replaceChildren();
-   for(const s of stages){const o=document.createElement('option');o.value=s.id;o.textContent=`${s.category}类 · ${s.label}`;el('cartStage').appendChild(o);const a=o.cloneNode(true);el('cartAction').appendChild(a);}
-  }
-  if(!pending){el('cartStage').value=c.stage||el('cartStage').value;el('cartSplit').value=c.split||'train';el('cartAction').value=c.manual||'auto';}
-  const stage=stages.find(s=>s.id===c.stage);
-  el('cartPrompt').textContent=`${stage?`${stage.index+1}/${stages.length} · ${stage.label}`:'等待协议'} · 完整周期 ${c.motion?.cycles||0}/2 · ${c.motion?.phase||'等待'}。闭合后再张开，不限速度；未完成可重录。`+(stage?.category===1?' 当前动作使用真实手部表面接触目标。':'');
+  const compatible=c.protocol==='cart_diff_v5';
+  const live=!!(compatible&&state.connected&&state.hand_model?.ready&&state.hand_model?.calibrated&&!c.replay_active&&!state.geort?.replay_active);
+  if(!pending)el('cartSplit').value=c.split||'train';
+  el('cartSplit').disabled=!!(pending||r.active||r.saving);
   el('cartRecordStart').disabled=!!(pending||!live||r.active||r.saving||state.geort?.recording?.active);
   el('cartRecordStop').disabled=!!(pending||!r.active);
-  for(const id of ['cartStage','cartSplit','cartNext'])el(id).disabled=!!(pending||r.active||r.saving);
-  el('cartNext').disabled ||= (c.motion?.cycles||0)<2;
-  el('cartRecordStart').textContent=pending==='cart_record_start'?'正在开始录制…':'录制当前子动作／重录';
-  el('cartRecordStatus').textContent=`${r.active?'CART 录制中':r.saving?'后台保存中':'未录制'} · ${r.frames||0}帧 · 无效 ${r.invalid_frames||0}帧`+(r.seconds?` · ${r.seconds.toFixed(1)}秒`:'')+(r.error?' · '+r.error:'')+(!live?' · 请连接并应用六动作标定':'');
-  const h=c.ready&&c.hull?c.hull:w.solver_backend==='cart'?w.cart_hull:null;
-  el('cartVolume').textContent=h?.ready?`${h.volume_ml.toFixed(3)} mL`:'—';
-  el('cartArea').textContent=h?.ready?`${h.area_cm2.toFixed(2)} cm²`:'—';
-  const primitive=h?.primitive||h?.diagnostic_candidate?.primitive;
-  const initialInfo=primitive?` · type ${primitive.reference_type} · ${primitive.kind} + delta · 半径 ${(primitive.radius_m*1000).toFixed(1)} mm${primitive.kind==='cylinder'?` · 长度 ${(primitive.height_m*1000).toFixed(1)} mm`:''} · 几何置信度 ${(primitive.confidence*100).toFixed(0)}%`:'';
-  const tried=h?.initial_shapes_tried?.length?` · 已尝试 ${h.initial_shapes_tried.join(' / ')}`:'';
-  const low=h?.fit_attempts?.length&&h.fit_attempts.every(a=>a.status==='low_confidence');
-  const fingerNames={thumb:'拇指',index:'食指',middle:'中指',ring:'无名指',pinky:'小指'};
-  const missing=h?.diagnostic_candidate?.contacts?.filter(a=>a.gap_m>.002||a.normal_error_deg>30).map(a=>fingerNames[a.patch.split('_')[0]]).join('、');
-  const details=missing?` · 尚未达标：${missing}`:low?' · 请让拇指参与对向夹持或包围':'';
-  el('cartHullStatus').textContent=h?`${h.contact_mode==='hand'?'真实手部表面接触目标':h.ready?'primitive 接触目标有效':h.diagnostic_candidate?'primitive 诊断候选（无效监督）':h.status==='low_confidence'||low?'几何置信度低，放弃拟合':'无有效 primitive'}${initialInfo}${tried}${details}${h.budget_exhausted?' · 搜索预算已用尽'+(h.ready?'，当前候选验收通过':''):''}${Number.isFinite(h.reference_gap_m)?` · 最大目标间距 ${(h.reference_gap_m*1000).toFixed(1)} mm`:''} · ${h.processing_ms?.toFixed(1)||'—'} ms · 估计延迟 ${c.preview_age_ms?.toFixed(0)||'—'} ms`:(c.error||'点击预览或录制，估计当前动作的 primitive');
+  el('cartRecordStatus').textContent=`${r.active?'录制中':r.saving?'保存中':'未录制'} · ${r.frames||0}帧 · 无效 ${r.invalid_frames||0}帧`+(r.error?' · '+r.error:'');
+  const geometry=c.capture_geometry;
+  el('cartGeometryStatus').textContent=geometry?`Wrist 三维数据 · ${geometry.status==='completed'?'已保存':geometry.status==='failed'?'失败（原始帧已保留，可准备观测重试）':geometry.status==='cancelled'?'等待恢复':'保存中'} · ${geometry.frames||0}${geometry.raw_frames!=null?'/'+geometry.raw_frames:''} 帧${geometry.error?' · '+geometry.error:''}`:'';
+  const h=compatible&&c.ready?c.hull:null;
+  el('cartHullStatus').textContent=c.protocol&&!compatible?'CART 服务版本不匹配，请重启网页服务以加载同步触觉接触检测。':h?`自接触 ${h.self_contacts||0} · 物体接触 ${h.object_contacts||0} · 触觉 ${h.tactile_status==='valid'?'有效':'未知／过期'} · 预览延迟 ${c.preview_age_ms?.toFixed(0)||'—'} ms`:(c.error||'点击预览接触或开始录制');
   window.updateCartPreview?.(state);
-  const job=c.job||{};el('cartJob').textContent=job.error||`${job.action||'后台任务'} · ${job.status||'未运行'} · ${job.phase||''} ${job.epoch?`${job.epoch}/${job.epochs}轮`:job.completed?`${job.completed}/${job.total}帧`:''}`;
-  const running=['starting','running','cancelling'].includes(job.status);
+  const job=c.job||{},running=['starting','running','cancelling'].includes(job.status);
+  el('cartJob').textContent=job.error||`${job.action||'后台任务'} · ${job.status||'未运行'} · ${job.phase||''}${job.device?` · ${job.device}`:''} ${job.epoch?`${job.epoch}/${job.epochs}轮`:job.completed!=null?`${job.completed}/${job.total}帧`:job.frames!=null?`${job.frames}/${job.raw_frames??'…'}帧`:''}${job.logical_batch_size?` · 逻辑 batch ${job.actual_batch_size??job.logical_batch_size}/${job.logical_batch_size} · GPU 分块 ${job.micro_batch_size}`:''}${job.chunk_completed!=null?` · ${job.compute_stage} ${job.chunk_completed}/${job.chunk_total} 块`:''}`;
   el('cartDeleteDatasets').disabled=!!(pending||running||r.active||r.saving||c.replay_active||!selected().length);
   el('cartDeleteModel').disabled=!!(pending||running||!el('cartModels').value);
-  el('cartLosses').textContent=job.losses?JSON.stringify(job.losses,null,2):job.result?JSON.stringify(job.result,null,2):'';
-  const m=w.cart?.metrics;el('cartContactStatus').textContent=m?`${w.cart.stage} · ${w.cart.phase} · ${w.contact_constraints_satisfied?'全部必需接触达标':'接触未全部达标'} · 间距 [${m.gaps_mm.map(v=>v.toFixed(2)).join(', ')}] mm · 最大穿透 ${w.cart.max_penetration_mm.toFixed(3)} mm · 识别 ${(w.cart.action_confidence*100).toFixed(0)}%`:'';
+  for(const id of ['cartPreprocess','cartTrain','cartEvaluate'])el(id).disabled=!!(pending||running||r.active||r.saving||!selected().length);
+  const chosen=recordings.filter(item=>selected().includes(item.id));
+  const trainCount=chosen.filter(item=>item.split==='train').length,validationCount=chosen.filter(item=>item.split==='validation').length;
+  el('cartTrainingHint').textContent=!chosen.length?'请选择训练会话和独立验证会话；也可先单独准备一段录制。':!trainCount||!validationCount?`已选训练 ${trainCount} 段、验证 ${validationCount} 段。${!validationCount?'请将采集分区切换为“验证”，另录一段会话，然后同时选中训练和验证数据。':'请同时选中至少一段训练会话。'}`:'已选择训练和独立验证会话；训练会自动准备缺失或过期的观测与 IK。';
+  if(!trainCount||!validationCount)el('cartTrain').disabled=true;
+  el('cartLosses').textContent=job.losses||job.sdf_losses?JSON.stringify({losses:job.losses,geometry_losses:job.sdf_losses,validation:job.validation_loss,geometry_validation:job.sdf_validation,metrics:job.metrics,timings:job.timings},null,2):job.result?JSON.stringify(job.result,null,2):'';
+  const m=w.cart?.metrics;
+  el('cartBufferStatus').textContent=w.cart?.buffering?`等待未来观测 ${w.cart.buffered_frames}/11 帧`:w.cart?.buffer_delay_ms!==undefined?`观测时间 ${w.cart.observation_timestamp_ms.toFixed(1)} ms · 实际缓冲 ${w.cart.buffer_delay_ms.toFixed(1)} ms`:'';
+  el('cartContactStatus').textContent=m?`网络独立诊断 · 间隙 ${m.max_gap_mm.toFixed(2)} mm · 穿透 ${m.max_penetration_mm.toFixed(2)} mm · 骨轴误差 ${m.bone_direction_deg.toFixed(1)}° · ${w.contact_constraints_satisfied===null?'无活动接触':w.contact_constraints_satisfied?'接触达标':'接触未达标'}`:'';
   if(w.playback?.active&&c.replay_active){el('cartSeek').max=Math.max(0,w.playback.frames-1);el('cartSeek').value=w.playback.index;}
  }
  async function action(command,data={}){
@@ -59,17 +51,16 @@
   if(refreshing)return;refreshing=true;
   try{
    const responses=await Promise.all(['/api/cart/recordings','/api/cart/models'].map(url=>fetch(url,{cache:'no-store'})));
-   const [records,models]=await Promise.all(responses.map(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'读取 CART 数据失败');return d.items||[];}));
-   options(el('cartDatasets'),records,r=>`${r.split==='validation'?'验证':'训练'} · ${r.stage} · ${r.label} · ${r.frames}帧 ${r.complete?'已保存':'保存中'} · ${r.preprocessing?(r.preprocessing.complete_cycles&&r.preprocessing.contact_targets_valid?'接触数据可用':'需补录／核对接触'):'未预处理'}`);
+   const [records,models]=await Promise.all(responses.map(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'读取失败');return d.items||[];}));
+   recordings=records;
+   options(el('cartDatasets'),records,r=>`${r.split==='validation'?'验证':'训练'} · ${r.label||r.id} · ${r.frames}帧 ${r.complete?'已保存':'保存中'}${r.ik?` · IK 已缓存 ${r.ik.valid_frames}/${r.frames}帧`:''}${r.preprocessing?.protocol==='cart_diff_v5'?` · 观测已准备 · EMF ${r.preprocessing.emf_frames||0}/${r.frames}帧`:r.emf_recorded?' · 已录制原始 EMF · 需准备观测':' · 需准备观测（旧录制需关联原始 EMF）'}`);
    options(el('cartModels'),models,m=>`${m.id} · ${m.status}`);
-   el('cartRecordings').replaceChildren(...records.map(r=>{const li=document.createElement('li');const a=document.createElement('a');a.href='/api/cart/recording?id='+encodeURIComponent(r.id);a.textContent=`${r.label} · 下载动作／预处理接触目标`;li.appendChild(a);return li;}));lastRefresh=Date.now();
+   el('cartRecordings').replaceChildren(...records.map(r=>{const li=document.createElement('li'),a=document.createElement('a');a.href='/api/cart/recording?id='+encodeURIComponent(r.id);a.textContent=`${r.label||r.id} · 接触数据`;li.appendChild(a);if(r.capture_geometry?.status==='completed'){const geometry=document.createElement('a');geometry.href='/api/cart/geometry?id='+encodeURIComponent(r.id);geometry.textContent=' · Wrist 三维点完整记录';li.appendChild(geometry);}if(r.ik){const ik=document.createElement('a');ik.href='/api/cart/ik?id='+encodeURIComponent(r.id);ik.textContent=' · IK 轨迹缓存 NPZ';li.appendChild(ik);}return li;}));lastRefresh=Date.now();render();
   }catch(error){el('cartError').textContent=error.message;}finally{refreshing=false;}
  }
- const config=()=>({stage:el('cartStage').value,split:el('cartSplit').value});
  async function remove(kind,ids){
-  if(!ids.length||ids.some(id=>!id)){el('cartError').textContent='请选择要删除的录制或模型';return;}
-  const active=kind==='models'&&ids.includes(state.cart?.selected_model);
-  if(!window.confirm(`永久删除 CART ${kind==='models'?'模型':'录制'}：\n${ids.join('\n')}\n${active?'当前网络预览将停止。':''}此操作无法撤销。`))return;
+  if(!ids.length||ids.some(id=>!id))return;
+  if(!window.confirm(`永久删除 CART ${kind==='models'?'模型':'录制'}：\n${ids.join('\n')}\n此操作无法撤销。`))return;
   const result=await action(`cart_${kind}_delete`,{ids});
   if(result?.unloaded)state={...state,cart:{...state.cart,selected_model:null}};
   await refresh();render();
@@ -77,19 +68,19 @@
  el('cartDeleteDatasets').onclick=()=>remove('recordings',selected());
  el('cartDeleteModel').onclick=()=>remove('models',[el('cartModels').value]);
  el('cartDatasets').onchange=el('cartModels').onchange=render;
- el('cartStage').onchange=()=>action('cart_stage_set',config());el('cartSplit').onchange=()=>action('cart_stage_set',config());
- el('cartPreview').onclick=()=>action('cart_stage_set',config());el('cartNext').onclick=()=>action('cart_stage_next');
- el('cartRecordStart').onclick=()=>action('cart_record_start',{...config(),label:el('cartLabel').value});
+ el('cartSplit').onchange=()=>action('cart_configure',{split:el('cartSplit').value});
+ el('cartPreview').onclick=()=>action('cart_preview',{split:el('cartSplit').value});
+ el('cartRecordStart').onclick=()=>action('cart_record_start',{split:el('cartSplit').value,label:el('cartLabel').value});
  el('cartRecordStop').onclick=()=>action('cart_record_stop');el('cartRefresh').onclick=refresh;
  el('cartPreprocess').onclick=()=>action('cart_preprocess',{datasets:selected()});
- el('cartTrain').onclick=()=>action('cart_train',{datasets:selected(),epochs:Number(el('cartEpochs').value)});
- el('cartCancel').onclick=()=>action('cart_cancel');el('cartSelect').onclick=async()=>{const result=await action('cart_model_select',{model:el('cartModels').value});if(result){window.wujiRequestedSolver='cart';el('wujiSolver').value='cart';}};
+ el('cartTrain').onclick=()=>action('cart_train',{datasets:selected(),epochs:Number(el('cartEpochs').value),architecture:el('cartArchitecture').value||'attention',batch_size:Number(el('cartBatchSize').value)||4096,micro_batch_size:Number(el('cartMicroBatchSize').value)||0,initial_noise_rad:Number(el('cartInitialNoise').value)});
+ el('cartCancel').onclick=()=>action('cart_cancel');
+ el('cartSelect').onclick=async()=>{const result=await action('cart_model_select',{model:el('cartModels').value});if(result){window.wujiRequestedSolver='cart';el('wujiSolver').value='cart';}};
  el('cartEvaluate').onclick=()=>action('cart_evaluate',{model:el('cartModels').value,datasets:selected()});
- el('cartAction').onchange=()=>action('cart_action_set',{stage:el('cartAction').value});
  el('cartReplayLoad').onclick=()=>action('cart_replay_load',{dataset:selected()[0]});
  el('cartReplayPause').onclick=()=>action('cart_replay_pause',{paused:!!state.wuji2?.playback?.playing});
  el('cartReplayStop').onclick=()=>action('cart_replay_stop');el('cartSeek').onchange=()=>action('cart_replay_seek',{index:Number(el('cartSeek').value)});
- el('cartShowHull').onchange=()=>{window.cartHullVisible=el('cartShowHull').checked;window.updateManoView?.(state,el('poseMode').value==='mano');window.updateWujiView?.(state,el('poseMode').value==='wuji2');};
+ el('cartShowHull').onchange=()=>{window.cartHullVisible=el('cartShowHull').checked;window.updateManoView?.(state,el('poseMode').value==='mano');window.updateWujiView?.(state,el('poseMode').value==='wuji2');window.updateCartPreview?.(state);};
  window.updateCartUI=next=>{state=next||{};render();if(Date.now()-lastRefresh>5000)void refresh();};
  void refresh();
 })();

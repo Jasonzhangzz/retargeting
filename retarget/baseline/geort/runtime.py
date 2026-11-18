@@ -88,8 +88,18 @@ class Replay:
         self.model.load_artifact(profile)
         self.index=0;self.playing=True;self.anchor=time.monotonic();self.offset=0.
         self.last_index=-1
+        self.epoch=0
+        self.contact_rows=None;self.linked_emf=None
+        if (folder/'cart_emf.jsonl').exists():
+            self.linked_emf=[json.loads(line) for line in (folder/'cart_emf.jsonl').open()]
+            if len(self.linked_emf)!=len(self.stamps) or any(r['timestamp_ms']!=s for r,s in zip(self.linked_emf,self.stamps)):
+                raise ValueError('关联 EMF 与回放时间轴不一致')
+        if self.meta.get('protocol','').startswith('cart_') and (folder/'frames.jsonl').exists():
+            self.contact_rows=[json.loads(line) for line in (folder/'frames.jsonl').open()]
+            if len(self.contact_rows)!=len(self.stamps):raise ValueError('CART 触觉与运动帧数不一致')
 
     def seek(self, index):
+        self.epoch+=1
         self.index=max(0,min(len(self.stamps)-1,int(index)))
         self.offset=float(self.stamps[self.index]-self.stamps[0])/1000
         self.anchor=time.monotonic();self.last_index=-1
@@ -104,19 +114,40 @@ class Replay:
             if self.index==len(self.stamps)-1:self.playing=False
         if self.index==self.last_index:return None
         self.last_index=self.index
+        return self._frame_at(self.index,time.time()*1000)
+
+    def future_frames(self,frame,count=10):
+        """Saved future observations are available even while replay is paused."""
+        if self.index+count>=len(self.stamps):return []
+        return [self._frame_at(i,frame['timestamp_ms']+float(self.stamps[i]-self.stamps[self.index]))
+                for i in range(self.index+1,self.index+count+1)]
+
+    def _frame_at(self,index,stamp):
         import torch
         with torch.inference_mode():
-            q=torch.as_tensor(self.motion['qpos'][self.index],device=self.model.device)[None]
+            q=torch.as_tensor(self.motion['qpos'][index],device=self.model.device)[None]
             v,j,_=self.model(q)
-        stamp=time.time()*1000
         source=self.meta['source']
-        return dict(vertices_m=v[0].cpu().numpy(),joints_m=j[0].cpu().numpy(),
+        recorded=self.contact_rows[index] if self.contact_rows else {}
+        tt=recorded.get('tactile_timestamp_ms')
+        contact=recorded.get('source_contact')
+        if contact:
+            contact=dict(contact)
+            if isinstance(contact.get('timestamp_ms'),(int,float)):
+                contact['timestamp_ms']=stamp+contact['timestamp_ms']-float(self.stamps[index])
+        emf=recorded.get('emf_observation') or (self.linked_emf[index]['emf_observation'] if self.linked_emf else None)
+        if emf:
+            emf=dict(emf,timestamp_ms=stamp+emf['timestamp_ms']-float(self.stamps[index]))
+        return dict(emf_observation=emf,vertices_m=v[0].cpu().numpy(),joints_m=j[0].cpu().numpy(),
             geometry_version=self.topology['geometry_version'],binding_version=self.topology['binding_version'],
             model_hash=source['model_hash'],hand_side=source['hand_side'],serial=source['serial'],
             surface_backend=self.topology['surface_backend'],coordinate_frame=self.topology['coordinate_frame'],
             calibration_fingerprint=source['calibration_fingerprint'],skeleton_runtime_revision=source['skeleton_runtime_revision'],
             timestamp_ms=stamp,skeleton_timestamp_ms=stamp,calibrated=True,
-            input_received_wall_ms=stamp,recorded_timestamp_ms=float(self.stamps[self.index]))
+            input_received_wall_ms=stamp,recorded_timestamp_ms=float(self.stamps[index]),
+            tactile_timestamp_ms=stamp+tt-float(self.stamps[index]) if isinstance(tt,(int,float)) else None,
+            source_contact=contact,source_joint_positions_rad=self.motion['qpos'][index].tolist(),
+            input_stream_epoch='replay:'+self.meta['id']+':'+str(self.epoch))
 
     def snapshot(self):
         return dict(active=True,id=self.meta['id'],playing=self.playing,index=self.index,frames=len(self.stamps),
