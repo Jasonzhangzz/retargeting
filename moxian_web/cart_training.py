@@ -14,7 +14,7 @@ from .cart_observations import batch_future,pack_future
 from .cart_collision import CollisionModel,SDFLearner,frozen
 from .cart_objective import CartHand,CartObjective,policy_settings
 from .cart_protocol import PROTOCOL,ARCHITECTURES
-from .cart_fast import DEFAULT_BATCH_SIZE,PreparedBatch,ObservationStore,prepare_windows,group_normalizers,choose_micro_batch
+from .cart_fast import DEFAULT_BATCH_SIZE,PreparedBatch,ObservationStore,prepare_windows,group_normalizers,choose_parallel_batch
 from .cart_contact_field import CONTACT_FIELD_VERSION
 from .cart_initialization import prepare_ik,attach_ik,perturb_initial_states,IK_VERSION,DEFAULT_INITIAL_NOISE_RAD
 from retarget.baseline.geort.training import atomic_json
@@ -31,8 +31,62 @@ def implementation_identity():
         initialization=file_hash(Path(__file__).with_name('cart_initialization.py')))
 
 
-def rollout(model,objective,batch,*,audit=False,collect_only=False,normalizers=None):
-    """No teacher labels or detach inside the loss-bearing rollout."""
+class RolloutTrajectory:
+    """One policy unroll, retained while detached mesh labels update geometry.
+
+    Policy state transitions do not read the collision model. Geometry can be
+    updated before building its loss graph, without replaying the policy or
+    invalidating any parameter versions needed for BPTT.
+    """
+    def __init__(self,pending,batch,normalizers=None):
+        self.pending=pending;self.batch=batch;self.normalizers=normalizers
+        self.predictions=[x[0] for x in pending]
+
+    @torch.no_grad()
+    def collect(self,objective):
+        collision=objective.collision
+        if collision is None:raise ValueError('Collect rollout requires collision model')
+        states=torch.cat(self.predictions).detach();frames=objective.hand.frames(states)
+        rows=[row for step in self.pending for row in step[1]]
+        collision.collect_queries(states,rows,frames,sample_budget=512*len(self.pending))
+
+    def loss(self,objective,*,audit=False,batch_losses=True):
+        collision=objective.collision;old=collision.auditing if collision is not None else False
+        if collision is not None:collision.auditing=audit
+        # Native dense audit retains its step-sized scratch-memory bound.
+        batched=batch_losses and not audit and collision is not None and getattr(objective,'vectorized',False)
+        def metrics_only(metrics):
+            return [{k:v.detach() if isinstance(v,torch.Tensor) else v for k,v in quality.items()
+                if k not in ('groups','points')} for quality in metrics]
+        try:
+            if batched:
+                length=len(self.pending);states=torch.cat(self.predictions)
+                rows=[row for step in self.pending for row in step[1]]
+                references=torch.cat([x[2] for x in self.pending])
+                acceleration=torch.cat([torch.zeros_like(x[0]) if x[3] is None else x[3] for x in self.pending])
+                previous=[row for step in self.pending for row in step[4]]
+                weights=self.normalizers if self.normalizers is not None else group_normalizers(self.batch)
+                row_weights=[weights[t] for t in range(length) for _ in self.batch]
+                loss,parts,metrics=objective.batch(states,rows,references,acceleration=acceleration,
+                    previous_rows=previous,audit=audit,normalizers=row_weights)
+                # Only the monitor excludes the first frame; its acceleration
+                # loss contribution stays zero in the T-frame average.
+                if length>1:parts['acceleration']=parts['acceleration']*length/(length-1)
+                return loss,parts,metrics_only(metrics),self.predictions
+            totals=[];sums={};qualities=[]
+            for t,(q,rows,previous_q,acceleration,previous_rows) in enumerate(self.pending):
+                options=dict(normalizers=self.normalizers[t]) if self.normalizers is not None else {}
+                loss,parts,metrics=objective.batch(q,rows,previous_q,acceleration=acceleration,
+                    previous_rows=previous_rows,audit=audit,**options)
+                totals.append(loss);qualities.extend(metrics_only(metrics))
+                for key,value in parts.items():sums.setdefault(key,[]).append(value)
+            return torch.stack(totals).mean(),{k:torch.stack(v).mean() for k,v in sums.items()},qualities,self.predictions
+        finally:
+            if collision is not None:collision.auditing=old
+
+
+def predict_trajectory(model,objective,batch,normalizers=None,*,batch_observations=True):
+    """Unroll only the recurrent policy; no geometry graph or horizon detach."""
     length=min(w['length'] for w in batch);device=objective.hand.device
     offsets=[len(w['rows'])-w['length']-10 for w in batch]
     prepared=isinstance(batch,PreparedBatch)
@@ -59,39 +113,42 @@ def rollout(model,objective,batch,*,audit=False,collect_only=False,normalizers=N
                 for j in range(start):one=model.unnormalize(model(one,**batch_future([w],[j],device)))
             initial.append(one[0])
         q=torch.stack(initial)
-    older_q=None;old_dt=None
-    totals=[];sums={};qualities=[];predictions=[]
-    collision=objective.collision;old_audit=collision.auditing if collision is not None else False
-    if collision is not None:collision.auditing=audit
-    try:
-        for t in range(length):
-            indices=[i+t for i in offsets]
-            rows=[w['rows'][i+1] for w,i in zip(batch,indices)]
-            previous=[w['rows'][i] for w,i in zip(batch,indices)]
-            inputs=inputs_at(indices)
-            next_q=model.unnormalize(model(q,**inputs))
-            if collect_only:
-                if collision is None:raise ValueError('Collect rollout requires collision model')
-                collision.collect_queries(next_q,rows,objective.hand.frames(next_q))
-                predictions.append(next_q);q=next_q;continue
-            dt=inputs['future_dt'][:,0]
-            velocity=(next_q-q)/dt[:,None]
-            acceleration=None
-            if older_q is not None:
-                old_velocity=(q-older_q)/old_dt[:,None]
-                acceleration=(velocity-old_velocity)/(.5*(dt+old_dt))[:,None]
-            weights=batch.normalizers if prepared and batch.normalizers is not None else normalizers
-            options=dict(normalizers=weights[t]) if weights is not None else {}
-            loss,parts,metrics=objective.batch(next_q,rows,q,acceleration=acceleration,previous_rows=previous,audit=audit,**options)
-            totals.append(loss);predictions.append(next_q)
-            # Metrics never retain the training graph; q feedback below does.
-            for quality in metrics:
-                qualities.append({k:v.detach() if isinstance(v,torch.Tensor) else v for k,v in quality.items() if k not in ('groups','points')})
-            for k,v in parts.items():sums.setdefault(k,[]).append(v)
-            older_q,q,old_dt=q,next_q,dt
-        return (torch.stack(totals).mean() if totals else q.new_zeros(())),{k:torch.stack(v).mean() for k,v in sums.items()},qualities,predictions
-    finally:
-        if collision is not None:collision.auditing=old_audit
+    older_q=None;old_dt=None;pending=[];cached_inputs=None;encoded=None
+    if batch_observations and prepared and getattr(model,'architecture',None)=='attention':
+        # The expensive EMF/taxel cross attention is independent of robot state.
+        # Batch it over TIME as well as windows; only the small q pool/decoder
+        # remains in the causal recurrence. Every slice still sees its own
+        # measured t+1...t+10 inputs, with the same masks and parameter gradients.
+        cached_inputs=[inputs_at([i+t for i in offsets]) for t in range(length)]
+        values={key:torch.cat([x[key] for x in cached_inputs]) for key in cached_inputs[0] if key!='validate'}
+        encoder_batch=512 if str(device).startswith('cuda') else 64
+        pieces=[model.encode_prepared_observations(**{key:value[start:start+encoder_batch] for key,value in values.items()})
+            for start in range(0,len(batch)*length,encoder_batch)]
+        encoded=tuple(torch.cat([part[k] for part in pieces]) for k in (0,1))
+    for t in range(length):
+        indices=[i+t for i in offsets]
+        rows=[w['rows'][i+1] for w,i in zip(batch,indices)]
+        previous=[w['rows'][i] for w,i in zip(batch,indices)]
+        inputs=cached_inputs[t] if cached_inputs is not None else inputs_at(indices)
+        if encoded is not None:
+            start=t*len(batch);stop=start+len(batch)
+            normalized=model.decode_observation_context(q,tuple(x[start:stop] for x in encoded))
+        else:normalized=model(q,**inputs)
+        next_q=model.unnormalize(normalized)
+        dt=inputs['future_dt'][:,0];velocity=(next_q-q)/dt[:,None]
+        acceleration=(velocity-(q-older_q)/old_dt[:,None])/(.5*(dt+old_dt))[:,None] if older_q is not None else None
+        pending.append((next_q,rows,q,acceleration,previous))
+        older_q,q,old_dt=q,next_q,dt
+    weights=batch.normalizers if prepared and batch.normalizers is not None else normalizers
+    return RolloutTrajectory(pending,batch,weights)
+
+
+def rollout(model,objective,batch,*,audit=False,collect_only=False,normalizers=None,batch_losses=True):
+    trajectory=predict_trajectory(model,objective,batch,normalizers)
+    if collect_only:
+        trajectory.collect(objective)
+        return trajectory.predictions[-1].new_zeros(()),{},[],trajectory.predictions
+    return trajectory.loss(objective,audit=audit,batch_losses=batch_losses)
 
 
 def windows(sessions,length=16):
@@ -106,36 +163,45 @@ def windows(sessions,length=16):
     return result
 
 
-def policy_update(model,objective,learner,optimizer,batch,micro_batch_size,check=lambda:None,progress=None,initial_noise_rad=0.):
-    """One logical batch, two SDF steps, one policy step; no horizon detach."""
+def validation_schedule(windows,epoch,epochs,interval=10,budget=32):
+    """Fixed independent windows for selection; full-session audit stays final."""
+    due=epoch==1 or epoch==epochs or epoch%interval==0
+    if not due:return []
+    if not budget or len(windows)<=budget:return windows
+    return [windows[i] for i in np.linspace(0,len(windows)-1,budget).astype(int)]
+
+
+def policy_update(model,objective,learner,optimizer,batch,parallel_batch_size,check=lambda:None,progress=None,initial_noise_rad=0.,*,batch_losses=True):
+    """One simultaneous batch, two SDF steps, one policy step; no accumulation."""
+    if not batch or len(batch)>parallel_batch_size:
+        raise ValueError('一次更新必须装入一个真实并行 batch，禁止跨显存分块累积梯度')
     device=objective.hand.device;batch=perturb_initial_states(batch,objective.hand,initial_noise_rad)
-    total_size=len(batch);normalizers=group_normalizers(batch)
-    def chunks():
-        for start in range(0,total_size,micro_batch_size):
-            windows=batch[start:start+micro_batch_size]
-            yield PreparedBatch(windows,device,normalizers) if all('store' in w for w in windows) else windows
+    normalizers=group_normalizers(batch)
+    chunk=PreparedBatch(batch,device,normalizers) if all('store' in w for w in batch) else batch
+    def sync():
+        if str(device).startswith('cuda'):torch.cuda.synchronize(device)
+    sync()
     started=time.perf_counter();times={}
-    with torch.no_grad():
-        for index,chunk in enumerate(chunks()):
-            check();rollout(model,objective,chunk,collect_only=True)
-            if progress:progress('collect',index+1,math_ceil(total_size,micro_batch_size))
+    optimizer.zero_grad(set_to_none=True)
+    check();trajectory=predict_trajectory(model,objective,chunk,normalizers)
+    trajectory.collect(objective)
+    if progress:progress('collect',1,1)
+    sync()
     times['collect_s']=time.perf_counter()-started;started=time.perf_counter()
     learner.collect()
-    for _ in range(2):sdf_losses=learner.update()
+    for step in range(2):
+        check();sdf_losses=learner.update()
+        if progress:progress('geometry',step+1,2)
     times['sdf_s']=time.perf_counter()-started;started=time.perf_counter()
-    optimizer.zero_grad(set_to_none=True);summed={};total=None
     with frozen(objective.collision.model):
-        for index,chunk in enumerate(chunks()):
-            check();weight=len(chunk)/total_size
-            loss,parts,_,_=rollout(model,objective,chunk,normalizers=normalizers)
-            if not torch.isfinite(loss):raise ValueError('CART loss 出现 NaN/Inf')
-            (weight*loss).backward()
-            total=weight*loss.detach() if total is None else total+weight*loss.detach()
-            for k,v in parts.items():summed[k]=summed.get(k,0.)+weight*v.detach()
-            if progress:progress('backward',index+1,math_ceil(total_size,micro_batch_size))
+        check();loss,parts,_,_=trajectory.loss(objective,batch_losses=batch_losses)
+        if not torch.isfinite(loss):raise ValueError('CART loss 出现 NaN/Inf')
+        loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(),10.,error_if_nonfinite=True);optimizer.step()
+    sync()
     times['policy_s']=time.perf_counter()-started
-    return total,summed,sdf_losses,times
+    if progress:progress('backward',1,1)
+    return loss.detach(),{k:v.detach() for k,v in parts.items()},sdf_losses,times
 
 
 def position_statistics(sessions):
@@ -228,7 +294,7 @@ def full_session(model,objective,sessions,check=lambda:None):
 
 def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DEFAULT_BATCH_SIZE,length=16,
           smoke=False,architecture='attention',resume=False,warmup_steps=None,device=None,micro_batch_size=0,initialize_from=None,
-          initial_noise_rad=DEFAULT_INITIAL_NOISE_RAD):
+          initial_noise_rad=DEFAULT_INITIAL_NOISE_RAD,attention_precision='auto',validation_interval=10,validation_window_budget=32):
     if architecture not in ARCHITECTURES:raise ValueError('architecture must be attention or fsq')
     from .geort_service import safe_id
     run_id=safe_id(run_id)
@@ -253,7 +319,11 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
     try:
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:raise ValueError('已有 GeoRT／CART 训练任务')
-        if not 1<=epochs<=2000 or not 1<=batch_size<=65536 or length<2:raise ValueError('无效训练预算')
+        if not 1<=epochs<=2000 or not 0<=batch_size<=65536 or length<2:raise ValueError('无效训练预算')
+        if isinstance(validation_interval,bool) or not isinstance(validation_interval,int) or not 1<=validation_interval<=2000:
+            raise ValueError('真实 mesh 检查间隔必须为 1–2000 轮')
+        if isinstance(validation_window_budget,bool) or not isinstance(validation_window_budget,int) or not 0<=validation_window_budget<=65536:
+            raise ValueError('真实 mesh 检查窗口预算必须为 0–65536；0 表示全部')
         if isinstance(initial_noise_rad,bool) or not np.isfinite(initial_noise_rad) or not 0<=initial_noise_rad<=.5:raise ValueError('IK 初始噪声幅度须为 0–0.5 rad')
         if set(train_ids)&set(validation_ids):raise ValueError('训练和验证不能包含同一录制')
         rng=np.random.default_rng(seed);torch.manual_seed(seed);torch.set_num_threads(1)
@@ -276,8 +346,18 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         hand=CartHand(device);collision=CollisionModel(hand);objective=CartObjective(hand,policy_settings(),collision)
         mean,scale=position_statistics(sessions)
         model=CartNetwork(hand.low,hand.high,architecture,position_mean=mean,position_scale=scale).to(device)
-        actual_micro=min(batch_size,choose_micro_batch(architecture,device,micro_batch_size))
+        requested_precision=attention_precision
+        if attention_precision not in ('auto','float32','bfloat16'):raise ValueError('无效 attention 精度')
+        if attention_precision=='auto':
+            attention_precision='bfloat16' if architecture=='attention' and str(device).startswith('cuda') and torch.cuda.is_bf16_supported() else 'float32'
+        if attention_precision=='bfloat16' and (not str(device).startswith('cuda') or not torch.cuda.is_bf16_supported()):
+            raise ValueError('当前设备不支持 CUDA BF16 attention')
+        model.set_attention_precision(attention_precision)
+        model.checkpoint_observations=architecture=='attention' and str(device).startswith('cuda')
         prepare_windows(sessions,train_windows,device);prepare_windows(validation,validation_windows,device)
+        parallel_size=min(len(train_windows),choose_parallel_batch(architecture,device,batch_size,micro_batch_size,length,
+            attention_precision,model.checkpoint_observations))
+        if resume:parallel_size=json.loads((folder/'config.json').read_text())['parallel_batch_size']
         objective.cache_rows=True
         optimizer=torch.optim.AdamW(model.parameters(),lr=1.e-4)
         learner=SDFLearner(collision,capacity=4096 if smoke else 200000,batch_size=64 if smoke else 2048)
@@ -292,8 +372,15 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             datasets=[dict(id=m['id'],fingerprint=info['fingerprint']) for m,_,info in sessions+validation],
             training='differentiable_bptt_online_mesh_sdf',sdf_warmup_steps=warmup_steps,sdf_updates_per_batch=2,
             selection='minimum_true_mesh_validation_loss',sdf_capacity=learner.capacity,sdf_batch_size=learner.batch_size)
-        config.update(micro_batch_size=micro_batch_size,batch_semantics='windows_per_optimizer_step',
-            reference_parallel_batch=4096,execution='resident_observations_batched_geometry_gradient_accumulation',initialize_from=initialize_from,
+        config.update(micro_batch_size=micro_batch_size,batch_semantics='parallel_windows_per_optimizer_step',
+            gradient_accumulation=False,parallel_batch_size=parallel_size,
+            attention_precision_request=requested_precision,policy_attention_precision=attention_precision,geometry_precision='float32',
+            observation_checkpointing=model.checkpoint_observations,
+            geometry_activation_recomputation=str(device).startswith('cuda'),
+            validation_interval=validation_interval,validation_window_budget=validation_window_budget,
+            final_validation='complete_independent_session_true_mesh',
+            execution='resident_observations_time_batched_bptt',initialize_from=initialize_from,
+            loss_execution='time_batched_fk_contact',
             contact_field=CONTACT_FIELD_VERSION,contact_selection='learned_directional_field_soft_pair',
             state_initialization=IK_VERSION,initial_noise_rad=initial_noise_rad,ik_datasets=ik_reports,
             full_session_initialization='neutral_closed_loop')
@@ -302,7 +389,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             return dict(model=model.state_dict(),collision=collision.model.state_dict(),policy_optimizer=optimizer.state_dict(),
                 sdf_learner=learner.state_dict(),epoch=epoch,next_batch=next_batch,order=torch.as_tensor(order) if order is not None else None,
                 sums=sums,batches=batches,best=best,best_epoch=best_epoch,holdout=tuple(v.cpu() for v in holdout),
-                micro_batch_size=actual_micro,
+                parallel_batch_size=parallel_size,
                 numpy_rng=rng.bit_generator.state,torch_rng=torch.get_rng_state(),
                 cuda_rng=torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [])
         def warmup(start):
@@ -321,7 +408,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             model.load_state_dict(restored['model']);collision.model.load_state_dict(restored['collision'])
             optimizer.load_state_dict(restored['policy_optimizer']);learner.load_state_dict(restored['sdf_learner'])
             epoch_start=restored['epoch'];resume_cursor=restored['next_batch'];order=restored['order'].numpy() if restored['order'] is not None else None
-            actual_micro=restored['micro_batch_size']
+            parallel_size=restored['parallel_batch_size']
             sums=restored['sums'];batches=restored['batches'];best=restored['best'];best_epoch=restored['best_epoch']
             holdout=tuple(v.to(device) for v in restored['holdout'])
             rng.bit_generator.state=restored['numpy_rng'];torch.set_rng_state(restored['torch_rng'])
@@ -358,36 +445,43 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         for epoch in range(epoch_start,epochs):
             model.train()
             if order is None:order=rng.permutation(len(train_windows));sums={};batches=0
-            for start in range(resume_cursor,len(order),batch_size):
-                check();batch=[train_windows[i] for i in order[start:start+batch_size]]
-                def chunk_progress(stage,completed,total):
+            for start in range(resume_cursor,len(order),parallel_size):
+                check();batch=[train_windows[i] for i in order[start:start+parallel_size]]
+                def stage_progress(stage,completed,total):
                     progress('batch_compute',epoch=epoch+1,epochs=epochs,batch=batches+1,
-                        logical_batch_size=batch_size,actual_batch_size=len(batch),micro_batch_size=actual_micro,
-                        compute_stage=stage,chunk_completed=completed,chunk_total=total)
-                loss,parts,sdf_losses,timings=policy_update(model,objective,learner,optimizer,batch,actual_micro,check,chunk_progress,initial_noise_rad)
+                        batches=math_ceil(len(order),parallel_size),parallel_batch_size=len(batch),
+                        requested_batch_size=batch_size,gradient_accumulation=False,compute_stage=stage,
+                        stage_completed=completed,stage_total=total)
+                loss,parts,sdf_losses,timings=policy_update(model,objective,learner,optimizer,batch,parallel_size,check,stage_progress,initial_noise_rad)
                 batches+=1
                 for k,v in dict(total=loss,**parts).items():sums[k]=sums.get(k,0.)+float(v.detach())
-                save_checkpoint(folder/'resume.pth',state(epoch,start+batch_size,order))
-                progress('retargeting',epoch=epoch+1,epochs=epochs,batch=batches,batches=math_ceil(len(order),batch_size),
-                    logical_batch_size=batch_size,actual_batch_size=len(batch),micro_batch_size=actual_micro,
-                    losses={k:v/batches for k,v in sums.items()},sdf_losses=sdf_losses,sdf_updates=learner.steps,timings=timings)
-            model.eval();validation_sum=0.;validation_count=0;quality=[]
-            with torch.no_grad():
-                for start in range(0,len(validation_windows),batch_size):
-                    check();batch=validation_windows[start:start+batch_size]
-                    normalizers=group_normalizers(batch)
-                    for chunk_start in range(0,len(batch),actual_micro):
-                        chunk=PreparedBatch(batch[chunk_start:chunk_start+actual_micro],device,normalizers)
-                        value,_,metrics,_=rollout(model,objective,chunk,audit=True)
-                        validation_sum+=float(value)*len(chunk);validation_count+=len(chunk);quality.extend(metrics)
-            validation_loss=validation_sum/validation_count
-            if not np.isfinite(validation_loss):raise ValueError('真实几何验证 loss 非有限数值')
-            sdf_report=learner.validate(*holdout)
-            if validation_loss<best:
-                best=validation_loss;best_epoch=epoch+1
-                save_checkpoint(folder/'last.pth',dict(model=model.state_dict(),collision=collision.model.state_dict(),epoch=epoch+1,validation_loss=best,sdf_validation=sdf_report))
-            progress('validation',epoch=epoch+1,epochs=epochs,validation_loss=validation_loss,best_validation_loss=best,
-                best_epoch=best_epoch,metrics=quality_summary(quality),sdf_validation=sdf_report)
+                save_checkpoint(folder/'resume.pth',state(epoch,start+parallel_size,order))
+                progress('retargeting',epoch=epoch+1,epochs=epochs,batch=batches,batches=math_ceil(len(order),parallel_size),
+                    parallel_batch_size=len(batch),requested_batch_size=batch_size,gradient_accumulation=False,
+                    losses={k:v/batches for k,v in sums.items()},sdf_losses=sdf_losses,sdf_updates=learner.steps,timings=timings,
+                    transitions_per_s=len(batch)*length/sum(timings.values()))
+            validation_batch=validation_schedule(validation_windows,epoch+1,epochs,validation_interval,validation_window_budget)
+            if validation_batch:
+                model.eval();validation_sum=0.;validation_count=0;quality=[]
+                with torch.no_grad():
+                    for start in range(0,len(validation_batch),parallel_size):
+                        check();batch=validation_batch[start:start+parallel_size]
+                        normalizers=group_normalizers(batch)
+                        prepared=PreparedBatch(batch,device,normalizers)
+                        value,_,metrics,_=rollout(model,objective,prepared,audit=True)
+                        validation_sum+=float(value)*len(batch);validation_count+=len(batch);quality.extend(metrics)
+                        progress('mesh_validation',epoch=epoch+1,epochs=epochs,completed=validation_count,total=len(validation_batch),available_windows=len(validation_windows))
+                validation_loss=validation_sum/validation_count
+                if not np.isfinite(validation_loss):raise ValueError('真实几何验证 loss 非有限数值')
+                sdf_report=learner.validate(*holdout)
+                if validation_loss<best:
+                    best=validation_loss;best_epoch=epoch+1
+                    save_checkpoint(folder/'last.pth',dict(model=model.state_dict(),collision=collision.model.state_dict(),epoch=epoch+1,validation_loss=best,sdf_validation=sdf_report))
+                progress('validation',epoch=epoch+1,epochs=epochs,validation_loss=validation_loss,best_validation_loss=best,
+                    best_epoch=best_epoch,metrics=quality_summary(quality),sdf_validation=sdf_report)
+            else:
+                progress('epoch_complete',epoch=epoch+1,epochs=epochs,validation_performed=False,
+                    next_validation_epoch=min(epochs,((epoch+1)//validation_interval+1)*validation_interval))
             order=None;resume_cursor=0;sums={};batches=0
             save_checkpoint(folder/'resume.pth',state(epoch+1,0,None))
         checkpoint=torch.load(folder/'last.pth',map_location=device,weights_only=True)
@@ -433,6 +527,7 @@ class Predictor:
         domain=self.config['output_domain']
         self.model=CartNetwork(domain['lower'],domain['upper'],self.config['architecture_name'],self.config['levels'],
             self.config['position_mean'],self.config['position_scale']).to(device)
+        self.model.set_attention_precision(self.config.get('policy_attention_precision','float32'))
         self.collision=CollisionModel(self.hand)
         checkpoint=torch.load(self.folder/'last.pth',map_location=device,weights_only=True)
         self.model.load_state_dict(checkpoint['model']);self.model.eval()

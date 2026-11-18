@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torch.utils.checkpoint import checkpoint
 from .cart_protocol import HISTORY_LENGTH
 
 LEVELS = (8, 8, 8, 8, 5, 5, 5, 5)
@@ -127,9 +128,15 @@ class CrossBlock(nn.Module):
         self.norm = nn.LayerNorm(128)
         self.feed = nn.Sequential(nn.Linear(128, 256), nn.GELU(), nn.Linear(256, 128))
         self.out_norm = nn.LayerNorm(128)
+        self.attention_precision = 'float32'
 
     def forward(self, query, values, padding):
-        context = self.attention(query, values, values, key_padding_mask=padding, need_weights=False)[0]
+        # BF16 enables fused CUDA attention. Geometry, normalization, the MLP
+        # decoder and its joint-angle output retain FP32 precision.
+        with torch.autocast('cuda',dtype=torch.bfloat16,
+                enabled=query.is_cuda and self.attention_precision=='bfloat16'):
+            context = self.attention(query, values, values, key_padding_mask=padding, need_weights=False)[0]
+        context=context.to(query.dtype)
         query = self.norm(query + context)
         return self.out_norm(query + self.feed(query))
 
@@ -154,6 +161,7 @@ class CartNetwork(nn.Module):
         if self.position_mean.shape != (3,) or self.position_scale.shape != (3,) or not torch.isfinite(self.position_mean).all() or not torch.isfinite(self.position_scale).all() or (self.position_scale <= 0).any():
             raise ValueError('Invalid position normalization')
         self.architecture = architecture
+        self.checkpoint_observations = False
         if architecture == 'fsq':
             # 450 pose values, 50 validity bits, ten time offsets, current q.
             self.encoder = nn.Sequential(nn.Linear(530, 256), nn.LayerNorm(256), nn.GELU(),
@@ -178,6 +186,51 @@ class CartNetwork(nn.Module):
     def unnormalize(self, q):
         return self.lower+(q+1)*.5*(self.upper-self.lower)
 
+    def set_attention_precision(self,precision):
+        if precision not in ('float32','bfloat16'):raise ValueError('Invalid attention precision')
+        for block in self.modules():
+            if isinstance(block,CrossBlock):block.attention_precision=precision
+        return self
+
+    def normalized_emf(self,future_emf,valid):
+        pose=torch.where(valid[...,None],future_emf,0.)
+        xyz=(pose[...,:3]-self.position_mean)/self.position_scale
+        return torch.cat((xyz,pose[...,3:]),-1)*valid[...,None]
+
+    def sensor_context(self,pose,valid,future_dt,tactile_positions,tactile_state,tv):
+        values=(pose,valid,future_dt,tactile_positions,tactile_state,tv)
+        if self.checkpoint_observations and torch.is_grad_enabled():
+            return checkpoint(self.encode_attention,*values,use_reentrant=False,preserve_rng_state=False)
+        return self.encode_attention(*values)
+
+    def encode_prepared_observations(self,future_emf,emf_valid,future_dt,tactile_positions,tactile_state,tactile_valid):
+        """Trusted prepared inputs; this large encoder does not read q."""
+        valid=emf_valid.bool()
+        return self.sensor_context(self.normalized_emf(future_emf,valid),valid,future_dt,
+            tactile_positions,tactile_state,tactile_valid.bool())
+
+    def decode_observation_context(self,current_q,encoded):
+        e,epad=encoded
+        context=self.pool(self.current(self.normalize(current_q))[:,None],e,epad)[:,0]
+        return self.decoder(context)
+
+    def encode_attention(self,pose,valid,future_dt,tactile_positions,tactile_state,tv):
+        b=len(pose);device=pose.device
+        tp=torch.where(tv[...,None],tactile_positions,0.)
+        ts=torch.where(tv,tactile_state,0.)
+        tx=torch.cat(((tp-self.position_mean)/self.position_scale,ts[...,None]),-1)*tv[...,None]
+        frame=self.frame(torch.arange(10,device=device))[None,:,None]
+        timing=self.time(future_dt[...,None])[:,:,None]
+        e=self.emf(pose)+frame+timing+self.finger(torch.arange(5,device=device))[None,None]
+        t=self.touch(tx)+frame+timing+self.sid(torch.arange(460,device=device))[None,None]
+        t=torch.cat((t.flatten(1,2),self.null_touch.expand(b,-1,-1)),1)
+        padding=torch.cat((~tv.flatten(1),torch.zeros(b,1,device=device,dtype=torch.bool)),1)
+        e=e.flatten(1,2)
+        for block in self.blocks:e=block(e,t,padding)
+        e=torch.cat((e,self.null_emf.expand(b,-1,-1)),1)
+        epad=torch.cat((~valid.flatten(1),torch.zeros(b,1,device=device,dtype=torch.bool)),1)
+        return e,epad
+
     def forward(self, current_q, future_emf, emf_valid, future_dt, tactile_positions=None,
                 tactile_state=None, tactile_valid=None, *, return_codes=False, validate=True):
         b = len(current_q)
@@ -188,9 +241,7 @@ class CartNetwork(nn.Module):
             raise ValueError('Nonfinite CART input')
         if validate and ((future_dt <= 0).any() or (future_dt[:, 1:] <= future_dt[:, :-1]).any() or (torch.diff(future_dt, dim=1) > .250001).any() or (future_dt[:, 0] > .250001).any()):
             raise ValueError('Future timestamps must increase without a stream gap')
-        pose = torch.where(valid[..., None], future_emf, 0.)
-        xyz = (pose[..., :3]-self.position_mean)/self.position_scale
-        pose = torch.cat((xyz, pose[..., 3:]), -1)*valid[..., None]
+        pose=self.normalized_emf(future_emf,valid)
         q = self.normalize(current_q)
         extra = {}
         if self.architecture == 'fsq':
@@ -202,20 +253,7 @@ class CartNetwork(nn.Module):
             tv = tactile_valid.bool()
             if validate and (not torch.isfinite(tactile_positions[tv]).all() or not torch.isfinite(tactile_state[tv]).all() or ((tactile_state[tv] != 0) & (tactile_state[tv] != 1)).any()):
                 raise ValueError('Tactile input must contain finite positions and binary states')
-            tp = torch.where(tv[...,None], tactile_positions, 0.)
-            ts = torch.where(tv, tactile_state, 0.)
-            tx = torch.cat(((tp-self.position_mean)/self.position_scale, ts[...,None]), -1)*tv[...,None]
-            frame = self.frame(torch.arange(10,device=q.device))[None,:,None]
-            timing = self.time(future_dt[...,None])[:,:,None]
-            e = self.emf(pose)+frame+timing+self.finger(torch.arange(5,device=q.device))[None,None]
-            t = self.touch(tx)+frame+timing+self.sid(torch.arange(460,device=q.device))[None,None]
-            # An always-valid null token avoids NaNs for entirely unknown sensors.
-            t = torch.cat((t.flatten(1,2), self.null_touch.expand(b,-1,-1)),1)
-            padding = torch.cat((~tv.flatten(1), torch.zeros(b,1,device=q.device,dtype=torch.bool)),1)
-            e = e.flatten(1,2)
-            for block in self.blocks: e = block(e,t,padding)
-            e = torch.cat((e,self.null_emf.expand(b,-1,-1)),1)
-            epad = torch.cat((~valid.flatten(1),torch.zeros(b,1,device=q.device,dtype=torch.bool)),1)
+            e,epad=self.sensor_context(pose,valid,future_dt,tactile_positions,tactile_state,tv)
             context = self.pool(self.current(q)[:,None],e,epad)[:,0]
         normalized = self.decoder(context)
         return dict(q=self.unnormalize(normalized), normalized_q=normalized, **extra) if return_codes else normalized

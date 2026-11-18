@@ -1,15 +1,15 @@
-"""Vectorization and accumulation must preserve the contact objective and BPTT."""
-import copy
+"""True parallel batches and temporal vectorization preserve contact BPTT."""
+from dataclasses import replace
 from types import SimpleNamespace
 import numpy as np
 import pytest
 import torch
-from moxian_web.cart_fast import ObservationStore,PreparedBatch,prepare_windows,group_normalizers,choose_micro_batch,DEFAULT_BATCH_SIZE
-from moxian_web.cart_training import rollout,policy_update,windows
+from moxian_web.cart_fast import ObservationStore,PreparedBatch,prepare_windows,group_normalizers,choose_micro_batch,choose_parallel_batch,DEFAULT_BATCH_SIZE
+from moxian_web.cart_training import rollout,policy_update,windows,validation_schedule,predict_trajectory
 from moxian_web.cart_observations import batch_future
 from moxian_web.cart_network import CartNetwork
 from moxian_web.cart_objective import CartHand,CartObjective,policy_settings
-from moxian_web.cart_collision import CollisionModel,frozen
+from moxian_web.cart_collision import CollisionModel,SDFLearner,frozen
 
 
 @pytest.fixture(autouse=True)
@@ -96,24 +96,146 @@ def test_batched_cost_matches_reference_loss_and_joint_gradient(geometry):
             torch.testing.assert_close(a[key],b[key])
 
 
-def test_logical_batch_gradient_is_invariant_to_gpu_chunk(geometry):
+def test_one_parallel_batch_has_one_policy_update_and_no_accumulation(geometry):
     hand,collision=geometry;rows=make_rows(hand);sessions=[(dict(id='one'),rows,{})]
     all_windows=windows(sessions,length=2);prepare_windows(sessions,all_windows,'cpu')
     batch=[all_windows[i] for i in (0,1,4,5)]
     torch.manual_seed(2);model=CartNetwork(hand.low,hand.high,'fsq')
     objective=CartObjective(hand,policy_settings(),collision)
     # Isolate policy accumulation: labels/model stay fixed between comparisons.
-    learner=SimpleNamespace(collect=lambda:collision.collected.clear(),update=lambda:{})
-    initial=copy.deepcopy(model.state_dict());gradients=[]
-    for micro in (4,1,3):
-        model.load_state_dict(initial);optimizer=torch.optim.SGD(model.parameters(),lr=0.)
-        value,_,_,_=policy_update(model,objective,learner,optimizer,batch,micro)
-        gradients.append((value.clone(),[p.grad.clone() for p in model.parameters()]))
-    for value,gradient in gradients[1:]:
-        torch.testing.assert_close(value,gradients[0][0],rtol=3.e-6,atol=.001)
-        for a,b in zip(gradient,gradients[0][1]):torch.testing.assert_close(a,b,rtol=.001,atol=2.e-5)
+    updates=[]
+    learner=SimpleNamespace(collect=lambda:collision.collected.clear(),update=lambda:updates.append('geometry') or {})
+    optimizer=torch.optim.SGD(model.parameters(),lr=0.)
+    step=optimizer.step
+    optimizer.step=lambda:updates.append('policy') or step()
+    value,_,_,_=policy_update(model,objective,learner,optimizer,batch,4)
+    assert updates==['geometry','geometry','policy'] and torch.isfinite(value)
+    assert all(p.grad is not None for p in model.parameters())
+    for capacity in (1,3):
+        with pytest.raises(ValueError,match='禁止跨显存分块累积梯度'):
+            policy_update(model,objective,learner,optimizer,batch,capacity)
+    assert updates==['geometry','geometry','policy']
 
 
-def test_reference_batch_default_and_explicit_memory_chunk():
-    assert DEFAULT_BATCH_SIZE==4096 and choose_micro_batch('attention','cpu',23)==23
+def test_parallel_batch_default_and_memory_limit(monkeypatch):
+    from moxian_web import cart_fast
+    assert DEFAULT_BATCH_SIZE==0 and choose_micro_batch('attention','cpu',23)==23
     with pytest.raises(ValueError):choose_micro_batch('attention','cpu',-1)
+    monkeypatch.setattr(cart_fast,'choose_micro_batch',lambda *args:16)
+    assert choose_parallel_batch('attention','cuda:0',4096)==16
+    assert choose_parallel_batch('attention','cuda:0',8)==8
+    assert choose_parallel_batch('attention','cuda:0',memory_limit=4)==4
+    assert choose_parallel_batch('attention','cuda:0',length=32)==8
+    with pytest.raises(ValueError):choose_parallel_batch('attention','cuda:0',True)
+
+
+def test_large_gpu_parallel_capacity_has_no_256_window_cap(monkeypatch):
+    monkeypatch.setattr(torch.cuda,'mem_get_info',lambda device:(120*1024**3,140*1024**3))
+    capacity=choose_parallel_batch('attention','cuda:0',attention_precision='bfloat16',checkpoint_observations=True)
+    assert capacity>1326
+    assert choose_parallel_batch('attention','cuda:0',requested=1326,attention_precision='bfloat16',checkpoint_observations=True)==1326
+
+
+def test_native_validation_is_periodic_and_uses_fixed_independent_windows():
+    windows=list(range(259))
+    first=validation_schedule(windows,1,200)
+    assert len(first)==32 and len(set(first))==32 and first[0]==0 and first[-1]==258
+    assert validation_schedule(windows,2,200)==[]
+    assert validation_schedule(windows,10,200)==first
+    assert validation_schedule(windows,199,199)==first
+    assert validation_schedule(windows,10,200,budget=0)==windows
+
+
+def test_ragged_tactile_transforms_preserve_points_and_joint_gradients(geometry):
+    hand,collision=geometry;rows=make_rows(hand)[4:8]
+    q=((hand.low+hand.high)/2)[None].repeat(4,1).requires_grad_()
+    frames=hand.frames(q);p,r=frames[:2]
+    actual=collision.oracle.tactile_queries(frames,rows);expected=[]
+    for i,row in enumerate(rows):
+        mask=np.asarray(row['tactile_valid'])&np.asarray(row['tactile_state'],bool)
+        points=hand.tensor(np.asarray(row['tactile_positions_m'])[mask])
+        expected.append((r[i,None].transpose(-1,-2)@(points[:,None]-p[i,None])[...,None]).squeeze(-1))
+    assert any(len(x)==0 for x in expected) and any(len(x)>0 for x in expected)
+    for (value,links),target in zip(actual,expected):
+        torch.testing.assert_close(value,target)
+        assert links.shape==value.shape[:-1]
+    a=torch.cat([v.reshape(-1,3) for v,_ in actual]);b=torch.cat([v.reshape(-1,3) for v in expected])
+    weights=torch.randn_like(a)
+    ga=torch.autograd.grad((a*weights).sum(),q,retain_graph=True)[0]
+    gb=torch.autograd.grad((b*weights).sum(),q)[0]
+    torch.testing.assert_close(ga,gb,rtol=1.e-5,atol=1.e-6)
+
+
+def test_retained_policy_graph_survives_real_geometry_updates(geometry):
+    hand,collision=geometry;rows=make_rows(hand)
+    selected=windows([(dict(id='one'),rows,{})],length=2)
+    prepare_windows([(dict(id='one'),rows,{})],selected,'cpu')
+    batch=selected[:2]
+    for w in batch:w['initial_q']=((hand.low+hand.high)/2).clone()
+    model=CartNetwork(hand.low,hand.high,'fsq');objective=CartObjective(hand,policy_settings(),collision)
+    learner=SDFLearner(collision,capacity=512,batch_size=32)
+    old_model=[p.detach().clone() for p in model.parameters()]
+    calls=[]
+    handle=model.register_forward_hook(lambda *args:calls.append('forward'))
+    update=learner.update
+    def update_geometry():
+        assert all(p.grad is None for p in model.parameters())
+        assert all(not x.requires_grad for x,_ in collision.collected)
+        return update()
+    learner.update=update_geometry
+    try:
+        value,_,_,_=policy_update(model,objective,learner,torch.optim.AdamW(model.parameters(),lr=1.e-4),batch,2)
+    finally:handle.remove()
+    assert len(calls)==2 and learner.steps==2 and torch.isfinite(value)
+    assert any(not torch.equal(a,b) for a,b in zip(old_model,model.parameters()))
+
+
+def test_time_batched_sensor_encoder_preserves_causal_policy_and_gradients(geometry):
+    hand,collision=geometry;rows=make_rows(hand)
+    selected=windows([(dict(id='one'),rows,{})],length=3)
+    prepare_windows([(dict(id='one'),rows,{})],selected,'cpu')
+    batch=PreparedBatch(selected[:2],'cpu')
+    for w in batch:w['initial_q']=((hand.low+hand.high)/2).clone()
+    torch.manual_seed(46);model=CartNetwork(hand.low,hand.high,'attention')
+    model.checkpoint_observations=True;objective=CartObjective(hand,policy_settings(),collision)
+    results=[]
+    for batched in (False,True):
+        model.zero_grad(set_to_none=True)
+        trajectory=predict_trajectory(model,objective,batch,batch_observations=batched)
+        predictions=torch.stack(trajectory.predictions)
+        predictions.square().mean().backward()
+        results.append((predictions.detach(),[p.grad.clone() for p in model.parameters()]))
+    torch.testing.assert_close(results[0][0],results[1][0],rtol=1.e-5,atol=1.e-6)
+    for a,b in zip(results[0][1],results[1][1]):torch.testing.assert_close(a,b,rtol=.001,atol=1.e-6)
+
+
+@pytest.mark.parametrize('architecture',['attention','fsq'])
+def test_time_batched_losses_preserve_values_and_bptt_gradients(geometry,architecture):
+    hand,collision=geometry;rows=make_rows(hand)
+    for i,row in enumerate(rows):row['timestamp_ms']=i*20.+(i%3)*2.
+    sessions=[(dict(id='one'),rows,{})];selected=windows(sessions,length=4)
+    prepare_windows(sessions,selected,'cpu');chosen=[selected[i] for i in (0,1,2)]
+    for w in chosen:w['initial_q']=((hand.low+hand.high)/2).clone()
+    normalizers=group_normalizers(chosen)
+    batch=PreparedBatch(chosen,'cpu',normalizers)
+    torch.manual_seed(7);model=CartNetwork(hand.low,hand.high,architecture)
+    objective=CartObjective(hand,policy_settings(),collision)
+    # Nonzero acceleration also checks its first-frame denominator, independently
+    # of the default monitoring-only setting. Contacts vary by time and window.
+    objective.settings=replace(objective.settings,acceleration=.00001)
+    outputs=[]
+    with frozen(collision.model):
+        for batched in (False,True):
+            model.zero_grad(set_to_none=True)
+            loss,parts,metrics,predictions=rollout(model,objective,batch,batch_losses=batched)
+            loss.backward()
+            outputs.append((loss.detach(),{k:v.detach() for k,v in parts.items()},metrics,
+                [p.detach() for p in predictions],[p.grad.clone() for p in model.parameters()]))
+    expected,actual=outputs
+    torch.testing.assert_close(actual[0],expected[0],rtol=3.e-6,atol=.002)
+    for key in expected[1]:torch.testing.assert_close(actual[1][key],expected[1][key],rtol=3.e-6,atol=.002)
+    for a,b in zip(actual[3],expected[3]):torch.testing.assert_close(a,b)
+    for a,b in zip(actual[4],expected[4]):torch.testing.assert_close(a,b,rtol=.002,atol=.002)
+    for a,b in zip(actual[2],expected[2]):
+        for key in ('max_gap_m','max_normal_deg','max_penetration_m','contact_keep_loss'):
+            torch.testing.assert_close(a[key],b[key],rtol=3.e-6,atol=.001 if key=='max_normal_deg' else 2.e-5)

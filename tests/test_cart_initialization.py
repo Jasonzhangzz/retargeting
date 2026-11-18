@@ -103,12 +103,16 @@ def test_one_reset_noise_sample_is_reused_for_collection_and_policy(monkeypatch)
     hand=SimpleNamespace(device='cpu',low=torch.zeros(20),high=torch.ones(20),tensor=lambda x:torch.tensor(x,dtype=torch.float32))
     model=torch.nn.Linear(1,1);collected=[];policy=[]
     objective=SimpleNamespace(hand=hand,collision=SimpleNamespace(model=torch.nn.Linear(1,1)))
-    def probe(model,objective,chunk,collect_only=False,**kwargs):
-        (collected if collect_only else policy).extend(w['initial_q'].clone() for w in chunk)
-        return model.weight.square().mean(),{},[],[]
-    monkeypatch.setattr(training,'rollout',probe)
+    calls=[]
+    def probe(model,objective,chunk,*args,**kwargs):
+        calls.append('unroll')
+        states=[w['initial_q'].clone() for w in chunk]
+        return SimpleNamespace(collect=lambda _:collected.extend(states),
+            loss=lambda *args,**kwargs:(policy.extend(states) or model.weight.square().mean(),{},[],[]))
+    monkeypatch.setattr(training,'predict_trajectory',probe)
     learner=SimpleNamespace(collect=lambda:None,update=lambda:{})
-    training.policy_update(model,objective,learner,torch.optim.SGD(model.parameters(),lr=0.),batch,2,initial_noise_rad=.1)
+    training.policy_update(model,objective,learner,torch.optim.SGD(model.parameters(),lr=0.),batch,5,initial_noise_rad=.1)
     torch.testing.assert_close(torch.stack(collected),torch.stack(policy))
+    assert calls==['unroll']  # the retained graph is used after geometry updates
     assert not torch.equal(collected[0],collected[1])
     assert batch[0]['initial_q']==[.5]*20

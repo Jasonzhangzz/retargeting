@@ -9,7 +9,7 @@ import torch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from moxian_web.cart_data import load_sessions,manifest
 from moxian_web.cart_training import windows,position_statistics,policy_update
-from moxian_web.cart_fast import prepare_windows,choose_micro_batch
+from moxian_web.cart_fast import prepare_windows,choose_parallel_batch
 from moxian_web.cart_objective import CartHand,CartObjective,policy_settings
 from moxian_web.cart_collision import CollisionModel,SDFLearner
 from moxian_web.cart_network import CartNetwork
@@ -27,9 +27,12 @@ def main():
     parser.add_argument('--initial-noise-rad',type=float,default=.1)
     parser.add_argument('--length',type=int,default=16);parser.add_argument('--repeats',type=int,default=3)
     parser.add_argument('--device',default='cuda:0' if torch.cuda.is_available() else 'cpu');parser.add_argument('--output',type=Path)
+    parser.add_argument('--serial-losses',action='store_true',help='Reference implementation: evaluate FK and loss separately at each recurrent step')
+    parser.add_argument('--attention-precision',choices=('float32','bfloat16'),default='float32')
+    parser.add_argument('--checkpoint-observations',action='store_true',help='Recompute the sensor encoder to fit more genuinely parallel windows')
     parser.add_argument('--profile',type=Path,help='Optional extra profiler step; excluded from throughput measurements')
     args=parser.parse_args()
-    if args.batch_size<1 or args.length<2 or args.repeats<2:parser.error('batch>=1, length>=2 and repeats>=2 are required')
+    if args.batch_size<0 or args.length<2 or args.repeats<2:parser.error('batch>=0 (0=auto), length>=2 and repeats>=2 are required')
     torch.set_num_threads(1);torch.manual_seed(17)
     _,meta=manifest(args.root,args.dataset)
     sessions,_=load_sessions(args.root,[args.dataset],meta['split'])
@@ -38,7 +41,9 @@ def main():
     selected=windows(sessions,args.length)[args.window_start:]
     if not selected:raise ValueError('No continuous rollout windows')
     prepare_windows(sessions,selected,args.device)
-    batch=[selected[i] for i in np.linspace(0,len(selected)-1,min(args.batch_size,len(selected))).astype(int)]
+    parallel=choose_parallel_batch(args.architecture,args.device,args.batch_size,args.micro_batch_size,args.length,
+        args.attention_precision,args.checkpoint_observations)
+    batch=[selected[i] for i in np.linspace(0,len(selected)-1,min(parallel,len(selected))).astype(int)]
     hand=CartHand(args.device);collision=CollisionModel(hand)
     objective=CartObjective(hand,policy_settings(),collision);objective.cache_rows=True
     mean,scale=position_statistics(sessions)
@@ -60,7 +65,9 @@ def main():
             if set(missing.missing_keys)!=expected or missing.unexpected_keys:raise ValueError('Unsupported old geometry checkpoint')
             print(json.dumps(dict(contact_field_initialized=True,quality_benchmark=False)),flush=True)
         optimizer.load_state_dict(state['policy_optimizer'])
-    micro=min(len(batch),choose_micro_batch(args.architecture,args.device,args.micro_batch_size))
+    model.set_attention_precision(args.attention_precision)
+    model.checkpoint_observations=args.checkpoint_observations
+    micro=len(batch)
     def sync():
         if args.device.startswith('cuda'):torch.cuda.synchronize(args.device)
     results=[]
@@ -68,14 +75,18 @@ def main():
         sync()
         if args.device.startswith('cuda'):torch.cuda.reset_peak_memory_stats(args.device)
         started=time.perf_counter()
-        loss,_,geometry_losses,timings=policy_update(model,objective,learner,optimizer,batch,micro,initial_noise_rad=args.initial_noise_rad)
+        loss,_,geometry_losses,timings=policy_update(model,objective,learner,optimizer,batch,micro,initial_noise_rad=args.initial_noise_rad,batch_losses=not args.serial_losses)
         sync();elapsed=time.perf_counter()-started
         result=dict(repeat=repeat,warmup=repeat==0,elapsed_s=elapsed,windows_per_s=len(batch)/elapsed,
             transitions_per_s=len(batch)*args.length/elapsed,loss=float(loss.detach()),phase_wall_s=timings,geometry_losses=geometry_losses)
         if args.device.startswith('cuda'):result['peak_allocated_mb']=torch.cuda.max_memory_allocated(args.device)/2**20
         results.append(result);print(json.dumps(result),flush=True)
     report=dict(device=torch.cuda.get_device_name(args.device) if args.device.startswith('cuda') else 'CPU',
-        architecture=args.architecture,logical_batch=len(batch),micro_batch=micro,length=args.length,window_start=args.window_start,
+        architecture=args.architecture,requested_parallel_batch=args.batch_size,parallel_batch=len(batch),gradient_accumulation=False,length=args.length,window_start=args.window_start,
+        loss_execution='serial_reference' if args.serial_losses else 'time_batched',
+        policy_attention_precision=args.attention_precision,geometry_precision='float32',
+        observation_checkpointing=args.checkpoint_observations,
+        geometry_activation_recomputation=args.device.startswith('cuda'),
         initialization='offline_wuji_retargeting_ik',initial_noise_rad=args.initial_noise_rad,
         contact_loss_frames=sum(bool(row['contacts']['self_pairs'] or row['contacts']['object_contacts'])
             for w in batch for row in w['rows'][-w['length']-9:-9]),
@@ -87,7 +98,7 @@ def main():
         activities=[torch.profiler.ProfilerActivity.CPU]
         if args.device.startswith('cuda'):activities.append(torch.profiler.ProfilerActivity.CUDA)
         with torch.profiler.profile(activities=activities) as profiler:
-            policy_update(model,objective,learner,optimizer,batch,micro,initial_noise_rad=args.initial_noise_rad);sync()
+            policy_update(model,objective,learner,optimizer,batch,micro,initial_noise_rad=args.initial_noise_rad,batch_losses=not args.serial_losses);sync()
         args.profile.parent.mkdir(parents=True,exist_ok=True)
         events=profiler.key_averages()
         args.profile.write_text(events.table(sort_by='self_cpu_time_total',row_limit=30)+'\n'+

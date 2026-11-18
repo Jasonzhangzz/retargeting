@@ -9,7 +9,7 @@ import torch
 from torch.nn import functional as F
 from .cart_contacts import link_owner
 
-DEFAULT_BATCH_SIZE = 4096
+DEFAULT_BATCH_SIZE = 0  # actual simultaneous windows, selected from free memory
 
 
 class ObservationStore:
@@ -71,15 +71,41 @@ def prepare_windows(sessions, windows, device):
     return stores
 
 
-def choose_micro_batch(architecture, device, requested=0):
+def choose_micro_batch(architecture, device, requested=0, per_window_mb=None,workspace_mb=0):
     if isinstance(requested,bool) or not isinstance(requested,int) or requested<0:
         raise ValueError('GPU 分块必须为非负整数；0 表示自动')
     if requested:return requested
     if not str(device).startswith('cuda'):return 8
     free,_=torch.cuda.mem_get_info(device)
-    per_window=(400 if architecture=='attention' else 100)*1024**2
-    limit=max(1,int(.5*free/per_window))
-    return min(64,2**int(np.log2(limit)))
+    # Measured FP32 attention at T=16 uses about 331 MiB/window. Reserve
+    # 20% of currently free memory for mesh labels, optimizer and variation.
+    per_window=(per_window_mb or (350 if architecture=='attention' else 100))*1024**2
+    limit=max(1,int((.8*free-workspace_mb*1024**2)/per_window))
+    # Multiples of eight use the budget without discarding almost half of it
+    # solely because the next power of two does not fit.
+    return max(1,limit//8*8)
+
+
+def choose_parallel_batch(architecture,device,requested=0,memory_limit=0,length=16,
+                          attention_precision='float32',checkpoint_observations=False):
+    """Resolve one real batch, never a larger batch split for accumulation.
+
+    Explicit requests are upper bounds: a request of 4096 on a small GPU must
+    not silently mean 4096 accumulated windows. Budget scales with BPTT length.
+    The old micro-batch argument is retained only as a simultaneous-window cap.
+    """
+    for value in (requested,memory_limit):
+        if isinstance(value,bool) or not isinstance(value,int) or value<0:
+            raise ValueError('并行窗口数必须为非负整数；0 表示按显存自动选择')
+    # The bounded encoder workspace dominates the recomputed BF16 path:
+    # measured T=16 peaks are 6304 MiB at B=112 and 6990 MiB at B=512.
+    # Reserve 6 GiB plus 3 MiB/window, AND 20% of device memory. There is no
+    # artificial window cap: enough memory permits the complete dataset.
+    recomputed=architecture=='attention' and checkpoint_observations and attention_precision=='bfloat16'
+    estimate=3 if recomputed else 100 if architecture=='attention' and checkpoint_observations else 240 if architecture=='attention' and attention_precision=='bfloat16' else None
+    workspace=6144 if recomputed else 0
+    capacity=max(1,int(choose_micro_batch(architecture,device,0,estimate,workspace)*16/max(16,length)))
+    return min([capacity]+[v for v in (requested,memory_limit) if v])
 
 
 def semantic_key(contact, self_contact=False):
@@ -87,7 +113,7 @@ def semantic_key(contact, self_contact=False):
 
 
 def group_normalizers(windows):
-    """Global per-step denominators make gradient accumulation batch-exact."""
+    """Balance semantic groups independently at each rollout step."""
     length=min(w['length'] for w in windows);result=[]
     for t in range(length):
         counts=Counter()
@@ -122,7 +148,9 @@ def fast_objective(objective,q,rows,references=None,acceleration=None,previous_r
         for item in c['contacts']:groups.setdefault(item['key'],[]).append((i,item))
     contact=q.new_zeros(size);normal_cost=q.new_zeros(size);max_gap=q.new_zeros(size);max_angle=q.new_zeros(size)
     unresolved=torch.zeros(size,device=q.device,dtype=torch.long);counts=[0]*size
-    weights=normalizers or {key:size/(len(groups)*len({i for i,_ in items})) for key,items in groups.items()}
+    # A time-batched rollout retains each step's semantic denominators. Mixing
+    # time into the group counts would silently change the contact objective.
+    weights=normalizers if normalizers is not None else {key:size/(len(groups)*len({i for i,_ in items})) for key,items in groups.items()}
     angle_scale=1-np.cos(np.deg2rad(s.normal_deg))
     for key,items in groups.items():
         ids=torch.as_tensor([i for i,_ in items],device=q.device);duplicates=Counter(i for i,_ in items)
@@ -151,7 +179,7 @@ def fast_objective(objective,q,rows,references=None,acceleration=None,previous_r
             rho=q.new_tensor([item['rho'] for _,item in items])
             position=rho.square()*distance/s.contact_scale_m**2;norm=rho.square()*(1-dot)/angle_scale
             degrees=torch.rad2deg(torch.acos(dot.detach().clamp(-1,1)))
-        weight=q.new_tensor([weights[key]/duplicates[i] for i,_ in items])
+        weight=q.new_tensor([(weights[i][key] if isinstance(weights,list) else weights[key])/duplicates[i] for i,_ in items])
         contact=contact.index_add(0,ids,torch.where(ok,position,0.)*weight)
         normal_cost=normal_cost.index_add(0,ids,torch.where(ok,norm,0.)*weight)
         max_gap=max_gap.scatter_reduce(0,ids,torch.where(ok,distance.detach().clamp_min(0).sqrt(),0.),reduce='amax',include_self=True)

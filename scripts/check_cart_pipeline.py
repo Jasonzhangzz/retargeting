@@ -104,6 +104,10 @@ def main():
     parser.add_argument('--architecture',choices=('both','attention','fsq'),default='both')
     parser.add_argument('--device',default='cpu');parser.add_argument('--length',type=int,default=2)
     args=parser.parse_args();torch.set_num_threads(1)
+    # Compare checkpoint recovery under controlled reductions. Fast BF16 CUDA
+    # attention may use nondeterministic backward reductions; two fresh runs
+    # can otherwise differ before either one has been interrupted.
+    if args.device.startswith('cuda'):torch.use_deterministic_algorithms(True)
     source=args.recording or next((ROOT/'output/moxian/cart/recordings').glob('*/manifest.json')).parent
     root=args.output or ROOT/'output/moxian/cart/smoke_tests'/(time.strftime('%Y%m%dT%H%M%S',time.gmtime())+'_'+uuid.uuid4().hex[:6])
     root.mkdir(parents=True,exist_ok=False);fixtures(root,source,count=max(16,args.length+12))
@@ -141,7 +145,8 @@ def main():
         result=evaluate(root,architecture,['validation'],allow_smoke=True)
         result.update(interrupted_resume_exact=max_delta==0.,interrupted_resume_max_delta=max_delta,interrupted_resume_within_tolerance=True)
         result.update(runtime_probe(root,model));reports[architecture]=result
-    atomic_json(root/'smoke_report.json',dict(architectures=reports,emf_synthetic=True,published=False,source=str(source)))
+    atomic_json(root/'smoke_report.json',dict(architectures=reports,emf_synthetic=True,published=False,source=str(source),
+        deterministic_cuda_check=args.device.startswith('cuda')))
     print(json.dumps(dict(output=str(root),reports=reports),ensure_ascii=False),flush=True)
 
 

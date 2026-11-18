@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torch.utils.checkpoint import checkpoint
 import warp as wp
 from .cart_contact_field import ContactField,ContactTeacher
 
@@ -111,18 +112,22 @@ class MeshOracle:
 
     def tactile_queries(self,frames,rows):
         """Only confirmed active taxels; every target link including the palm."""
-        p,r=frames[:2];result=[]
+        p,r=frames[:2];clouds=[];counts=[]
         for i,row in enumerate(rows):
             if '_cart_active_points' in row:points=row['_cart_active_points']
             else:
                 positions=torch.as_tensor(row['tactile_positions_m'],device=p.device,dtype=p.dtype)
                 mask=torch.as_tensor(row['tactile_valid'],device=p.device,dtype=torch.bool)&torch.as_tensor(row['tactile_state'],device=p.device,dtype=torch.bool)
                 points=positions[mask]
-            if len(points):
-                local=(r[i,None].transpose(-1,-2)@(points[:,None]-p[i,None])[...,None]).squeeze(-1)
-                result.append((local,torch.arange(21,device=p.device).expand(len(points),-1)))
-            else:result.append((p.new_empty((0,21,3)),torch.empty(0,21,device=p.device,dtype=torch.long)))
-        return result
+            clouds.append(points);counts.append(len(points))
+        points=torch.cat(clouds)
+        # One FK gather/transform for all ragged point clouds, instead of a
+        # sequence of tiny CUDA launches for every window and time step.
+        ids=torch.as_tensor([i for i,n in enumerate(counts) for _ in range(n)],device=p.device)
+        if len(points):local=(r[ids].transpose(-1,-2)@(points[:,None]-p[ids])[...,None]).squeeze(-1)
+        else:local=p.new_empty((0,21,3))
+        links=torch.arange(21,device=p.device).expand(len(points),-1)
+        return list(zip(local.split(counts),links.split(counts)))
 
 
 class CollisionModel:
@@ -135,6 +140,8 @@ class CollisionModel:
         """No native queries, detached witnesses or data-dependent surface IDs."""
         links=torch.full(local.shape[:-1],owner,device=local.device,dtype=torch.long)
         flags=torch.full_like(links,palmar,dtype=torch.bool)
+        if local.is_cuda and torch.is_grad_enabled() and (local.requires_grad or direction.requires_grad) and not any(p.requires_grad for p in self.model.parameters()):
+            return checkpoint(self.model.contact,local,direction,links,flags,use_reentrant=False,preserve_rng_state=False)
         return self.model.contact(local,direction,links,flags)
 
     def pair_queries(self,p,r,a,b):
@@ -166,7 +173,7 @@ class CollisionModel:
     def collect_contact(self,local,direction,links,palmar):
         n=local.numel()//3
         if n:
-            ids=torch.randperm(n,device=local.device)[:512]
+            ids=torch.randperm(n,device=local.device)[:512] if n>512 else slice(None)
             self.contact_collected.append(tuple(v.detach().reshape(n,-1)[ids] if v.ndim==local.ndim else v.detach().reshape(n)[ids]
                 for v in (local,direction,links,palmar)))
 
@@ -176,34 +183,47 @@ class CollisionModel:
         shape=links.shape
         # Chunk the transient allocation while preserving the full autograd graph.
         flat=local.reshape(-1,3);ids=links.reshape(-1)
-        values=torch.cat([self.model(x,l) for x,l in zip(flat.split(8192),ids.split(8192))]).reshape(shape) if len(flat) else local.new_empty(shape)
+        chunk=65536 if local.is_cuda else 8192
+        recompute=local.is_cuda and torch.is_grad_enabled() and local.requires_grad and not any(p.requires_grad for p in self.model.parameters())
+        def evaluate(x,l):
+            return checkpoint(self.model,x,l,use_reentrant=False,preserve_rng_state=False) if recompute else self.model(x,l)
+        values=torch.cat([evaluate(x,l) for x,l in zip(flat.split(chunk),ids.split(chunk))]).reshape(shape) if len(flat) else local.new_empty(shape)
         if self.collecting:self.collect_local(local,links,valid)
         return values
 
-    def collect_local(self,local,links,valid=None):
+    def collect_local(self,local,links,valid=None,max_samples=512):
         x=local.detach().reshape(-1,3);l=links.detach().reshape(-1)
         if valid is not None:x=x[valid.flatten()];l=l[valid.flatten()]
         if len(x):
-            select=torch.randperm(len(x),device=x.device)[:512]
+            select=torch.randperm(len(x),device=x.device)[:max_samples] if len(x)>max_samples else slice(None)
             self.collected.append((x[select],l[select]))
 
-    def collect_queries(self,q,rows,frames):
+    def collect_queries(self,q,rows,frames,sample_budget=512):
         """Collect the same moving surfaces/taxels without evaluating any loss."""
-        self.collect_local(*self.oracle.self_queries(frames))
-        for x,l in self.oracle.tactile_queries(frames,rows):self.collect_local(x,l)
+        self.collect_local(*self.oracle.self_queries(frames),max_samples=sample_budget)
+        tactile=self.oracle.tactile_queries(frames,rows)
+        self.collect_local(torch.cat([x.reshape(-1,3) for x,_ in tactile]),
+            torch.cat([l.flatten() for _,l in tactile]),max_samples=512*len(rows))
         from .cart_contacts import link_owner
-        p,r=frames[:2]
+        p,r=frames[:2];objects={};pairs={}
         for i,row in enumerate(rows):
             for c in row['contacts']['object_contacts']:
-                owner=link_owner(c['region']);point=q.new_tensor(c['position_m']);normal=q.new_tensor(c['normal'])
-                local=(r[i,owner].T@(point-p[i,owner]))[None];direction=(r[i,owner].T@normal)[None]
-                links=torch.full((1,),owner,device=q.device,dtype=torch.long)
-                self.collect_contact(local,direction,links,torch.ones_like(links,dtype=torch.bool))
+                objects.setdefault(link_owner(c['region']),[]).append((i,c))
             for c in row['contacts']['self_pairs']:
-                a,b=map(link_owner,c['regions'])
-                for _,owner,_,_,local,direction in self.pair_queries(p[i:i+1],r[i:i+1],a,b):
-                    links=torch.full(local.shape[:-1],owner,device=q.device,dtype=torch.long)
-                    self.collect_contact(local,direction,links,torch.zeros_like(links,dtype=torch.bool))
+                pairs.setdefault(tuple(map(link_owner,c['regions'])),[]).append(i)
+        for owner,items in objects.items():
+            ids=torch.as_tensor([i for i,_ in items],device=q.device)
+            points=q.new_tensor([c['position_m'] for _,c in items]);normals=q.new_tensor([c['normal'] for _,c in items])
+            inverse=r[ids,owner].transpose(-1,-2)
+            local=(inverse@(points-p[ids,owner])[...,None]).squeeze(-1)
+            direction=(inverse@normals[...,None]).squeeze(-1)
+            links=torch.full((len(ids),),owner,device=q.device,dtype=torch.long)
+            self.collect_contact(local,direction,links,torch.ones_like(links,dtype=torch.bool))
+        for (a,b),indices in pairs.items():
+            ids=torch.as_tensor(indices,device=q.device)
+            for _,owner,_,_,local,direction in self.pair_queries(p[ids],r[ids],a,b):
+                links=torch.full(local.shape[:-1],owner,device=q.device,dtype=torch.long)
+                self.collect_contact(local,direction,links,torch.zeros_like(links,dtype=torch.bool))
 
     def penalties(self,q,rows,frames):
         local,links,valid=self.oracle.self_queries(frames)
@@ -228,6 +248,15 @@ class CollisionModel:
             logits=torch.where(reverse[None],-torch.inf,depth/tau)
             attention=torch.softmax(logits,dim=-1)
             self_depth=(attention*depth).sum(-1)
+        if not self.auditing:
+            flat=torch.cat(values[1:]);counts=[v.numel() for v in values[1:]]
+            ids=torch.as_tensor([i for i,n in enumerate(counts) for _ in range(n)],device=q.device,dtype=torch.long)
+            depth=F.softplus(-flat/.00005)*.00005;logits=depth/.00005
+            maximum=q.new_full((len(rows),),-torch.inf).scatter_reduce(0,ids,logits.detach(),reduce='amax',include_self=True)
+            weight=torch.exp(logits-maximum[ids])
+            denominator=q.new_zeros(len(rows)).index_add(0,ids,weight)
+            numerator=q.new_zeros(len(rows)).index_add(0,ids,weight*depth)
+            return self_depth,numerator/denominator.clamp_min(1.e-20)
         point_depth=[]
         for d in values[1:]:
             if not d.numel():point_depth.append(q.new_zeros(()))

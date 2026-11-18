@@ -19,7 +19,8 @@
   el('cartHullStatus').textContent=c.protocol&&!compatible?'CART 服务版本不匹配，请重启网页服务以加载同步触觉接触检测。':h?`自接触 ${h.self_contacts||0} · 物体接触 ${h.object_contacts||0} · 触觉 ${h.tactile_status==='valid'?'有效':'未知／过期'} · 预览延迟 ${c.preview_age_ms?.toFixed(0)||'—'} ms`:(c.error||'点击预览接触或开始录制');
   window.updateCartPreview?.(state);
   const job=c.job||{},running=['starting','running','cancelling'].includes(job.status);
-  el('cartJob').textContent=job.error||`${job.action||'后台任务'} · ${job.status||'未运行'} · ${job.phase||''}${job.device?` · ${job.device}`:''} ${job.epoch?`${job.epoch}/${job.epochs}轮`:job.completed!=null?`${job.completed}/${job.total}帧`:job.frames!=null?`${job.frames}/${job.raw_frames??'…'}帧`:''}${job.logical_batch_size?` · 逻辑 batch ${job.actual_batch_size??job.logical_batch_size}/${job.logical_batch_size} · GPU 分块 ${job.micro_batch_size}`:''}${job.chunk_completed!=null?` · ${job.compute_stage} ${job.chunk_completed}/${job.chunk_total} 块`:''}`;
+  const stage={collect:'并行 rollout 与查询收集',geometry:'GPU 标签与碰撞网络更新',backward:'策略展开、合批损失与反传'}[job.compute_stage]||job.compute_stage;
+  el('cartJob').textContent=job.error||`${job.action||'后台任务'} · ${job.status||'未运行'} · ${job.phase||''}${job.device?` · ${job.device}`:''} ${job.epoch?`${job.epoch}/${job.epochs}轮`:job.completed!=null?`${job.completed}/${job.total}帧`:job.frames!=null?`${job.frames}/${job.raw_frames??'…'}帧`:''}${job.batch?` · 更新 ${job.batch}/${job.batches??'…'}`:''}${job.phase==='mesh_validation'?` · 真实 mesh 验证 ${job.completed}/${job.total} 个窗口`:''}${job.parallel_batch_size?` · 实际并行 ${job.parallel_batch_size} 个窗口 · 每 batch 更新`:''}${job.gradient_accumulation===false?' · 无梯度累积':''}${job.compute_stage?` · ${stage}`:''}${job.transitions_per_s?` · ${job.transitions_per_s.toFixed(1)} 损失帧/秒`:''}`;
   el('cartDeleteDatasets').disabled=!!(pending||running||r.active||r.saving||c.replay_active||!selected().length);
   el('cartDeleteModel').disabled=!!(pending||running||!el('cartModels').value);
   for(const id of ['cartPreprocess','cartTrain','cartEvaluate'])el(id).disabled=!!(pending||running||r.active||r.saving||!selected().length);
@@ -73,7 +74,7 @@
  el('cartRecordStart').onclick=()=>action('cart_record_start',{split:el('cartSplit').value,label:el('cartLabel').value});
  el('cartRecordStop').onclick=()=>action('cart_record_stop');el('cartRefresh').onclick=refresh;
  el('cartPreprocess').onclick=()=>action('cart_preprocess',{datasets:selected()});
- el('cartTrain').onclick=()=>action('cart_train',{datasets:selected(),epochs:Number(el('cartEpochs').value),architecture:el('cartArchitecture').value||'attention',batch_size:Number(el('cartBatchSize').value)||4096,micro_batch_size:Number(el('cartMicroBatchSize').value)||0,initial_noise_rad:Number(el('cartInitialNoise').value)});
+ el('cartTrain').onclick=()=>action('cart_train',{datasets:selected(),epochs:Number(el('cartEpochs').value),architecture:el('cartArchitecture').value||'attention',batch_size:Number(el('cartBatchSize').value)||0,initial_noise_rad:Number(el('cartInitialNoise').value)});
  el('cartCancel').onclick=()=>action('cart_cancel');
  el('cartSelect').onclick=async()=>{const result=await action('cart_model_select',{model:el('cartModels').value});if(result){window.wujiRequestedSolver='cart';el('wujiSolver').value='cart';}};
  el('cartEvaluate').onclick=()=>action('cart_evaluate',{model:el('cartModels').value,datasets:selected()});

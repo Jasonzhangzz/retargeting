@@ -24,6 +24,41 @@ def inputs(batch=2):
         tactile_valid=torch.ones(batch,10,460,dtype=torch.bool))
 
 
+def test_sensor_checkpointing_preserves_outputs_and_all_gradients():
+    torch.manual_seed(31);model=CartNetwork(torch.zeros(20),torch.ones(20),'attention')
+    args=inputs(batch=1);args['current_q'].requires_grad_();args['future_emf'].requires_grad_()
+    args['tactile_positions'].requires_grad_();records=[]
+    for enabled in (False,True):
+        model.checkpoint_observations=enabled;model.zero_grad(set_to_none=True)
+        for value in args.values():
+            if value.requires_grad:value.grad=None
+        output=model(**args);output.square().mean().backward()
+        records.append((output.detach(),[p.grad.clone() for p in model.parameters()],
+            [value.grad.clone() for value in args.values() if value.requires_grad]))
+    torch.testing.assert_close(records[0][0],records[1][0])
+    for group in (1,2):
+        for a,b in zip(records[0][group],records[1][group]):torch.testing.assert_close(a,b,atol=1.e-7,rtol=1.e-5)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(),reason='CUDA BF16 coverage')
+@pytest.mark.parametrize('unknown',[False,True])
+def test_bf16_attention_keeps_decoder_and_joint_gradients_fp32(unknown):
+    torch.manual_seed(41);model=CartNetwork(torch.zeros(20),torch.ones(20),'attention').cuda()
+    model.set_attention_precision('bfloat16');model.checkpoint_observations=True
+    args={k:v.cuda() for k,v in inputs(batch=1).items()}
+    if unknown:
+        args['tactile_valid'].fill_(False);args['emf_valid'].fill_(False)
+    args['current_q'].requires_grad_();dtypes=[]
+    handle=model.blocks[0].attention.register_forward_hook(lambda m,i,o:dtypes.append(o[0].dtype))
+    try:
+        output=model(**args);output.square().mean().backward()
+    finally:handle.remove()
+    assert output.dtype==torch.float32 and dtypes and set(dtypes)=={torch.bfloat16}
+    assert output.isfinite().all() and (output>=-1).all() and (output<=1).all()
+    assert args['current_q'].grad.dtype==torch.float32 and args['current_q'].grad.isfinite().all()
+    assert all(p.grad is not None and p.grad.isfinite().all() for p in model.parameters())
+
+
 @pytest.mark.parametrize('architecture',['attention','fsq'])
 def test_future_policy_gradients_bounds_and_unknowns(architecture):
     torch.manual_seed(1);model=CartNetwork(torch.zeros(20),torch.ones(20),architecture)
@@ -236,3 +271,27 @@ def test_recorder_preserves_emf_independently_of_mutable_source(tmp_path):
     service.observe(frame,topology,np.zeros((21,3)),'serial')
     frame['emf_observation']['positions_m'][0][0]=99.
     assert service.capture['queue'].get_nowait()['emf_observation']['positions_m'][0][0]==1.
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(),reason='CUDA activation recomputation')
+def test_frozen_geometry_checkpoint_preserves_position_and_direction_gradients():
+    from moxian_web.cart_collision import LinkSDF
+    # No native geometry is needed to compare the two field execution paths.
+    collision=CollisionModel.__new__(CollisionModel)
+    collision.model=LinkSDF().cuda();collision.auditing=False;collision.collecting=False
+    points=(torch.randn(257,3,device='cuda')*.02).requires_grad_()
+    directions=torch.randn_like(points).requires_grad_()
+    links=torch.full((len(points),),8,device='cuda',dtype=torch.long)
+    flags=torch.ones_like(links,dtype=torch.bool)
+    with frozen(collision.model):
+        distance=collision.model(points,links)
+        hit,normal=collision.model.contact(points,directions,links,flags)
+        expected=distance.square().sum()+hit.square().sum()+normal.square().sum()
+        reference=torch.autograd.grad(expected,(points,directions))
+        distance=collision.distance(points,links)
+        hit,normal=collision.contact(points,directions,8,palmar=True)
+        actual=distance.square().sum()+hit.square().sum()+normal.square().sum()
+        gradient=torch.autograd.grad(actual,(points,directions))
+    torch.testing.assert_close(actual,expected)
+    for a,b in zip(gradient,reference):torch.testing.assert_close(a,b)
+    assert all(p.grad is None for p in collision.model.parameters())

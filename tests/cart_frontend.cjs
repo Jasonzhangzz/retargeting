@@ -38,7 +38,8 @@ async function main(){
  ids.get('cartArchitecture').value='fsq';
  ids.get('cartInitialNoise').value='0.1';
  await ids.get('cartTrain').onclick();assert.equal(requests.at(-1).architecture,'fsq');
- assert.equal(requests.at(-1).batch_size,4096);assert.equal(requests.at(-1).micro_batch_size,0);
+ assert.equal(requests.at(-1).batch_size,0);assert.equal('micro_batch_size' in requests.at(-1),false);
+ assert.equal(ids.has('cartMicroBatchSize'),false);
  assert.equal(requests.at(-1).initial_noise_rad,.1);
  await ids.get('cartPreview').onclick();assert.equal(requests.at(-1).command,'cart_preview');
  ids.get('cartLabel').value='揉搓';await ids.get('cartRecordStart').onclick();

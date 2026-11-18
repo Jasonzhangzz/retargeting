@@ -44,7 +44,11 @@ def main():
         if name=='train':
             p.add_argument('--epochs',type=int,default=200);p.add_argument('--smoke-test',action='store_true')
             p.add_argument('--architecture',choices=('attention','fsq'),default='attention')
-            p.add_argument('--batch-size',type=int,default=4096);p.add_argument('--micro-batch-size',type=int,default=0,help='GPU memory chunk; 0 selects automatically')
+            p.add_argument('--batch-size',type=int,default=0,help='Simultaneous windows per optimizer step; 0 selects from free memory')
+            p.add_argument('--micro-batch-size',type=int,default=0,help='Deprecated alias for a simultaneous-window cap; never gradient accumulation')
+            p.add_argument('--attention-precision',choices=('auto','float32','bfloat16'),default='auto',help='Only CUDA attention uses BF16; geometry and output stay FP32')
+            p.add_argument('--validate-every',type=int,default=10,help='Periodic true-mesh selection audit; first and final epochs are always checked')
+            p.add_argument('--validation-windows',type=int,default=32,help='Fixed true-mesh selection window budget; 0 means all. Final full-session acceptance is never sampled.')
             p.add_argument('--length',type=int,default=16)
             p.add_argument('--resume-run');p.add_argument('--sdf-warmup-steps',type=int)
             p.add_argument('--initialize-from',help='Initialize a new run from a compatible v5 checkpoint; not exact resume')
@@ -103,7 +107,8 @@ def run(args):
                 _,m=manifest(args.root,dataset);ids[m['split']].append(dataset)
             result=dict(model=str(train(args.root,ids['train'],ids['validation'],safe_id(args.resume_run) if args.resume_run else key,args.epochs,smoke=args.smoke_test,
                 architecture=args.architecture,batch_size=args.batch_size,micro_batch_size=args.micro_batch_size,length=args.length,resume=bool(args.resume_run),warmup_steps=args.sdf_warmup_steps,initialize_from=args.initialize_from,
-                initial_noise_rad=args.initial_noise_rad)))
+                initial_noise_rad=args.initial_noise_rad,attention_precision=args.attention_precision,
+                validation_interval=args.validate_every,validation_window_budget=args.validation_windows)))
         else:
             from .cart_training import evaluate
             result=evaluate(args.root,safe_id(args.model),args.datasets,check=check)
