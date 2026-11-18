@@ -1,6 +1,6 @@
 # CART：可微策略与在线碰撞距离模型
 
-当前录制协议为 `cart_diff_v5`。训练直接使用手套观测和机器人原生 FK，不求解离线 Tube，不使用关节轨迹监督或 teacher forcing。预处理会运行原版 `wuji-retargeting` IK，只为随机训练窗口提供参考初始状态。模型输出下一帧的绝对关节角；短窗口内通过预测状态连续反传，窗口之间截断计算图。
+当前录制协议为 `cart_diff_v5`。训练直接使用手套观测和机器人原生 FK，不求解离线 Tube，不使用关节轨迹监督或 teacher forcing。预处理会运行原版 `wuji-retargeting` IK，只为随机训练窗口提供参考初始状态。模型输出归一化关节增量 Δq，并叠加到当前关节状态；短窗口内通过预测状态连续反传，窗口之间截断计算图。
 
 ## 网页与采集
 
@@ -8,7 +8,7 @@
 
 录制保存同帧原始五指 EMF 位置、旋转、有效性和时间戳，以及转换后的 wrist 位姿、源关节角、460 路触觉二值状态、响应、SID 绑定和标定指纹。触点由标定后的手套 FK 与材料位置重建；未知触觉不会变成“无接触”。原始 ADC 响应只用于当前 CARD 接触权重，不进入策略触觉 token。
 
-旧 `cart_contact_v3`／`cart_contact_tube_v4` 文件保留在磁盘。旧权重不能作为 v5 策略启用；网页历史 Tube、精英残影及下载入口已删除，由缓存 IK 回放替代。缺少原始 EMF 的录制不能直接训练新模型。可以显式关联匹配的原始录制：
+旧 `cart_contact_v3`／`cart_contact_tube_v4` 文件保留在磁盘。旧权重不能作为当前策略启用；网页历史 Tube、精英残影及下载入口已删除，由缓存 IK 回放替代。缺少原始 EMF 的录制不能直接训练新模型。可以显式关联匹配的原始录制：
 
 ```bash
 .venv-contact/bin/python -m moxian_web.cart_cli import-emf \
@@ -50,7 +50,7 @@
 
 ## 输入、输出与实时延迟
 
-每步使用当前 Wuji2 `q_t[20]` 与 `t+1…t+10` 的实测观测，预测 `q_{t+1}`。输入 q 以弧度传入，网络内部按当前 Wuji2 关节域映射到 `[-1,1]`；网络和 Predictor 默认输出归一化绝对关节角，FK、loss 与运行时状态使用弧度。
+每步使用当前 Wuji2 `q_t[20]` 与 `t+1…t+10` 的实测观测，预测 `q_{t+1}`。输入 q 以弧度传入，网络内部按当前 Wuji2 关节域映射到 `[-1,1]`；网络和 Predictor 默认输出归一化增量 `delta_norm=2*delta_rad/(upper-lower)`，不添加绝对角归一化的偏置。状态转移为 `q_next_norm=clamp(q_norm+delta_norm,-1,1)`，再恢复成弧度用于 FK、loss 和反馈。关节域投影为分段可微；区间内部保留恒等状态路径和完整 BPTT，越界分量在投影区间外梯度为零，不使用伪梯度。decoder 最后一层以小权重、零偏置初始化，初始动作接近保持当前状态。
 
 EMF 表示为五指接收器 wrist 位置和旋转 6D，共 `[10,5,9]`，位置均值与尺度仅由训练会话拟合。左右手、EMF、触点和机器人 FK 使用同一坐标适配；反射时对旋转两侧换基，保持 SO(3)。时间输入保留实际间隔。训练窗口直接读取录制轨迹中当前帧之后 `t+1…t+10` 的 EMF、逐帧触觉三维位置、0/1 与有效性，目标是 `q_{t+1}`；下一步将读取范围整体后移一帧。轨迹尾部不足十帧时不补齐，跨断流、标定或输入 epoch 的窗口不使用。
 
@@ -61,13 +61,15 @@ EMF 表示为五指接收器 wrist 位置和旋转 6D，共 `[10,5,9]`，位置�
 from moxian_web.cart_training import Predictor
 
 predictor = Predictor('output/moxian/cart/models/MODEL_ID')
-q_normalized = predictor.predict(
+delta_normalized = predictor.predict(
     q_current, future_emf, emf_valid, future_dt,
     tactile_positions, tactile_state, tactile_valid,
 )
 # 单样本：q[20], emf[10,5,9], emf_valid[10,5], dt[10]（秒、相对 q_t 时间）
 # tactile_positions[10,460,3]（米），state/valid[10,460]
-# normalized=False 返回弧度。FSQ 可省略 tactile 参数。
+# predict(..., normalized=False) 返回弧度增量。
+# predict_next(...) 返回叠加后的绝对关节角；normalized=False 返回弧度。
+# FSQ 可省略 tactile 参数。
 ```
 
 实时路径缓存 11 个真实观测（当前状态时刻和 10 个未来时刻），输出第一个未来时刻对应的机器人与手套画面，显示其时间戳和实际缓冲延迟。首段等待；超过 250 ms 的断流、时间回退、seek、输入 epoch 或模型变化均重置缓冲与机器人状态。离线回放直接读取保存的未来帧，暂停或 seek 后可立即查看有完整窗口的结果；结束时不补造短尾。该模型需要真实前瞻，不能作为零延迟策略使用。
@@ -125,9 +127,9 @@ IK 只用于窗口起始 `q_t`，不作为 `q_{t+1}` 的监督标签，不逐帧
 
 对照版本为 [xMimic 0385122](https://github.com/Open-X-Humanoid/xMimic/tree/0385122a232279210e941c7bb28da6a0bbb42356)。它使用 Isaac Lab 批量物理环境和 PPO；[环境配置](https://github.com/Open-X-Humanoid/xMimic/blob/0385122a232279210e941c7bb28da6a0bbb42356/source/whole_body_tracking/whole_body_tracking/tasks/tracking/tracking_env_cfg.py)默认 4096 环境，[PPO 配置](https://github.com/Open-X-Humanoid/xMimic/blob/0385122a232279210e941c7bb28da6a0bbb42356/source/whole_body_tracking/whole_body_tracking/tasks/tracking/config/tiangong3/agents/rsl_rl_ppo_cfg.py)每环境采样 24 步、分为 4 个 minibatch、优化 5 轮。因此每次采样是 98,304 条 transition，每个 PPO minibatch 是 24,576 条；`num_mini_batches=4` 并不是 batch size 4。PPO 不通过接触物理反传，奖励的 Torch 表达式也不意味着仿真可微。其 [MotionCommand](https://github.com/Open-X-Humanoid/xMimic/blob/0385122a232279210e941c7bb28da6a0bbb42356/source/whole_body_tracking/whole_body_tracking/tasks/tracking/mdp/commands.py#L176) 在 reset 随机抽取预先重定向轨迹的一帧，以参考 q 加均匀噪声写入模拟器；任务配置将幅度设为 ±0.1 rad。后续 policy 的当前关节状态来自模拟器，参考 q/速度另外作为 command 输入；没有中性姿态策略预热。CART 对齐其参考状态初始化方式，目标输入继续使用原有未来 EMF／触觉，不添加 IK 轨迹监督。
 
-CART 保留用户确认的 16 步 BPTT、当前观测和在线 SDF，没有 PPO critic、优势估计、ratio clip 或 Isaac 仿真；状态转移直接为策略输出的绝对 q，梯度沿精确 FK 和碰撞代理输入返回。曾将 4096 环境数映射为逻辑窗口 batch，并通过显存分块累积；这种映射不能复现 xMimic 的并行执行，现已删除，改用显存决定的真实并行窗口数。两者算法、batch 单位和每轮更新次数不同，不能直接比较 iteration 的秒数。
+CART 保留用户确认的 16 步 BPTT、当前观测和在线 SDF，没有 PPO critic、优势估计、ratio clip 或 Isaac 仿真；状态转移为当前 q 加策略输出的归一化增量并投影至关节域，梯度沿精确 FK 和碰撞代理输入返回。曾将 4096 环境数映射为逻辑窗口 batch，并通过显存分块累积；这种映射不能复现 xMimic 的并行执行，现已删除，改用显存决定的真实并行窗口数。两者算法、batch 单位和每轮更新次数不同，不能直接比较 iteration 的秒数。
 
-2026-11-18 在本地 RTX 5060 Ti 16 GiB、同一真实训练会话（10628 帧、1326 个 16 步窗口）完成整轮验证：旧实现 83 个显存分块的训练计算约 167.9 s；当前版本全部 1326 窗口组成一个 batch，一次完整策略 backward／更新的训练计算为 **52.54 s**，其中策略 rollout 与标签收集 4.76 s、原生标签及两次几何更新 3.19 s、损失及策略反传 44.60 s。固定 32 窗口的原生选模检查另需 **3.86 s**，合计 **56.41 s**；首次数据加载及最后完整会话验收另计。此前 112 窗口、12 次更新的优化版本整轮训练约 51.93 s，说明合成大 batch 主要改变参数更新方式，并不会令总运算量缩小 12 倍。该计时仅验证运行吞吐；单轮模型没有通过几何质量验收，未启用，也没有证明分钟级收敛。机器可读记录为 `output/moxian/cart/performance/local_full_parallel_epoch_20261118T153108.json`。
+2026-11-18 在本地 RTX 5060 Ti 16 GiB、同一真实训练会话（10628 帧、1326 个 16 步窗口）完成整轮验证：旧实现 83 个显存分块的训练计算约 167.9 s；改为 Δq 之前的优化版本全部 1326 窗口组成一个 batch，一次完整策略 backward／更新的训练计算为 **52.54 s**，其中策略 rollout 与标签收集 4.76 s、原生标签及两次几何更新 3.19 s、损失及策略反传 44.60 s。固定 32 窗口的原生选模检查另需 **3.86 s**，合计 **56.41 s**；首次数据加载及最后完整会话验收另计。此前 112 窗口、12 次更新的优化版本整轮训练约 51.93 s，说明合成大 batch 主要改变参数更新方式，并不会令总运算量缩小 12 倍。该计时仅验证运行吞吐；单轮模型没有通过几何质量验收，未启用，也没有证明分钟级收敛。机器可读记录为 `output/moxian/cart/performance/local_full_parallel_epoch_20261118T153108.json`。
 
 替换连续接触场之前的合批优化基准（不是当前接触场版本）：2026-11-18，RTX 5060 Ti 16 GiB、Attention、16 步、实际录制的四段固定窗口、相同 checkpoint 的局部测试（排除首次编译；分块 16 测试重复这四段窗口以隔离 batch 吞吐）：
 
@@ -225,3 +227,24 @@ node tests/cart_frontend.cjs
 ```
 
 端到端脚本从已有动作构造显式合成 EMF fixture，检查两种架构的预处理、训练、恢复、真实几何验证和缓冲回放。fixture 并非真实传感器监督或独立任务泛化证据；测试模型不会启用。实际收敛速度与接触质量需新增原始 EMF／触觉齐全的独立会话验证。
+
+## Δq 权重与 W&B
+
+模型架构版本为 `cart_cross_attention128_delta_v2`／`cart_future_fsq8_delta_v2`，`policy_output=normalized_delta_q_v1`。旧绝对 q 策略不能直接初始化或启用为 Δq 策略。`--initialize-geometry-from OLD_RUN` 只迁移碰撞网络及其 optimizer／回放，策略与策略 optimizer 使用全新初始化；原始录制、预处理和 IK 缓存仍可复用。
+
+Δq 版本在同一真实训练会话上完成本地整轮检查：1326 窗口一次并行更新，训练计算 52.59 s，固定独立窗口原生检查另需 2.10 s；包含加载和最终完整会话验收的运行共 130.98 s。82 项单元测试通过；两个结构的 16 步 CUDA 合成闭环、缓存回放和确定性中断恢复均通过，恢复权重最大差为 0。单轮模型未达几何质量门限，未启用；这些检查验证训练流程，不代表模型收敛。
+
+W&B 为可选依赖：未指定 project 时不导入 SDK。远端训练显式使用自建站点，不上传录制、模型或代码，仅记录标量与配置。曲线包括每次真实 optimizer 更新的全部 loss、几何模型各项 loss、训练吞吐、分阶段耗时，以及独立真实 mesh 的误差、穿透漏检和最终验收结果。训练横轴为真实 `optimizer_step`；几何横轴为其更新次数，验证横轴为 epoch。完整恢复同时恢复计数，并用同一 W&B run ID 继续记录。`wandb_run.json` 保存网页链接。
+
+```bash
+# 在远端训练环境登录；只在终端提示中输入 API key。
+/workspace/jasonzhang/.venv-cart-bptt/bin/python -m wandb login \
+  --host https://wandb.plat.x2robot.com --relogin
+
+python -m moxian_web.cart_cli --root /path/to/cart train \
+  --datasets TRAIN_ID VALIDATION_ID --architecture attention --batch-size 0 \
+  --initialize-geometry-from OLD_RUN \
+  --wandb-project cart --wandb-base-url https://wandb.plat.x2robot.com
+```
+
+在线模式初始化失败会报告错误，不会静默开始无曲线训练。单元测试覆盖禁用分支、服务器地址、真实步数、分项 loss 和恢复参数；CUDA 端到端仍检查两个 Δq 分支的 BPTT、保存恢复和闭环回放。

@@ -117,7 +117,7 @@
             <p id="cartIKStatus" role="status">先点击准备观测、触点与 IK，再选择一段录制查看缓存。</p>
           </section>
           <div class="guide-actions"><label>模型 <select id="cartModels"></select></label><button id="cartSelect" class="button">启用 CART 网络</button><button id="cartEvaluate" class="button">评估验证会话</button><button id="cartDeleteModel" class="text-button">删除所选模型</button></div>
-          <p class="footnote">在线输入为当前 Wuji2 关节角与未来10帧实测 EMF；Attention 还输入未来触觉三维点和0/1。触觉与几何用于可微训练及独立诊断，IK 只用于训练初始化。</p>
+          <p class="footnote">在线输入为当前 Wuji2 关节角与未来10帧实测 EMF；Attention 还输入未来触觉三维点和0/1。网络输出归一化 Δq，叠加到当前状态并限制在关节域内，得到下一帧角度。触觉与几何用于可微训练及独立诊断，IK 只用于训练初始化。</p>
           <div class="guide-actions"><button id="cartReplayLoad" class="button">回放所选一段</button><button id="cartReplayPause" class="button">暂停／继续</button><button id="cartReplayStop" class="text-button">返回实时</button></div><input id="cartSeek" aria-label="CART 回放进度" type="range" min="0" max="1" value="0" style="width:100%">
           <p id="cartContactStatus" role="status"></p><p id="cartError" role="alert" style="color:#b44738">CART 控件加载中…</p>
         </details>

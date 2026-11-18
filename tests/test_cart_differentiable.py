@@ -86,6 +86,38 @@ def test_unknown_tactile_is_distinct_from_valid_zero():
     assert not torch.allclose(a,b)
 
 
+@pytest.mark.parametrize('architecture',['attention','fsq'])
+def test_normalized_delta_has_no_absolute_offset_and_preserves_identity(architecture):
+    low=torch.linspace(-1.3,-.2,20);high=torch.linspace(.4,1.7,20)
+    model=CartNetwork(low,high,architecture)
+    args=inputs(batch=2);args['current_q']=low+(high-low)*torch.linspace(.1,.9,20)
+    args['current_q']=args['current_q'][None].repeat(2,1)
+    with torch.no_grad():model.decoder[-2].weight.zero_();model.decoder[-2].bias.zero_()
+    delta=model(**args)
+    torch.testing.assert_close(delta,torch.zeros_like(delta),rtol=0,atol=0)
+    torch.testing.assert_close(model.apply_delta(args['current_q'],delta),args['current_q'])
+    torch.testing.assert_close(model.delta_to_radians(torch.ones_like(delta)),((high-low)/2).expand(2,-1))
+    current=args['current_q'].clone().requires_grad_();delta=delta.detach().requires_grad_()
+    next_q=model.apply_delta(current,delta)
+    gq,gd=torch.autograd.grad(next_q.sum(),(current,delta))
+    torch.testing.assert_close(gq,torch.ones_like(current))
+    torch.testing.assert_close(gd,((high-low)/2).expand(2,-1))
+    torch.testing.assert_close(model.apply_delta(current,torch.full_like(delta,10.)),high.expand(2,-1))
+    torch.testing.assert_close(model.apply_delta(current,torch.full_like(delta,-10.)),low.expand(2,-1))
+
+
+def test_predictor_exposes_delta_and_integrated_next_state():
+    from moxian_web.cart_training import Predictor
+    predictor=Predictor.__new__(Predictor);predictor.device='cpu'
+    predictor.model=CartNetwork(torch.full((20,),-.7),torch.full((20,),1.3),'fsq').eval()
+    args=inputs(batch=1)
+    delta=predictor.predict(**args)
+    radians=predictor.predict(**args,normalized=False)
+    next_q=predictor.predict_next(**args,normalized=False)
+    np.testing.assert_allclose(radians,delta,rtol=1.e-6)
+    np.testing.assert_allclose(next_q,np.clip(args['current_q'].numpy()+radians,-.7,1.3),rtol=1.e-6,atol=1.e-7)
+
+
 def test_emf_rotation_and_left_reflection():
     from scipy.spatial.transform import Rotation
     rotation=Rotation.from_rotvec([.3,-.2,.1]).as_matrix()
@@ -126,7 +158,7 @@ def test_rollout_bptt_does_not_detach_feedback_and_uses_real_dt():
         def forward(self,q,**kwargs):
             value=q*self.weight+.1;value.retain_grad() if value.requires_grad else None
             self.calls.append(value);return value
-        def unnormalize(self,q):return q
+        def apply_delta(self,q,delta):return q+delta
     class Objective:
         collision=None
         hand=SimpleNamespace(device='cpu')

@@ -73,7 +73,7 @@ def test_window_uses_current_frame_ik_and_no_teacher_forcing():
     class Model(torch.nn.Module):
         def __init__(self):super().__init__();self.weight=torch.nn.Parameter(torch.tensor(.2));self.inputs=[]
         def forward(self,q,**inputs):self.inputs.append(q);return q*self.weight+.1
-        def unnormalize(self,q):return q
+        def apply_delta(self,q,delta):return q+delta
     class Objective:
         collision=None
         hand=SimpleNamespace(device='cpu',tensor=lambda x:torch.tensor(x,dtype=torch.float32))

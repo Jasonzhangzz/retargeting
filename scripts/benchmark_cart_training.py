@@ -10,6 +10,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from moxian_web.cart_data import load_sessions,manifest
 from moxian_web.cart_training import windows,position_statistics,policy_update
 from moxian_web.cart_fast import prepare_windows,choose_parallel_batch
+from moxian_web.cart_protocol import POLICY_OUTPUT
 from moxian_web.cart_objective import CartHand,CartObjective,policy_settings
 from moxian_web.cart_collision import CollisionModel,SDFLearner
 from moxian_web.cart_network import CartNetwork
@@ -20,6 +21,7 @@ from retarget.baseline.geort.adapter import ROOT
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root',type=Path,default=ROOT/'output/moxian/cart')
+    parser.add_argument('--geometry-only',action='store_true',help='Transfer geometry/replay only, leaving the delta policy freshly initialized')
     parser.add_argument('--dataset',required=True);parser.add_argument('--model')
     parser.add_argument('--architecture',choices=('attention','fsq'),default='attention')
     parser.add_argument('--batch-size',type=int,default=16);parser.add_argument('--micro-batch-size',type=int,default=0)
@@ -56,7 +58,9 @@ def main():
         optimizer=torch.optim.AdamW(model.parameters(),lr=1.e-4)
         path=folder/('resume.pth' if (folder/'resume.pth').exists() else 'warmup.pth')
         state=torch.load(path,map_location='cpu',weights_only=True)
-        model.load_state_dict(state['model'])
+        if not args.geometry_only:
+            if config.get('policy_output')!=POLICY_OUTPUT:raise ValueError('Absolute-q checkpoint cannot initialize a delta policy; use --geometry-only')
+            model.load_state_dict(state['model'])
         if config.get('contact_field'):
             collision.model.load_state_dict(state['collision']);learner.load_state_dict(state['sdf_learner'])
         else:
@@ -64,7 +68,7 @@ def main():
             expected={k for k in collision.model.state_dict() if k.startswith('contact_field.')}
             if set(missing.missing_keys)!=expected or missing.unexpected_keys:raise ValueError('Unsupported old geometry checkpoint')
             print(json.dumps(dict(contact_field_initialized=True,quality_benchmark=False)),flush=True)
-        optimizer.load_state_dict(state['policy_optimizer'])
+        if not args.geometry_only:optimizer.load_state_dict(state['policy_optimizer'])
     model.set_attention_precision(args.attention_precision)
     model.checkpoint_observations=args.checkpoint_observations
     micro=len(batch)
@@ -86,6 +90,7 @@ def main():
         loss_execution='serial_reference' if args.serial_losses else 'time_batched',
         policy_attention_precision=args.attention_precision,geometry_precision='float32',
         observation_checkpointing=args.checkpoint_observations,
+        policy_output=POLICY_OUTPUT,geometry_only_initialization=args.geometry_only,
         geometry_activation_recomputation=args.device.startswith('cuda'),
         initialization='offline_wuji_retargeting_ik',initial_noise_rad=args.initial_noise_rad,
         contact_loss_frames=sum(bool(row['contacts']['self_pairs'] or row['contacts']['object_contacts'])

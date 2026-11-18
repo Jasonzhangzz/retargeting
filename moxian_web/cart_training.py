@@ -13,10 +13,11 @@ from .cart_network import CartNetwork,LEVELS
 from .cart_observations import batch_future,pack_future
 from .cart_collision import CollisionModel,SDFLearner,frozen
 from .cart_objective import CartHand,CartObjective,policy_settings
-from .cart_protocol import PROTOCOL,ARCHITECTURES
+from .cart_protocol import PROTOCOL,ARCHITECTURES,POLICY_OUTPUT
 from .cart_fast import DEFAULT_BATCH_SIZE,PreparedBatch,ObservationStore,prepare_windows,group_normalizers,choose_parallel_batch
 from .cart_contact_field import CONTACT_FIELD_VERSION
 from .cart_initialization import prepare_ik,attach_ik,perturb_initial_states,IK_VERSION,DEFAULT_INITIAL_NOISE_RAD
+from .cart_tracking import CartTracking
 from retarget.baseline.geort.training import atomic_json
 
 
@@ -102,7 +103,7 @@ def predict_trajectory(model,objective,batch,normalizers=None,*,batch_observatio
         q=neutral(objective.hand)[None].expand(len(batch),-1).clone()
         with torch.no_grad():
             for j in range(max(offsets)):
-                candidate=model.unnormalize(model(q,**inputs_at([min(j,start) for start in offsets])))
+                candidate=model.apply_delta(q,model(q,**inputs_at([min(j,start) for start in offsets])))
                 active=torch.as_tensor([j<start for start in offsets],device=device)[:,None]
                 q=torch.where(active,candidate,q)
     else:
@@ -110,7 +111,7 @@ def predict_trajectory(model,objective,batch,normalizers=None,*,batch_observatio
         for w,start in zip(batch,offsets):
             one=neutral(objective.hand)[None]
             with torch.no_grad():
-                for j in range(start):one=model.unnormalize(model(one,**batch_future([w],[j],device)))
+                for j in range(start):one=model.apply_delta(one,model(one,**batch_future([w],[j],device)))
             initial.append(one[0])
         q=torch.stack(initial)
     older_q=None;old_dt=None;pending=[];cached_inputs=None;encoded=None
@@ -132,9 +133,9 @@ def predict_trajectory(model,objective,batch,normalizers=None,*,batch_observatio
         inputs=cached_inputs[t] if cached_inputs is not None else inputs_at(indices)
         if encoded is not None:
             start=t*len(batch);stop=start+len(batch)
-            normalized=model.decode_observation_context(q,tuple(x[start:stop] for x in encoded))
-        else:normalized=model(q,**inputs)
-        next_q=model.unnormalize(normalized)
+            delta=model.decode_observation_context(q,tuple(x[start:stop] for x in encoded))
+        else:delta=model(q,**inputs)
+        next_q=model.apply_delta(q,delta)
         dt=inputs['future_dt'][:,0];velocity=(next_q-q)/dt[:,None]
         acceleration=(velocity-(q-older_q)/old_dt[:,None])/(.5*(dt+old_dt))[:,None] if older_q is not None else None
         pending.append((next_q,rows,q,acceleration,previous))
@@ -281,7 +282,7 @@ def full_session(model,objective,sessions,check=lambda:None):
                         q=neutral(objective.hand)[None];segment+=1;continue
                     window=dict(store=store,indices=list(range(i,i+11)))
                     inputs=PreparedBatch([window],objective.hand.device).future_inputs([0]);inputs['validate']=False
-                    start=time.perf_counter();next_q=model.unnormalize(model(q,**inputs))
+                    start=time.perf_counter();next_q=model.apply_delta(q,model(q,**inputs))
                     times.append((time.perf_counter()-start)*1000)
                     row=rows[i+1]
                     _,_,quality=objective.batch(next_q,[row],q,previous_rows=[rows[i]],audit=True)
@@ -294,12 +295,14 @@ def full_session(model,objective,sessions,check=lambda:None):
 
 def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DEFAULT_BATCH_SIZE,length=16,
           smoke=False,architecture='attention',resume=False,warmup_steps=None,device=None,micro_batch_size=0,initialize_from=None,
-          initial_noise_rad=DEFAULT_INITIAL_NOISE_RAD,attention_precision='auto',validation_interval=10,validation_window_budget=32):
+          initial_noise_rad=DEFAULT_INITIAL_NOISE_RAD,attention_precision='auto',validation_interval=10,validation_window_budget=32,
+          initialize_geometry_from=None,wandb_project=None,wandb_entity=None,wandb_base_url=None,wandb_mode='online'):
     if architecture not in ARCHITECTURES:raise ValueError('architecture must be attention or fsq')
     from .geort_service import safe_id
     run_id=safe_id(run_id)
     if initialize_from:initialize_from=safe_id(initialize_from)
-    if resume and initialize_from:raise ValueError('精确恢复与初始化来源不能同时指定')
+    if initialize_geometry_from:initialize_geometry_from=safe_id(initialize_geometry_from)
+    if sum(map(bool,(resume,initialize_from,initialize_geometry_from)))>1:raise ValueError('恢复、策略初始化与仅几何初始化不能同时指定')
     root=Path(root);folder=root/'models'/run_id
     folder.mkdir(parents=True,exist_ok=resume)
     lockpath=root.parent/'geort/training.lock';lockpath.parent.mkdir(parents=True,exist_ok=True)
@@ -310,12 +313,13 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
     def check():
         if cancelled:raise InterruptedError('CART 任务已取消')
     old={s:signal.signal(s,stop) for s in (signal.SIGTERM,signal.SIGINT)}
-    started=time.time();lock=lockpath.open('a');active=not resume
+    started=time.time();lock=lockpath.open('a');active=not resume;tracking=None;policy_updates=0;tracking_error=None
     def progress(phase,**values):
         check();state=dict(status='running',run_id=run_id,pid=os.getpid(),phase=phase,elapsed_s=time.time()-started,**values)
         atomic_json(folder/'status.json',state)
         with (folder/'trace.jsonl').open('a') as stream:stream.write(json.dumps(state,allow_nan=False)+'\n')
         print(json.dumps(state,ensure_ascii=False),flush=True)
+        if tracking is not None:tracking.log(phase,state)
     try:
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:raise ValueError('已有 GeoRT／CART 训练任务')
@@ -373,6 +377,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             training='differentiable_bptt_online_mesh_sdf',sdf_warmup_steps=warmup_steps,sdf_updates_per_batch=2,
             selection='minimum_true_mesh_validation_loss',sdf_capacity=learner.capacity,sdf_batch_size=learner.batch_size)
         config.update(micro_batch_size=micro_batch_size,batch_semantics='parallel_windows_per_optimizer_step',
+            policy_output=POLICY_OUTPUT,delta_normalization='2*delta_rad/(upper-lower)',state_transition='clamp(normalize(q)+delta,-1,1)',
             gradient_accumulation=False,parallel_batch_size=parallel_size,
             attention_precision_request=requested_precision,policy_attention_precision=attention_precision,geometry_precision='float32',
             observation_checkpointing=model.checkpoint_observations,
@@ -380,6 +385,8 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             validation_interval=validation_interval,validation_window_budget=validation_window_budget,
             final_validation='complete_independent_session_true_mesh',
             execution='resident_observations_time_batched_bptt',initialize_from=initialize_from,
+            initialize_geometry_from=initialize_geometry_from,
+            tracking=dict(project=wandb_project,entity=wandb_entity,base_url=wandb_base_url,mode=wandb_mode),
             loss_execution='time_batched_fk_contact',
             contact_field=CONTACT_FIELD_VERSION,contact_selection='learned_directional_field_soft_pair',
             state_initialization=IK_VERSION,initial_noise_rad=initial_noise_rad,ik_datasets=ik_reports,
@@ -390,6 +397,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 sdf_learner=learner.state_dict(),epoch=epoch,next_batch=next_batch,order=torch.as_tensor(order) if order is not None else None,
                 sums=sums,batches=batches,best=best,best_epoch=best_epoch,holdout=tuple(v.cpu() for v in holdout),
                 parallel_batch_size=parallel_size,
+                policy_updates=policy_updates,
                 numpy_rng=rng.bit_generator.state,torch_rng=torch.get_rng_state(),
                 cuda_rng=torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [])
         def warmup(start):
@@ -409,26 +417,32 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             optimizer.load_state_dict(restored['policy_optimizer']);learner.load_state_dict(restored['sdf_learner'])
             epoch_start=restored['epoch'];resume_cursor=restored['next_batch'];order=restored['order'].numpy() if restored['order'] is not None else None
             parallel_size=restored['parallel_batch_size']
+            policy_updates=restored['policy_updates']
             sums=restored['sums'];batches=restored['batches'];best=restored['best'];best_epoch=restored['best_epoch']
             holdout=tuple(v.to(device) for v in restored['holdout'])
             rng.bit_generator.state=restored['numpy_rng'];torch.set_rng_state(restored['torch_rng'])
             if torch.cuda.is_available() and restored['cuda_rng']:torch.cuda.set_rng_state_all(restored['cuda_rng'])
             active=True
+            tracking=CartTracking(folder,config,project=wandb_project,entity=wandb_entity,base_url=wandb_base_url,mode=wandb_mode,resume=True)
             if 'warmup_next' in restored:warmup(restored['warmup_next'])
         else:
             atomic_json(folder/'config.json',config)
+            tracking=CartTracking(folder,config,project=wandb_project,entity=wandb_entity,base_url=wandb_base_url,mode=wandb_mode)
             first=root/'recordings'/train_ids[0]
             for name in ('profile.json','topology.json'):shutil.copyfile(first/name,folder/('source_'+name))
             holdout=collision.oracle.random_queries(256 if smoke else 4096)
             first_warmup=0
-            if initialize_from:
-                source_folder=root/'models'/initialize_from
+            if initialize_from or initialize_geometry_from:
+                source_folder=root/'models'/(initialize_from or initialize_geometry_from)
                 origin=json.loads((source_folder/'config.json').read_text())
-                required=('protocol','architecture_name','robot','output_domain','levels','position_mean','position_scale',
-                    'source','source_binding_version','train_ids','validation_ids','datasets','sdf_capacity','sdf_batch_size')
+                required=('protocol','robot','output_domain','source','source_binding_version','sdf_capacity','sdf_batch_size')
+                if initialize_from:required+=('architecture','policy_output','levels','position_mean','position_scale','train_ids','validation_ids','datasets')
+                if initialize_from and origin.get('policy_output')!=POLICY_OUTPUT:
+                    raise ValueError('绝对 q 权重不能用作 delta q 策略；可用 initialize_geometry_from 仅迁移几何模型')
                 if any(config[k]!=origin[k] for k in required):raise ValueError('初始化 checkpoint 的架构、数据、坐标或碰撞模型配置不匹配')
                 initial=torch.load(source_folder/('resume.pth' if (source_folder/'resume.pth').exists() else 'warmup.pth'),map_location='cpu',weights_only=True)
-                model.load_state_dict(initial['model']);optimizer.load_state_dict(initial['policy_optimizer'])
+                if initialize_from:
+                    model.load_state_dict(initial['model']);optimizer.load_state_dict(initial['policy_optimizer'])
                 if origin.get('contact_field')==CONTACT_FIELD_VERSION:
                     collision.model.load_state_dict(initial['collision']);learner.load_state_dict(initial['sdf_learner'])
                     first_warmup=min(learner.steps,warmup_steps)
@@ -453,12 +467,14 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                         requested_batch_size=batch_size,gradient_accumulation=False,compute_stage=stage,
                         stage_completed=completed,stage_total=total)
                 loss,parts,sdf_losses,timings=policy_update(model,objective,learner,optimizer,batch,parallel_size,check,stage_progress,initial_noise_rad)
-                batches+=1
-                for k,v in dict(total=loss,**parts).items():sums[k]=sums.get(k,0.)+float(v.detach())
+                batches+=1;policy_updates+=1
+                batch_losses={k:float(v.detach()) for k,v in dict(total=loss,**parts).items()}
+                for k,v in batch_losses.items():sums[k]=sums.get(k,0.)+v
                 save_checkpoint(folder/'resume.pth',state(epoch,start+parallel_size,order))
                 progress('retargeting',epoch=epoch+1,epochs=epochs,batch=batches,batches=math_ceil(len(order),parallel_size),
                     parallel_batch_size=len(batch),requested_batch_size=batch_size,gradient_accumulation=False,
                     losses={k:v/batches for k,v in sums.items()},sdf_losses=sdf_losses,sdf_updates=learner.steps,timings=timings,
+                    batch_losses=batch_losses,optimizer_step=policy_updates,
                     transitions_per_s=len(batch)*length/sum(timings.values()))
             validation_batch=validation_schedule(validation_windows,epoch+1,epochs,validation_interval,validation_window_budget)
             if validation_batch:
@@ -495,13 +511,19 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         atomic_json(folder/'status.json',dict(status='smoke_test' if smoke else 'rejected' if reasons else 'completed',
             run_id=run_id,epochs=epochs,elapsed_s=time.time()-started,best_epoch=best_epoch,validation_loss=best,
             metrics=report,sdf_validation=sdf_report,rejection_reasons=reasons))
+        if tracking is not None:tracking.finish(report=dict(metrics=report,sdf_validation=sdf_report,rejection_reasons=reasons,accepted=not reasons))
+        tracking=None
         return folder
     except BaseException as exc:
+        tracking_error=str(exc)
         atomic_json(folder/('status.json' if active else 'resume_error.json'),dict(status='cancelled' if isinstance(exc,InterruptedError) else 'failed',run_id=run_id,error=str(exc)))
         raise
     finally:
-        for s,handler in old.items():signal.signal(s,handler)
-        lock.close()
+        try:
+            if tracking is not None:tracking.finish(error=tracking_error)
+        finally:
+            for s,handler in old.items():signal.signal(s,handler)
+            lock.close()
 
 
 def math_ceil(n,d):return (n+d-1)//d
@@ -509,13 +531,13 @@ def math_ceil(n,d):return (n+d-1)//d
 
 def validate_model_geometry(config):
     name=config.get('architecture_name')
-    if config.get('protocol')!=PROTOCOL or name not in ARCHITECTURES or config.get('architecture')!=ARCHITECTURES[name]:
+    if config.get('protocol')!=PROTOCOL or name not in ARCHITECTURES or config.get('architecture')!=ARCHITECTURES[name] or config.get('policy_output')!=POLICY_OUTPUT:
         raise ValueError('旧 CART 模型与未来帧可微训练架构不兼容，请重新训练')
     if config.get('geometry')!=implementation_identity():raise ValueError('CART 几何／训练实现已变化，请重新训练')
 
 
 class Predictor:
-    """Stateless future-window API. Default output is normalized absolute q."""
+    """Stateless future-window API; default output is normalized delta q."""
     def __init__(self,folder,device='cpu',allow_smoke=False):
         self.folder=Path(folder);self.device=device
         self.config=json.loads((self.folder/'config.json').read_text());status=json.loads((self.folder/'status.json').read_text())
@@ -534,7 +556,8 @@ class Predictor:
         self.collision.model.load_state_dict(checkpoint['collision']);self.collision.model.eval()
         for p in self.collision.model.parameters():p.requires_grad_(False)
 
-    def predict(self,current_q,future_emf,emf_valid,future_dt,tactile_positions=None,tactile_state=None,tactile_valid=None,*,normalized=True):
+    def predict(self,current_q,future_emf,emf_valid,future_dt,tactile_positions=None,tactile_state=None,tactile_valid=None,*,normalized=True,output='delta'):
+        if output not in ('delta','next'):raise ValueError('output must be delta or next')
         q=np.asarray(current_q,np.float32);single=q.shape==(20,)
         values=dict(current_q=q,future_emf=future_emf,emf_valid=emf_valid,future_dt=future_dt,
             tactile_positions=tactile_positions,tactile_state=tactile_state,tactile_valid=tactile_valid)
@@ -545,15 +568,20 @@ class Predictor:
             args[k]=tensor[None] if single else tensor
         with torch.inference_mode():
             result=self.model(**args)
-            if not normalized:result=self.model.unnormalize(result)
+            if output=='next':result=self.model.apply_delta(args['current_q'],result,normalized=normalized)
+            elif not normalized:result=self.model.delta_to_radians(result)
             result=result.cpu().numpy()
         return result[0] if single else result
+
+    def predict_next(self,*args,**kwargs):
+        return self.predict(*args,**kwargs,output='next')
 
     def predict_rows(self,q,current_stamp,rows):
         inputs=pack_future(current_stamp,rows,self.device)
         with torch.inference_mode():
-            result=self.model(self.hand.tensor(q)[None],**{k:v[None] for k,v in inputs.items()})
-            return self.model.unnormalize(result)[0].cpu().numpy()
+            current=self.hand.tensor(q)[None]
+            delta=self.model(current,**{k:v[None] for k,v in inputs.items()})
+            return self.model.apply_delta(current,delta)[0].cpu().numpy()
 
 
 def evaluate(root,model_id,dataset_ids,check=lambda:None,allow_smoke=False):

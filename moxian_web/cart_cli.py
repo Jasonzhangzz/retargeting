@@ -52,6 +52,10 @@ def main():
             p.add_argument('--length',type=int,default=16)
             p.add_argument('--resume-run');p.add_argument('--sdf-warmup-steps',type=int)
             p.add_argument('--initialize-from',help='Initialize a new run from a compatible v5 checkpoint; not exact resume')
+            p.add_argument('--initialize-geometry-from',help='Reuse geometry and its optimizer/replay; initialize a fresh delta policy')
+            p.add_argument('--wandb-project');p.add_argument('--wandb-entity')
+            p.add_argument('--wandb-base-url',help='Self-hosted W&B origin, without /home')
+            p.add_argument('--wandb-mode',choices=('online','offline'),default='online')
             p.add_argument('--initial-noise-rad',type=float,default=.1,help='Uniform IK reset noise in [-amplitude, amplitude]; 0 disables')
         if name=='evaluate':p.add_argument('--model',required=True)
     cap=sub.add_parser('capture');cap.add_argument('--dataset',required=True);cap.add_argument('--follow',action='store_true');cap.add_argument('--device')
@@ -108,7 +112,9 @@ def run(args):
             result=dict(model=str(train(args.root,ids['train'],ids['validation'],safe_id(args.resume_run) if args.resume_run else key,args.epochs,smoke=args.smoke_test,
                 architecture=args.architecture,batch_size=args.batch_size,micro_batch_size=args.micro_batch_size,length=args.length,resume=bool(args.resume_run),warmup_steps=args.sdf_warmup_steps,initialize_from=args.initialize_from,
                 initial_noise_rad=args.initial_noise_rad,attention_precision=args.attention_precision,
-                validation_interval=args.validate_every,validation_window_budget=args.validation_windows)))
+                validation_interval=args.validate_every,validation_window_budget=args.validation_windows,
+                initialize_geometry_from=args.initialize_geometry_from,wandb_project=args.wandb_project,wandb_entity=args.wandb_entity,
+                wandb_base_url=args.wandb_base_url,wandb_mode=args.wandb_mode)))
         else:
             from .cart_training import evaluate
             result=evaluate(args.root,safe_id(args.model),args.datasets,check=check)

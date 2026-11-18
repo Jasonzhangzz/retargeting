@@ -221,6 +221,9 @@ class CartService:
             command+=['--epochs',str(epochs),'--architecture',architecture,'--batch-size',str(batch),'--micro-batch-size',str(micro)]
             command+=['--initial-noise-rad',str(noise)]
             if data.get('initialize_from'):command+=['--initialize-from',safe_id(data['initialize_from'])]
+            if data.get('initialize_geometry_from'):command+=['--initialize-geometry-from',safe_id(data['initialize_geometry_from'])]
+            for field in ('wandb_project','wandb_entity','wandb_base_url'):
+                if data.get(field):command+=['--'+field.replace('_','-'),str(data[field])]
             self.stop_preview()
         if action=='evaluate':command+=['--model',safe_id(data.get('model'))]
         write_json(folder/'status.json',dict(status='starting',action=action,id=key))

@@ -10,6 +10,7 @@ scipy>=1.15,<2
 
 # Compute and visualization stack (tested together in .venv-contact, Python 3.11).
 torch==2.10.0
+wandb>=0.23,<0.31
 mujoco==3.10.0
 mujoco-warp==3.10.0.3
 warp-lang==1.16.0

@@ -142,7 +142,7 @@ class CrossBlock(nn.Module):
 
 
 class CartNetwork(nn.Module):
-    """q_t + exactly ten future sensor frames -> normalized absolute q_(t+1).
+    """q_t + exactly ten future sensor frames -> normalized DELTA joint angle.
 
     Physical units are converted only at the input/output boundary. FSQ uses
     a straight-through estimator; the attention policy has no quantization.
@@ -179,12 +179,28 @@ class CartNetwork(nn.Module):
             self.pool = CrossBlock(); incoming = 128
         self.decoder = nn.Sequential(nn.Linear(incoming, 256), nn.LayerNorm(256), nn.GELU(),
             nn.Linear(256, 256), nn.GELU(), nn.Linear(256, 20), nn.Tanh())
+        # Start near identity dynamics; a random full-range action would drive
+        # a residual rollout into joint limits before it can learn anything.
+        nn.init.normal_(self.decoder[-2].weight,std=1.e-3)
+        nn.init.zeros_(self.decoder[-2].bias)
 
     def normalize(self, q):
         return 2*(q-self.lower)/(self.upper-self.lower)-1
 
     def unnormalize(self, q):
         return self.lower+(q+1)*.5*(self.upper-self.lower)
+
+    def delta_to_radians(self,delta):
+        return delta*.5*(self.upper-self.lower)
+
+    def apply_delta(self,current_q,delta,*,normalized=False):
+        """Residual state transition; normalization of an increment has no bias.
+
+        Joint-limit projection is piecewise differentiable. In the interior,
+        the identity state path and the complete delta graph are preserved.
+        """
+        next_q=(self.normalize(current_q)+delta).clamp(-1.,1.)
+        return next_q if normalized else self.unnormalize(next_q)
 
     def set_attention_precision(self,precision):
         if precision not in ('float32','bfloat16'):raise ValueError('Invalid attention precision')
@@ -255,8 +271,10 @@ class CartNetwork(nn.Module):
                 raise ValueError('Tactile input must contain finite positions and binary states')
             e,epad=self.sensor_context(pose,valid,future_dt,tactile_positions,tactile_state,tv)
             context = self.pool(self.current(q)[:,None],e,epad)[:,0]
-        normalized = self.decoder(context)
-        return dict(q=self.unnormalize(normalized), normalized_q=normalized, **extra) if return_codes else normalized
+        delta = self.decoder(context)
+        return dict(delta_q=self.delta_to_radians(delta),normalized_delta_q=delta,
+            q=self.apply_delta(current_q,delta),normalized_q=self.apply_delta(current_q,delta,normalized=True),
+            **extra) if return_codes else delta
 
 
 class FutureBuffer:
