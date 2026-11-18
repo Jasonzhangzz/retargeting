@@ -2,7 +2,7 @@
 
 网页求解器 `wuji-retargeting` 使用**当前已标定 Moxian 骨架 → 原版机器人重定向**。不再运行默认 CQQ 人手 IK。实现位于 `retarget/baseline/wuji_retargeting`，直接调用其 `upstream/retarget_reference` 中未修改的 `RetargetSession.for_hand('WujiHand2', side)`。
 
-远端来源：`ssh -p 1016 8.147.67.185`，目录 `/mnt/cpfs/zbl-cpfs-new/USERS/jasonzhang/emf_wuji_retarget`。引入的45份原版源码、6份URDF、测试和说明文件保持原始SHA256，记录于 `upstream/SOURCE.json`。机器人重定向实现一致；输入骨架使用当前 Moxian 标定，因此不宣称完整 EMF／CQQ 链路复现。
+远端来源：`ssh -p 1016 8.147.67.185`，目录 `/mnt/cpfs/zbl-cpfs-new/USERS/jasonzhang/emf_wuji_retarget`。保留的原版生产源码、6份URDF和说明文件保持原始SHA256，独立测试已排除，记录于 `upstream/SOURCE.json`。机器人重定向实现一致；输入骨架使用当前 Moxian 标定，因此不宣称完整 EMF／CQQ 链路复现。
 
 ## 输入与一致性范围
 
@@ -44,7 +44,7 @@
 
 旧路径的原版默认CQQ模型不适配当前Moxian的TX/RX外参：真实采样曾出现约33/167/186/185/155mm的五指接收器位置残差，多个人手关节达到限位。用户选择使用当前标定骨架，保留原版机器人部分。此前16帧合成EMF的远端逐位一致验证仅证明原码数值一致，不代表设备外参适配；历史记录仍位于 `output/reports/wuji_reference_integration_20261116` 和 `output/reports/wuji_reference_display_20261116`。
 
-本次回归覆盖左右手真实Qnbot拓扑、原版连续角度／热启动／float32滤波／完整优化trace逐位一致、重复帧、重置、非法输入不推进历史、显示逆变换、离线回放、worker后端切换与网页。当前回归入口为 `tests/test_wuji_reference.py`。
+本次回归覆盖左右手真实Qnbot拓扑、原版连续角度／热启动／float32滤波／完整优化trace逐位一致、重复帧、重置、非法输入不推进历史、显示逆变换、离线回放、worker后端切换与网页。独立回归脚本未包含在当前源码发布中。
 
 
 ## 对指适用边界

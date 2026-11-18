@@ -18,9 +18,27 @@ PATCHES += [{"id": f"palm_{r}_{c}", "label": f"掌心 · {('腕侧', '中央', '
             for r in range(3) for c in range(2)]
 PATCH_IDS = [p["id"] for p in PATCHES]
 EMA_TAU = .040
-DETECTOR = {"version": "ema-light-touch-v2", "ema_tau_ms": EMA_TAU * 1000,
-            "enter_adc": 1.5, "enter_sigma": 1.5, "exit_adc": .6, "exit_sigma": .75,
-            "enter_hold_ms": 30, "exit_hold_ms": 80}
+DETECTOR = {"version": "ema-light-touch-v3", "ema_tau_ms": EMA_TAU * 1000,
+            "noise_model": "filtered_tare_mad", "noise_floor_adc": .25,
+            "enter_adc": .5, "enter_sigma": 2.5, "exit_adc": .25, "exit_sigma": 1.25,
+            "enter_hold_ms": 30, "exit_hold_ms": 80,
+            "single_enter_adc": .75, "single_enter_sigma": 3., "single_enter_hold_ms": 80,
+            "single_support_ms": 25}
+
+
+def filtered_noise(tare):
+    """Compare the EMA signal with noise in the same filtered ADC units.
+
+    Older tare profiles contain only raw noise. For those, use the stationary
+    EMA variance at the device's nominal 120 Hz until the next tare.
+    """
+    measured = tare.get("filtered_sigma")
+    if (tare.get("noise_ema_tau_ms") == DETECTOR["ema_tau_ms"]
+            and isinstance(measured, list) and len(measured) == 460
+            and all(isinstance(s, (int, float)) and math.isfinite(s) and s >= 0 for s in measured)):
+        return [max(DETECTOR["noise_floor_adc"], s) for s in measured]
+    scale = math.sqrt(math.tanh(1 / (240 * EMA_TAU)))
+    return [max(DETECTOR["noise_floor_adc"], s * scale) for s in tare.get("sigma", [1.] * 460)]
 
 
 def default_mapping(side):
@@ -78,6 +96,11 @@ class ContactEngine:
         self.latest_time = None
         self.filtered = [0.] * 460
         self.filter_time = None
+        self.single_since = [None] * 460
+        self.single_active = [False] * 460
+        self.single_last_support = [None] * 460
+        tare = self.profile.get("tare")
+        self.noise_sigma = filtered_noise(tare if valid_tare(tare) else {})
 
     def bind(self, serial, side):
         key = f"{serial}:{side}"
@@ -171,7 +194,22 @@ class ContactEngine:
                     columns = list(zip(*samples))
                     med = [statistics.median(v) for v in columns]
                     sigma = [max(1., 1.4826 * statistics.median(abs(x - m) for x in v)) for m, v in zip(med, columns)]
-                    self.profile["tare"] = {"baseline": med, "sigma": sigma, "samples": len(samples), "timestamp": time.time()}
+                    # Measure the signal actually used by detection, including
+                    # temporal correlation in this device's no-contact noise.
+                    filtered_sigma = []
+                    alpha = -math.expm1(-1 / (120 * EMA_TAU))
+                    for baseline, values in zip(med, columns):
+                        filtered = 0.; trace = []
+                        for value in values:
+                            filtered += alpha * (value - baseline - filtered)
+                            trace.append(filtered)
+                        trace = trace[20:]
+                        center = statistics.median(trace)
+                        filtered_sigma.append(max(DETECTOR["noise_floor_adc"],
+                            1.4826 * statistics.median(abs(x - center) for x in trace)))
+                    self.profile["tare"] = {"baseline": med, "sigma": sigma,
+                        "filtered_sigma": filtered_sigma, "noise_ema_tau_ms": DETECTOR["ema_tau_ms"],
+                        "samples": len(samples), "timestamp": time.time()}
                     self.collection = None
                     self.tare_status = {"state": "ready", "progress": 1, "error": None, "samples": len(samples)}
                     self.reset_detection()
@@ -192,30 +230,51 @@ class ContactEngine:
         self.filter_time = now
         delta = [max(v, 0.) for v in self.filtered]
         normalized = [round(min(d / max(12., 6 * s), 1.), 4) for d, s in zip(delta, sigma)]
-        enter = [d >= max(DETECTOR["enter_adc"], DETECTOR["enter_sigma"] * s) for d, s in zip(delta, sigma)]
-        leave = [d >= max(DETECTOR["exit_adc"], DETECTOR["exit_sigma"] * s) for d, s in zip(delta, sigma)]
+        enter = [d >= max(DETECTOR["enter_adc"], DETECTOR["enter_sigma"] * s) for d, s in zip(delta, self.noise_sigma)]
+        leave = [d >= max(DETECTOR["exit_adc"], DETECTOR["exit_sigma"] * s) for d, s in zip(delta, self.noise_sigma)]
+        for sid, (d, s) in enumerate(zip(delta, self.noise_sigma)):
+            if float(raw[sid]) - tare["baseline"][sid] >= DETECTOR["single_enter_adc"]:
+                self.single_last_support[sid] = now
+            recent = (self.single_last_support[sid] is not None
+                      and now - self.single_last_support[sid] <= DETECTOR["single_support_ms"] / 1000)
+            if self.single_active[sid]:
+                if not leave[sid]:
+                    self.single_active[sid] = False
+                    self.single_since[sid] = None
+            elif recent and d >= max(DETECTOR["single_enter_adc"], DETECTOR["single_enter_sigma"] * s):
+                if self.single_since[sid] is None:
+                    self.single_since[sid] = now
+                if now - self.single_since[sid] >= DETECTOR["single_enter_hold_ms"] / 1000 - 1e-9:
+                    self.single_active[sid] = True
+            else:
+                self.single_since[sid] = None
         patches = []
         cells = [False] * 460
         for i, definition in enumerate(PATCHES):
             mask = leave if self.active[i] else enter
-            supported = any(mask[a] and mask[b] for a, b in self.neighbors[i])
+            single = any(self.single_active[s] for s in self.groups[i])
+            supported = single or any(mask[a] and mask[b] for a, b in self.neighbors[i])
             if supported == self.active[i]:
                 self.pending[i] = None
             else:
                 if self.pending[i] is None:
                     self.pending[i] = now
                 hold = DETECTOR["exit_hold_ms" if self.active[i] else "enter_hold_ms"] / 1000
+                if single and not self.active[i]:
+                    hold = 0.  # The individual taxel already passed its longer hold.
                 if now - self.pending[i] >= hold - 1e-9:
                     self.active[i] = supported
                     self.pending[i] = None
             patches.append({**definition, "contact": self.active[i],
                             "response": max(normalized[s] for s in self.groups[i]),
                             "active_cells": sum(mask[s] for s in self.groups[i])})
-            # Only supported neighboring cells in an active patch turn yellow.
-            # An isolated spike must not paint a taxel as confirmed contact.
+            # A small contact need not spread to an adjacent taxel. Single
+            # cells have their own stricter noise and persistence checks.
             if self.active[i]:
                 for a, b in self.neighbors[i]:
                     if leave[a] and leave[b]:cells[a] = cells[b] = True
+                for sid in self.groups[i]:
+                    if self.single_active[sid]:cells[sid] = True
         self.latest = {"ready": True, "status": "ready", "normalized": normalized, "patches": patches,
                        "cell_contact": cells,
                        "active_patches": [p["id"] for p in patches if p["contact"]],

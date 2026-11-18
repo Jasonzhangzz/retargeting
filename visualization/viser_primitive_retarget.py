@@ -192,8 +192,13 @@ def main():
     ap.add_argument('--host', default='0.0.0.0')
     ap.add_argument('--port', type=int, default=8767)
     ap.add_argument('--check', action='store_true')
+    ap.add_argument('--augmentation', type=Path, help='Browse an independent primitive augmentation campaign')
     args = ap.parse_args()
     torch.set_num_threads(2)
+    if args.augmentation:
+        from visualization.viser_primitive_augmentation import run
+        run(args.augmentation, args.host, args.port, args.check)
+        return
     data = Data(args.poses.resolve())
     if args.check:
         check(data)

@@ -1,6 +1,0 @@
-{
-  "source": "Wuji Studio 2026.7.1 builtin wrist-root URDF, recovered from installed release",
-  "source_sha256": "dcabb009f021d0a705d6a2c9fb5bacc9ea7143956c3d76c92849f76362db38d6",
-  "urdf_sha256": "30b6d930f39411f92d4e7fca6a5d9e4879b2d80620a2d43c8c67a6ab9f988ddb",
-  "purpose": "Independent offline native SDK and URDF FK parity fixture; no live device calibration"
-}

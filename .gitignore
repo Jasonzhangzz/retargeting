@@ -17,17 +17,11 @@ dist/
 .DS_Store
 .aws
 MUJOCO_LOG.TXT
-/data/*
-!/data/contact/
-!/data/grasp/
-/data/grasp/*
-!/data/grasp/assets/
-!/data/grasp/templates/
-!/data/grasp/model.yaml
+# Datasets, robot assets and private models are supplied locally.
+/data/
 /GloveIPC_pack/
 /MoxianEMF-Windows-*/
 
 /third_party/robokit/src/*.egg-info/
 
-!/data/datasets/
 /moxian_web/vendor/

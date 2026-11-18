@@ -6,11 +6,10 @@
 | `retarget/baseline/` | CARD、wuji-retargeting、GeoRT 当前实现及固定版本上游源码 |
 | `retarget/env/`、`retarget/task/`、`retarget/solver/` | CEM、GraspADMM、接触空间任务的模型、几何和求解器 |
 | `retarget/learning/mano_contact/` | 可选 MANO 接触预测的准备、训练和推理 |
-| `scripts/` | 当前安装、启动、离线求解和验证入口 |
-| `tests/` | 当前标定、求解器、数据传输和界面的回归检查 |
-| `data/contact/`、`data/grasp/` | 运行所需的机器人网格、MJCF、模板和许可 |
-| `data/datasets/` | 31类、1,247组成对抓握姿态及查看器使用的冻结资源、评估数组 |
-| `visualization/` | 抓握数据查看器与资源 |
+| `scripts/` | 当前安装、启动、标定和离线求解入口 |
+| `data/contact/`、`data/grasp/` | 本地提供的机器人网格、MJCF、模板和许可，不纳入 Git |
+| `data/datasets/` | 本地数据集与查看器资源，不纳入 Git |
+| `visualization/` | 当前抓握数据与 primitive 增强查看器；资源从本地 `data/` 读取 |
 | `docs/` | 当前功能和数据接口说明 |
 | `third_party/`、`licenses/` | 运行依赖的固定版本源码、许可及来源记录 |
 
@@ -22,6 +21,8 @@
 
 所有生成内容写入 `output/`，不纳入版本管理。`output/moxian/` 保存当前标定、手型、选中模型及仍供覆盖图使用的录制；不得作为普通缓存整目录删除。原生求解器的 `output/runtime/`、Python 字节码、pytest 缓存和构建中间文件可重新生成。旧报告、训练权重快照和失效实验输出已清理；运行中的日志和锁保留。
 
-抓握数据保留查看器读取的姿态与 RL 末帧数组，已删除训练 checkpoint 和历史脚本快照。`verify.py` 检查保留文件的 SHA256、31类和1,247组配对姿态。
+`dex_grasping_primitives_20261115` 保留查看器读取的姿态与 RL 末帧数组，已删除训练 checkpoint 和历史脚本快照，仅在本地保存。
 
-上游原始算法及其 `SOURCE.json` 校验清单保留；来源与许可证见根目录 `THIRD_PARTY.md`。`.git` 保留完整版本历史，清理改动可通过 Git 审查和恢复。
+`moxian_grasp` 保存从远端下载的原生25自由度Moxian抓握数据，每类4,000条，并保留原始手部资产、全部引用物体网格与124,000组精确配对的Wuji2姿态。查看器并列展示两种手抓取同一物体。`contact_retarget_v1/` 另存固定 Wuji2 接触锚点重算的 Moxian 姿态、独立几何验收标记与训练筛选索引，原始关节映射保留用于对照。启动 `visualization/viser_moxian_dataset.py --port 8767` 浏览；数据来源和查看方法见本地数据目录的 `VIEWER.md`。
+
+上游原始算法及其 `SOURCE.json` 校验清单保留；来源与许可证见根目录 `THIRD_PARTY.md`。GitHub `main` 接收基于原 `main` 历史的代码快照，不引入 `developer` 分支新增的数据或 LFS 历史。当前版本不跟踪任何 `data/` 文件。测试目录、独立 benchmark／核验脚本和第三方演示代码已移除；运行期几何与输入校验仍保留。

@@ -53,7 +53,7 @@ def run(config, output: Path) -> list:
     implementation_files = [*root.joinpath('retarget/env/contact').rglob('*.py'),
         *root.joinpath('retarget/task/contact').rglob('*.py'), root / 'retarget/solver/contact_cem.py',
         root / 'retarget/solver/contact_defaults.py',
-        root / 'retarget/solver/robokit_cem.py', root / 'third_party/robokit/SOURCE.json', root / 'scripts/run_contact_benchmark.py']
+        root / 'retarget/solver/robokit_cem.py', root / 'third_party/robokit/SOURCE.json', root / 'run.py']
     implementation_hashes = {}
     for path in implementation_files:
         relative = path.relative_to(root)

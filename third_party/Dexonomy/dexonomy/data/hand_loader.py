@@ -1,6 +1,4 @@
-import time
 import os
-import hydra
 import threading
 import logging
 import time
@@ -230,34 +228,3 @@ class HandTemplateLoader:
             for k, v in self.extra_info.items():
                 new_data[k] = v
             return new_data
-
-
-@hydra.main(config_path="../config", config_name="base", version_base=None)
-def test_hand_library(cfg):
-    tmpl_name = os.listdir(cfg.init_tmpl_dir)[-1].split(".npy")[0]
-    hand_library = HandTemplateLoader(
-        xml_path=cfg.hand.xml_path,
-        skt_path=cfg.hand_skt_path,
-        tmpl_name=tmpl_name,
-        init_tmpl_dir=cfg.init_tmpl_dir,
-        new_tmpl_dir=cfg.new_tmpl_dir,
-        n_worker=cfg.n_worker,
-    )
-    try:
-        for _ in range(20):
-            for i in range(3):
-                time.sleep(0.1)
-                d = hand_library.get_batched_data(
-                    torch.Size([10, 8192]), torch.device("cpu")
-                )
-                logging.info(f"Batched data shape: {d['grasp_qpos'].shape}")
-            time.sleep(0.8)
-    finally:
-        hand_library.stop()
-        logging.info("Pipeline stopped")
-
-    return
-
-
-if __name__ == "__main__":
-    test_hand_library()

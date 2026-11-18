@@ -1,6 +1,6 @@
 # Retarget
 
-Moxian 采集与 WebUI、实时手部重定向、MANO CEM／GraspADMM，以及运行所需的模型资产和验证工具。
+Moxian 采集与 WebUI、实时手部重定向、MANO CEM／GraspADMM，以及离线抓握重定向与数据查看器。
 
 ## 启动
 
@@ -8,6 +8,8 @@ Moxian 采集与 WebUI、实时手部重定向、MANO CEM／GraspADMM，以及�
 bash scripts/setup_moxian.sh
 bash scripts/start_moxian_web.sh
 ```
+
+整个 `data/` 目录仅在本地保存，不纳入 Git；新克隆仓库需要自行准备相同目录结构的机器人资产、模板和数据集。
 
 网页地址：<http://127.0.0.1:8890>。厂商 SDK、私有 MANO 权重和设备标定需在本机准备；MANO 权重通过 `MOXIAN_MANO_MODEL` 指定。
 
@@ -52,11 +54,9 @@ python3.11 -m venv .venv-graspadmm
 
 YAML 的 `solver.type` 接受 `cem`、`graspadmm` 或 `contact_cem`，参数由对应模块的 `DEFAULTS` 提供。接触空间 CEM 的安装、任务和验收见 [contact_cem](docs/contact_cem.md)。外部输入数据和私有模型需另行准备。
 
-## 检查与目录
+## 目录
 
-```bash
-PYTHONDONTWRITEBYTECODE=1 .venv-contact/bin/python -m pytest -p no:cacheprovider -q
-```
+仓库保留运行源码、配置、文档和许可证；测试、独立 benchmark、旧预览样例及构建缓存已移除。
 
 生成结果写入被 Git 忽略的 `output/`。本机当前标定、手型、GeoRT 模型和录制保存在 `output/moxian/`；运行环境与厂商依赖保留。可重建的缓存、编译中间文件、旧报告及已废弃的实验代码已清理。
 

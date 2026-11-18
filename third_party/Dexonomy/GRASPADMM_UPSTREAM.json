@@ -22,9 +22,15 @@
     "dexonomy/util/file_util.py": "9d18cd1057d74771d26fcdf4451b4dddc813d52dbe7416c0c4a1fc004a0c4452",
     "dexonomy/util/traj_util.py": "557a62f94f690d2e3be2d2e5a9a98f9cd779ab4a2e75b1efa9ba3cd3663720d8",
     "dexonomy/data/obj_loader.py": "f92ca45a4aefd9e236a492227ea55b141adef9e2364808c11f20f409d26f2c35",
-    "dexonomy/data/hand_loader.py": "6f310f6e47ed207d832f14c70c00b8fef870fe692080290e5e94e7c1792194f6",
+    "dexonomy/data/hand_loader.py": "e329765d6edb799fe0961437226e2fa349f72bd7a01116bdba51d0400746866b",
     "README.md": "4cb948c925d701c3bc66a6dcb2f570e90ddc8600b97d6fafc817773f3b30b2ad",
     "pyproject.toml": "6b4cb4359ff96c848bb4787e68513f06fc0f65b9db967182debe1fb24cbf53c6",
     "getting_started/3_ADMM.md": "3da1e5df26a3da82439861149d600646ed80050d0cd6bda9f336e10452d31558"
+  },
+  "local_modifications": {
+    "dexonomy/data/hand_loader.py": {
+      "upstream_sha256": "6f310f6e47ed207d832f14c70c00b8fef870fe692080290e5e94e7c1792194f6",
+      "change": "Removed standalone test_hand_library and its Hydra entry point; loader implementation unchanged."
+    }
   }
 }

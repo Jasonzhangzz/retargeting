@@ -159,7 +159,6 @@ windows from train only, both full objectives, and the complete HACO head:
 ```bash
 python -m retarget.learning.mano_contact.cli smoke \
   --corpus CORPUS.h5 --assets ASSETS --output RUN/smoke --threads 4
-python -m pytest tests/learning/test_mano_contact.py -q
 ```
 
 The gate checks >=70% reconstruction reduction, vertex F1 >=0.90 and frame F1

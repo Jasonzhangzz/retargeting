@@ -12,6 +12,6 @@
 
 网页支持 `cem`、`slsqp_graph`、`wuji-retargeting`、`geort`、`cart`。离散接触图 SLSQP 和 CART 不属于本次迁移的三个 baseline；SLSQP·CARD 已移除。
 
-远端生产代码一致性由 `wuji_retargeting/upstream/SOURCE.json` 的45份文件哈希核对。GeoRT 原始文件哈希由 `geort/upstream/SOURCE.json` 核对。迁移只调整项目适配模块的导入与资源路径，不修改原始算法文件。
+远端生产代码一致性由 `wuji_retargeting/upstream/SOURCE.json` 的保留文件哈希核对。GeoRT 原始文件哈希由 `geort/upstream/SOURCE.json` 核对。迁移只调整项目适配模块的导入与资源路径，不修改原始算法文件；独立测试目录不随当前源码发布。
 
 使用范围与数值验证见 [wuji-retargeting 接入说明](../../docs/moxian_wuji_reference.md)、[CARD](../../docs/moxian_robokit_card.md)、[GeoRT](../../docs/moxian_geort.md)。

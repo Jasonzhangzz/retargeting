@@ -11,7 +11,7 @@ acceptance are adapted from OpenRoboKit commit
 and asset hashes are in `retarget/task/contact/SOURCE.json`. The library snapshot
 is the user's local Robokit working tree based on that commit, not a claim of a
 pristine checkout; `third_party/robokit/SOURCE.json` records its authoritative
-per-file hashes. The vendored library files are unchanged. The MIT task-code
+per-file hashes. Retained library files are unchanged; standalone examples and gallery modules are excluded. The MIT task-code
 license, Apache Sharpa license and BSD H1 license are included.
 
 ## Installation and execution
@@ -24,37 +24,19 @@ uv venv --python 3.11 .venv-contact
 uv pip install --python .venv-contact/bin/python -r requirements.txt
 bash scripts/setup_contact.sh
 
-CUDA_VISIBLE_DEVICES=0 uv run --no-project --python .venv-contact/bin/python \
-  python scripts/run_contact_benchmark.py --task sharpa_pen \
-  --method contact_cem --output-name pen_contact --headless --save-video
+CUDA_VISIBLE_DEVICES=0 .venv-contact/bin/python run.py --config configs/contact_sharpa_pen.yaml
 ```
 
-The same command accepts `sharpa_coin`, `h1_jog`, `cem`, and `source_sampling`.
-`--steps` creates a partial diagnostic, which can never pass full-task acceptance.
-Output names must be new, preventing accidental replacement of existing results.
-Canonical sample budgets and horizons come from the migrated original example factories in `retarget/task/contact/source/`; `tasks.py` exposes their static configuration summaries. Production
-CLIs do not accept sample-count or iteration overrides.
+The unified entry point also accepts `configs/contact_sharpa_coin.yaml` and
+`configs/contact_h1_jog.yaml`. Set `solver.type` to `cem` or `contact_cem` in the
+YAML. For the source controller, use `cem` with
+`task.options.baseline: source_sampling`. Supply `data/contact/` locally before
+running; the data directory is excluded from Git.
 
-The unified entry point also accepts the three `configs/contact_*.yaml` files.
-Saved trajectories can be rendered or replayed with:
-
-```bash
-uv run --no-project --python .venv-contact/bin/python python \
-  scripts/run_contact_benchmark.py --replay output/pen_contact
-```
-
-The fixed campaign is sequential, uses seeds 0/1/2 plus coin seed 10000, and
-includes all three controllers and H1 reference tracking (39 jobs):
-
-```bash
-CUDA_VISIBLE_DEVICES=0 uv run --no-project --python .venv-contact/bin/python \
-  python scripts/run_contact_benchmark.py --campaign \
-  --output-name contact_campaign --headless --save-video
-```
-
-Use `--campaign --resume --output-name contact_campaign` to continue unfinished
-jobs; retries receive new directories and do not replace existing artifacts.
-Review each job’s `summary.json` and recorded contact/object metrics after the campaign.
+Saved trajectories use the unified replay mode: copy `configs/replay.yaml`, set
+`output.name` to the saved run directory name, then pass that YAML to `run.py`.
+Output names must be new. Standalone comparison campaigns and test scripts are
+excluded from this source release.
 
 ## Search and physics
 
@@ -125,7 +107,7 @@ not a certificate that a dynamically simulated candidate is infeasible.
 Native speculative sweeps use pre-step velocity, without new acceleration in
 that step. Multi-step dynamics therefore re-predict on every step. A force that
 accelerates a stationary body through a thin wall can still tunnel in one step;
-the test suite includes this limitation. `effective_distance` and
+this remains a limitation of the native integration step. `effective_distance` and
 `geometric_distance` are recorded separately. Contact force comes exclusively
 from the constraint solve, never from TOI.
 
@@ -219,13 +201,3 @@ times describe CPU work and are not additive with validation wall time.
 `startup_seconds` covers scene/backend initialization; cold time to the first
 control additionally includes first-window preparation and planning. H1's first
 planning window intentionally has ten iterations versus four at steady state.
-
-Checks:
-
-```bash
-uv run --no-project --python .venv-contact4/bin/python python -m pytest \
-  tests/contact/test_prediction.py -q -p no:cacheprovider
-CUDA_VISIBLE_DEVICES=0 uv run --no-project --python .venv-contact/bin/python \
-  python -m pytest tests/contact tests/core/test_solver_defaults.py \
-  tests/core/test_unified_config.py -q -p no:cacheprovider
-```

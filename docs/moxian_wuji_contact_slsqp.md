@@ -82,16 +82,10 @@ GPU 每轮修复的各连杆对最深穿透 witness 在设备端归约，仅回�
 
     .venv-contact/bin/python scripts/retarget_moxian_wuji2.py --input raw.jsonl --source-model moxian-model.json --output slsqp.jsonl --device cuda:0
 
-相同材料点评估姿态 SLSQP、触觉 SLSQP 和 CEM：
-
-    .venv-contact/bin/python scripts/benchmark_moxian_wuji_contact.py --capture raw.jsonl --source-model moxian-model.json --output output/reports/contact-comparison --device cuda:0
-
 重建要求设备初始化指纹、手侧、SID分区与模型匹配；原始 EMF 重新经过 Moxian QP，再驱动 SKN。动作标签仅用于评估窗口分组，不进入 IK/retargeting。缺少原始数据的 MANO 录制明确拒绝。离线拒绝覆盖输入或已有文件；--pose-only关闭触觉项，--limit限制读取帧数。
 
 Python API 为 `ContactSLSQPRetarget(topology, cache=None, device='cpu', settings=None, object_sdf=None, objective_profile='contact_graph')`。可选 `objective_profile='contact_graph'` 先固定离散接触图，再使用旧的统一 Laplacian、骨骼方向、非穿透和时间项；此构造器仅用于图方法。原 SLSQP·CARD 入口与专用代码已删除。原版机器人重定向后端独立使用 `create_retarget('wuji-retargeting', ...)`，详见 [接入说明](moxian_wuji_reference.md)。
 
-## 验证和清理
+## 运行期校验
 
-测试覆盖两侧实际11598顶点源mesh、460 SID随动与法向偏移、语义排边、单/多/未知触觉、版本错配、cost及双侧间距解析梯度、负间距修复、碰撞状态、重置、离线与网页保持画面。
-
-只清理本次失败映射、调试比较目录、模块缓存和未使用的参考预处理/特征分解代码。保留 CEM、原有模型、标定、录制、结果网页和其他未提交工作；实际删除项记录在最终评估目录的 CLEANUP.json。
+保留两侧实际源 mesh、SID 随动、版本与手侧匹配、接触和穿透的运行期校验。独立测试与调试比较脚本不包含在当前源码发布中。

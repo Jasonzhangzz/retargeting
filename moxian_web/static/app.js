@@ -374,7 +374,7 @@ function updateModes(live){
   $('responseMetricLabel').innerHTML=isContact?'接触状态 <small>BINARY CONTACT</small>':'接触单元 <small>ACTIVE CELLS</small>';
   $('peak').textContent=isContact?(ready?contact.count:'—'):(live?state.tactile.peak:'—');$('peakUnit').textContent=isContact?'/ 20':'ADC';
   $('active').textContent=isContact?(ready?(contact.count>0?'1':'0'):'—'):(live?state.tactile.active:'—');$('activeUnit').textContent=isContact?'0 / 1':'/ 460';
-  $('responseNote').textContent=isContact?(ready?'1 有确认接触 / 0 无确认接触':'未就绪 · 状态未知'):'阈值 > 5 ADC';
+  $('responseNote').textContent=isContact?(ready?'1 有确认接触 / 0 无确认接触':'未就绪 · 状态未知'):'显示计数 > 5 ADC · 不影响接触识别';
   const collecting=state?.contact?.tare?.state==='collecting';
   $('tare').disabled=!live||collecting;$('clearTare').disabled=!live||collecting;
   $('tareStatus').textContent=collecting?`采集中 ${Math.round((contact.tare.progress||0)*100)}%`:contact?.tare?.error||(!live?'设备离线':state?.contact?.ready?'去皮有效':'请先去皮');
@@ -385,7 +385,7 @@ function updateModes(live){
   $('baselineStatus').textContent=isContact?(ready?'未接触区域灰显':'接触状态未知 · 请完成去皮'):(state?.tactile?.has_baseline?'已应用旧触觉基线':'原始触觉值');
   $('heatUnitNote').textContent=isContact?'二值分布：灰 0 / 绿 1；未知显示 ?':'ADC 原始量，不等同于牛顿';
   const detector=contact?.detector;
-  $('detectorInfo').textContent=detector?`轻触检测 · EMA ${detector.ema_tau_ms} ms · 进入 max(${detector.enter_adc}, ${detector.enter_sigma}σ) ADC · 相邻双单元确认`:'连接后显示接触检测参数。';
+  $('detectorInfo').textContent=detector?`轻触检测 · EMA ${detector.ema_tau_ms} ms · 相邻单元 max(${detector.enter_adc}, ${detector.enter_sigma}σEMA) ADC / ${detector.enter_hold_ms} ms${detector.single_enter_adc!=null?` · 单点 max(${detector.single_enter_adc}, ${detector.single_enter_sigma}σEMA) ADC / ${detector.single_enter_hold_ms} ms`:''}`:'连接后显示接触检测参数。';
   const active=ready?contact.patches.filter(p=>p.contact):[];
   $('contactList').replaceChildren(...(isContact&&active.length?active.map(p=>{const chip=document.createElement('span');chip.className='contact-chip';chip.textContent=p.label;return chip;}):[document.createTextNode(!isContact?'切换接触分布可查看接触 patch':!live?'设备离线，接触状态未知':!ready?collecting?'正在采集无接触信号…':'尚未去皮，接触状态未知':'当前无接触')]));
   if(!mappingDirty)updateMappingUI();

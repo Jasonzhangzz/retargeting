@@ -151,7 +151,7 @@ class ManoCampaignWorker:
         self.mesh, self.loader = MeshCache(device), GeometryLoader(config['dataset'])
         self.source_cache = collections.OrderedDict()
         self.args = SimpleNamespace(device=device, initialization='shadow-ik', batch_size=config['batch_size'],
-            candidate_chunk=config['candidate_chunk'], benchmark_candidates=0, benchmark_repeats=0,
+            candidate_chunk=config['candidate_chunk'],
             score_only=False, seed=config['seed'])
 
     def completed(self, job):

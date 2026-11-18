@@ -20,6 +20,14 @@
 
 ## 保留的项目适配
 
+### 轻触输入与阈值
+
+触觉分布的绿色响应来自 ADC；黄色确认接触点由 `moxian_web/contact.py` 的检测器产生，CEM 使用后者。检测器对40 ms EMA后的去皮残差判定：相邻单元达到 `max(0.5 ADC, 2.5σEMA)` 并持续30 ms，或单个单元达到 `max(0.75 ADC, 3σEMA)` 并持续80 ms。单点确认还要求最近25 ms内有原始ADC支持，防止尖峰经EMA拖尾变成接触。释放阈值为 `max(0.25 ADC, 1.25σEMA)`，分区释放防抖80 ms。
+
+新去皮记录测量平滑后的噪声；旧记录按120 Hz EMA方差折算，自动兼容，无需丢弃标定。噪声标准差下限为0.25 ADC。持续1 ADC、只覆盖一个单元的轻触也可形成CEM锚点；已确认接触不会再经过绝对压力门槛。网页“触觉分布”中的 `>5 ADC` 只是显示统计，不控制黄色点或CEM。
+
+接触激活与求解可行性分别验收：CEM仍执行掌指间距和物体穿透硬约束；黄色点已亮而结果不可行时，应检查 `solver.feasible` 和碰撞诊断。
+
 一致性范围为 **objective 和 CEM**，不包含整条源数据与初值流程。Robokit 初解仍由当前源手21节点优化产生，用自己的关节历史热启动并缓存完全相同输入，不读取 CEM 历史；没有替换成论文附录C的闭式初值或拇指仿射映射。
 
 实时路径保留因果接触提取和累计凸包，输出原始 CEM。离线入口保留整段接触凸包、11帧接触图表平滑及经可行性检查的 SG(15,3) 后处理；这是独立于逐帧 CEM 的阶段。离线段最大压力仍可作为预处理元数据保存，但不参与 objective。相对ADC响应未标定为牛顿；默认方向项为法向对齐，不是硬件力控制。
@@ -30,8 +38,4 @@
 
 `solver.consistency_scope='objective_and_cem_only'`；`search_center`、`previous_used_as_search_center`、`empty_elite_iterations`、`output_selection_scope='all_scored_candidates'` 和实际 `evaluations` 说明本帧求解过程。`backend_timing_ms` 是 `timing_ms.cem` 的子项，不应重复相加；首次构建／图捕获由 `cold_start` 标记。
 
-```bash
-.venv-contact/bin/python -m pytest -q tests/mano/test_card_retarget.py tests/mano/test_contact_force.py tests/mano/test_wuji_pinch.py tests/test_moxian_wuji_bridge.py tests/test_moxian_wuji_view.py
-```
-
-录制片段通过 `scripts/retarget_moxian_wuji2.py --solver cem --input <recording.jsonl> --output <new.jsonl>` 离线重算；输出路径必须新建。两后端冻结帧对照可使用 `scripts/benchmark_moxian_robokit_card.py`。
+录制片段通过 `scripts/retarget_moxian_wuji2.py --solver cem --input <recording.jsonl> --output <new.jsonl>` 离线重算；输出路径必须新建。
