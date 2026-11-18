@@ -50,6 +50,7 @@ def main():
             p.add_argument('--validate-every',type=int,default=10,help='Periodic true-mesh selection audit; first and final epochs are always checked')
             p.add_argument('--validation-windows',type=int,default=32,help='Fixed true-mesh selection window budget; 0 means all. Final full-session acceptance is never sampled.')
             p.add_argument('--length',type=int,default=16)
+            p.add_argument('--window-stride',type=int,default=0,help='Training window start spacing; 0 keeps length//2. Validation sampling is unchanged.')
             p.add_argument('--resume-run');p.add_argument('--sdf-warmup-steps',type=int)
             p.add_argument('--initialize-from',help='Initialize a new run from a compatible v5 checkpoint; not exact resume')
             p.add_argument('--initialize-geometry-from',help='Reuse geometry and its optimizer/replay; initialize a fresh delta policy')
@@ -114,7 +115,7 @@ def run(args):
                 initial_noise_rad=args.initial_noise_rad,attention_precision=args.attention_precision,
                 validation_interval=args.validate_every,validation_window_budget=args.validation_windows,
                 initialize_geometry_from=args.initialize_geometry_from,wandb_project=args.wandb_project,wandb_entity=args.wandb_entity,
-                wandb_base_url=args.wandb_base_url,wandb_mode=args.wandb_mode)))
+                wandb_base_url=args.wandb_base_url,wandb_mode=args.wandb_mode,window_stride=args.window_stride)))
         else:
             from .cart_training import evaluate
             result=evaluate(args.root,safe_id(args.model),args.datasets,check=check)

@@ -8,7 +8,7 @@ import signal
 import time
 import numpy as np
 import torch
-from .cart_data import load_sessions,sequence_indices,preprocess,manifest,preprocessing_current,implementation_identity as geometry_identity,file_hash
+from .cart_data import load_sessions,preprocess,manifest,preprocessing_current,implementation_identity as geometry_identity,file_hash
 from .cart_network import CartNetwork,LEVELS
 from .cart_observations import batch_future,pack_future
 from .cart_collision import CollisionModel,SDFLearner,frozen
@@ -152,10 +152,20 @@ def rollout(model,objective,batch,*,audit=False,collect_only=False,normalizers=N
     return trajectory.loss(objective,audit=audit,batch_losses=batch_losses)
 
 
-def windows(sessions,length=16):
+def windows(sessions,length=16,stride=0):
+    if isinstance(stride,bool) or not isinstance(stride,int) or stride<0:
+        raise ValueError('窗口步长必须为非负整数；0 表示 length//2')
+    stride=stride or max(1,length//2)
     result=[]
     for meta,rows,_ in sessions:
-        for indices in sequence_indices(rows,length):
+        # Sampling density belongs to training, not the immutable observation
+        # cache. Keep warmup and the complete ten-frame future tail in-segment.
+        segments=[];start=0
+        for end in range(1,len(rows)+1):
+            if end==len(rows) or not 0<rows[end]['timestamp_ms']-rows[end-1]['timestamp_ms']<=250 or rows[end].get('stream_epoch')!=rows[end-1].get('stream_epoch'):
+                segments.extend((i,start) for i in range(start,end-length-9,stride));start=end
+        for i,start in segments:
+            indices=list(range(max(start,i-10),i+length+10))
             current=rows[indices[len(indices)-length-10]]
             if current.get('ik_valid') is False:continue
             window=dict(rows=[rows[i] for i in indices],indices=indices,length=length,dataset=meta['id'])
@@ -296,7 +306,7 @@ def full_session(model,objective,sessions,check=lambda:None):
 def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DEFAULT_BATCH_SIZE,length=16,
           smoke=False,architecture='attention',resume=False,warmup_steps=None,device=None,micro_batch_size=0,initialize_from=None,
           initial_noise_rad=DEFAULT_INITIAL_NOISE_RAD,attention_precision='auto',validation_interval=10,validation_window_budget=32,
-          initialize_geometry_from=None,wandb_project=None,wandb_entity=None,wandb_base_url=None,wandb_mode='online'):
+          initialize_geometry_from=None,wandb_project=None,wandb_entity=None,wandb_base_url=None,wandb_mode='online',window_stride=0):
     if architecture not in ARCHITECTURES:raise ValueError('architecture must be attention or fsq')
     from .geort_service import safe_id
     run_id=safe_id(run_id)
@@ -324,6 +334,8 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:raise ValueError('已有 GeoRT／CART 训练任务')
         if not 1<=epochs<=2000 or not 0<=batch_size<=65536 or length<2:raise ValueError('无效训练预算')
+        if isinstance(window_stride,bool) or not isinstance(window_stride,int) or not 0<=window_stride<=65536:
+            raise ValueError('窗口步长必须为 0–65536；0 表示 length//2')
         if isinstance(validation_interval,bool) or not isinstance(validation_interval,int) or not 1<=validation_interval<=2000:
             raise ValueError('真实 mesh 检查间隔必须为 1–2000 轮')
         if isinstance(validation_window_budget,bool) or not isinstance(validation_window_budget,int) or not 0<=validation_window_budget<=65536:
@@ -344,7 +356,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         if len(bindings)!=1:raise ValueError('训练与验证的触觉材料绑定不兼容')
         if {m.get('session_id',m['id']) for m,_,_ in sessions}&{m.get('session_id',m['id']) for m,_,_ in validation}:
             raise ValueError('同一采集会话不能跨训练与验证分区')
-        train_windows=windows(sessions,length);validation_windows=windows(validation,length)
+        train_windows=windows(sessions,length,window_stride);validation_windows=windows(validation,length)
         if not train_windows or not validation_windows:raise ValueError('训练与验证各需至少连续 length+10 帧真实观测，不跨断流边界')
         device=device or ('cuda:0' if torch.cuda.is_available() else 'cpu')
         hand=CartHand(device);collision=CollisionModel(hand);objective=CartObjective(hand,policy_settings(),collision)
@@ -379,6 +391,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         config.update(micro_batch_size=micro_batch_size,batch_semantics='parallel_windows_per_optimizer_step',
             policy_output=POLICY_OUTPUT,delta_normalization='2*delta_rad/(upper-lower)',state_transition='clamp(normalize(q)+delta,-1,1)',
             gradient_accumulation=False,parallel_batch_size=parallel_size,
+            window_stride=window_stride or max(1,length//2),training_windows=len(train_windows),
             attention_precision_request=requested_precision,policy_attention_precision=attention_precision,geometry_precision='float32',
             observation_checkpointing=model.checkpoint_observations,
             geometry_activation_recomputation=str(device).startswith('cuda'),

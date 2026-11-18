@@ -26,6 +26,7 @@ def main():
     parser.add_argument('--architecture',choices=('attention','fsq'),default='attention')
     parser.add_argument('--batch-size',type=int,default=16);parser.add_argument('--micro-batch-size',type=int,default=0)
     parser.add_argument('--window-start',type=int,default=0,help='First eligible window index, useful for single-window timing')
+    parser.add_argument('--window-stride',type=int,default=0,help='Window start spacing; 0 keeps length//2')
     parser.add_argument('--initial-noise-rad',type=float,default=.1)
     parser.add_argument('--length',type=int,default=16);parser.add_argument('--repeats',type=int,default=3)
     parser.add_argument('--device',default='cuda:0' if torch.cuda.is_available() else 'cpu');parser.add_argument('--output',type=Path)
@@ -40,7 +41,7 @@ def main():
     sessions,_=load_sessions(args.root,[args.dataset],meta['split'])
     prepare_ik(args.root,args.dataset);attach_ik(args.root,sessions)
     if args.window_start<0:parser.error('window-start must be nonnegative')
-    selected=windows(sessions,args.length)[args.window_start:]
+    selected=windows(sessions,args.length,args.window_stride)[args.window_start:]
     if not selected:raise ValueError('No continuous rollout windows')
     prepare_windows(sessions,selected,args.device)
     parallel=choose_parallel_batch(args.architecture,args.device,args.batch_size,args.micro_batch_size,args.length,
@@ -87,6 +88,7 @@ def main():
         results.append(result);print(json.dumps(result),flush=True)
     report=dict(device=torch.cuda.get_device_name(args.device) if args.device.startswith('cuda') else 'CPU',
         architecture=args.architecture,requested_parallel_batch=args.batch_size,parallel_batch=len(batch),gradient_accumulation=False,length=args.length,window_start=args.window_start,
+        window_stride=args.window_stride or max(1,args.length//2),available_windows=len(selected),
         loss_execution='serial_reference' if args.serial_losses else 'time_batched',
         policy_attention_precision=args.attention_precision,geometry_precision='float32',
         observation_checkpointing=args.checkpoint_observations,

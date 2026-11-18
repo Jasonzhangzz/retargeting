@@ -23,6 +23,33 @@ def row_at(stamp,joints):
         contacts=dict(tactile_ready=True,tactile_status='valid',self_pairs=[],object_contacts=[]))
 
 
+def test_dense_windows_are_distinct_and_preserve_future_and_stream_boundaries():
+    from moxian_web.cart_data import sequence_indices
+    rows=[dict(timestamp_ms=i*20,stream_epoch=i//60,ik_valid=True,ik_q_rad=[i]*20) for i in range(120)]
+    sessions=[(dict(id='one'),rows,{})]
+    default=windows(sessions,16)
+    assert [w['indices'] for w in default]==sequence_indices(rows,16)
+    dense=windows(sessions,16,stride=2)
+    starts=[w['initial_q'][0] for w in dense]
+    assert len(starts)==len(set(starts)) and len(dense)>len(default)
+    assert starts==list(range(0,35,2))+list(range(60,95,2))
+    for w in dense:
+        assert len({rows[i]['stream_epoch'] for i in w['indices']})==1
+        offset=len(w['indices'])-16-10
+        current=w['indices'][offset]
+        assert w['indices'][offset+1:offset+11]==list(range(current+1,current+11))
+        assert w['indices'][-1]==current+16+9
+    # A dropout and an invalid IK seed are still hard window boundaries.
+    rows[30]['timestamp_ms']+=10000
+    rows[60]['ik_valid']=False
+    for w in windows(sessions,16,stride=1):
+        stamps=[rows[i]['timestamp_ms'] for i in w['indices']]
+        assert all(0<b-a<=250 for a,b in zip(stamps,stamps[1:]))
+        assert w['initial_q'][0]!=60
+    for invalid in (-1,True,1.5):
+        with pytest.raises(ValueError):windows(sessions,16,stride=invalid)
+
+
 @pytest.fixture(scope='module')
 def geometry():
     hand=CartHand('cpu');return hand,CollisionModel(hand)

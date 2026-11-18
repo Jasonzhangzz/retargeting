@@ -220,6 +220,9 @@ class CartService:
             if isinstance(noise,bool) or not isinstance(noise,(int,float)) or not np.isfinite(noise) or not 0<=noise<=.5:raise ValueError('IK 初始噪声幅度须为 0–0.5 rad')
             command+=['--epochs',str(epochs),'--architecture',architecture,'--batch-size',str(batch),'--micro-batch-size',str(micro)]
             command+=['--initial-noise-rad',str(noise)]
+            stride=data.get('window_stride',0)
+            if isinstance(stride,bool) or not isinstance(stride,int) or not 0<=stride<=65536:raise ValueError('窗口步长必须为 0–65536；0 表示 length//2')
+            command+=['--window-stride',str(stride)]
             if data.get('initialize_from'):command+=['--initialize-from',safe_id(data['initialize_from'])]
             if data.get('initialize_geometry_from'):command+=['--initialize-geometry-from',safe_id(data['initialize_geometry_from'])]
             for field in ('wandb_project','wandb_entity','wandb_base_url'):
