@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emf-wuji-retarget-reference"
+version = "0.1.0"
+description = "Independent offline EMF pose to human IK to Wuji1/Wuji2 retarget pipeline"
+requires-python = ">=3.10"
+dependencies = ["numpy>=2,<3", "nlopt>=2.11,<3"]
+
+[project.optional-dependencies]
+hdf5 = ["h5py>=3"]
+episode = ["h5py>=3", "ijson>=3"]
+validation = ["h5py>=3", "scipy>=1.15,<2"]
+
+[project.scripts]
+emf-retarget = "emf_retarget.cli:main"
+
+[tool.setuptools]
+packages = ["emf_retarget", "human_ik_reference", "retarget_reference"]
+
+[tool.setuptools.package-data]
+human_ik_reference = ["assets/*.urdf", "README.txt"]
+retarget_reference = ["assets/*.urdf", "README.txt", "NOTICE.txt", "LICENSE*"]

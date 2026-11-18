@@ -1,3 +1,6 @@
 # Preserve binary numerical assets without line-ending conversion.
 *.npz binary
 *.npy binary
+# Keep pinned upstream sources byte-identical, including original whitespace.
+/retarget/baseline/geort/upstream/** -text -whitespace
+/retarget/baseline/wuji_retargeting/upstream/** -text -whitespace

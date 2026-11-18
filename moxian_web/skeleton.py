@@ -1,4 +1,4 @@
-"""Nonblocking process bridge to the official SDK 1.7 Skeleton runtime."""
+"""Nonblocking process bridges for the active and official reference IK."""
 from __future__ import annotations
 
 import copy
@@ -11,6 +11,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from .hand_side import check_side
 
 JOINT_CHAINS = [
     ["wrist", "thumb_metacarpal", "thumb_proximal", "thumb_distal", "thumb_tip"],
@@ -20,8 +21,8 @@ JOINT_CHAINS = [
 JOINT_NAMES = ["wrist"] + [name for chain in JOINT_CHAINS for name in chain[1:]]
 
 
-def validate_pose(pose):
-    if pose.get("coordinate_frame") != "wrist_local" or pose.get("hand_side") != "left":
+def validate_pose(pose,side=None):
+    if pose.get("coordinate_frame") != "wrist_local" or pose.get("hand_side") not in ("left","right") or (side is not None and pose.get("hand_side")!=side):
         raise ValueError("骨架坐标系或手侧不匹配")
     names, positions, orientations = (pose.get(k, []) for k in ("names", "positions_local", "orientations_local_xyzw"))
     if len(names) != 25 or set(names) != set(JOINT_NAMES) or len(positions) != 25 or len(orientations) != 25:
@@ -64,26 +65,44 @@ class SkeletonBridge:
     def __init__(self, root, folder):
         self.root, self.folder = Path(root), Path(folder)
         self.python = self.root / ".venv-moxian-ik/bin/python"
+        self.worker_script = "ik_worker.py"
+        self.worker_arguments = []
+        self.install_hint = "请运行 scripts/setup_moxian_ik.sh 安装骨骼运行时"
         self.lock = threading.Lock()
         self.state = {"status": "not_started", "pose": None, "error": None, "capture": None, "calibration": None}
         self.pose_at = 0
         self.proc = None
         self.serial = None
+        self.side = "left"
         self.generation = 0
         self.frames = queue.Queue(maxsize=1)
         self.controls = queue.Queue(maxsize=32)
         self.pending = {}
         self.threads = []
         self.log = None
+        self.calibration_operation = threading.Lock()
 
-    def start(self, serial):
-        if self.proc and self.proc.poll() is None and self.serial == serial:
+    def recalibrate(self,serial,restore=False):
+        from .calibration_store import archive_calibration,restore_calibration
+        with self.calibration_operation:
+            self.stop()
+            key=__import__('hashlib').sha256(serial.encode()).hexdigest()[:16]
+            home=self.folder/'ik'/key
+            try:
+                (restore_calibration if restore else archive_calibration)(home)
+            finally:
+                self.start(serial,self.side)
+
+    def start(self, serial,side="left"):
+        side=check_side(side)
+        if self.proc and self.proc.poll() is None and self.serial == serial and self.side==side:
             return
         self.stop()
         self.serial = serial
+        self.side = side
         if not self.python.is_file():
             with self.lock:
-                self.state.update(status="unavailable", error="请运行 scripts/setup_moxian_ik.sh 安装官方骨骼运行时")
+                self.state.update(status="unavailable", error=self.install_hint)
             return
         self.folder.mkdir(parents=True, exist_ok=True)
         self.log = (self.folder / "skeleton-worker.log").open("a")
@@ -91,8 +110,9 @@ class SkeletonBridge:
         env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
         serial_key = __import__("hashlib").sha256(serial.encode()).hexdigest()[:16]
         home = self.folder / "ik" / serial_key
-        args = [str(self.python), "-I", str(self.root / "moxian_web/ik_worker.py"),
-                "--event-fd", str(write_fd), "--home", str(home), "--serial", serial]
+        args = [str(self.python), "-I", str(self.root / "moxian_web" / self.worker_script),
+                "--event-fd", str(write_fd), "--home", str(home), "--serial", serial,"--side",side,
+                *self.worker_arguments]
         try:
             proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=self.log, stderr=self.log,
                                     text=True, bufsize=1, pass_fds=(write_fd,), env=env)
@@ -148,10 +168,11 @@ class SkeletonBridge:
             with self.lock:
                 self.pending.pop(request_id, None)
 
-    def snapshot(self, connected=True):
+    def snapshot(self, connected=True,copy_state=True):
         with self.lock:
-            result = copy.deepcopy(self.state)
-            age = (time.monotonic() - self.pose_at) * 1000 if self.pose_at else None
+            published=dict(self.state);received=self.pose_at
+        result=copy.deepcopy(published) if copy_state else published
+        age = (time.monotonic() - received) * 1000 if received else None
         if self.proc and self.proc.poll() is not None:
             result.update(status="error", error=result.get("error") or f"骨骼进程退出 ({self.proc.returncode})，请重连或重启骨架")
         result["age_ms"] = round(age, 1) if age is not None else None
@@ -159,7 +180,7 @@ class SkeletonBridge:
         if result.get("pose") and not result["ready"] and result["status"] != "error":
             result["status"] = "stale"
         result["chains"] = JOINT_CHAINS
-        result["hand_side"] = "left"
+        result["hand_side"] = self.side
         return result
 
     def _read(self, fd, proc, generation):
@@ -176,7 +197,7 @@ class SkeletonBridge:
                             reply.put_nowait(message)
                         continue
                     if message.get("pose"):
-                        validate_pose(message["pose"])
+                        validate_pose(message["pose"],self.side)
                     with self.lock:
                         if message.get("pose"):
                             self.pose_at = time.monotonic()
@@ -233,3 +254,24 @@ class SkeletonBridge:
         with self.lock:
             self.state.update(status="not_started", pose=None, capture=None, calibration=None)
             self.pose_at = 0
+
+
+class OfficialSkeletonBridge(SkeletonBridge):
+    """Read-only public SDK output, isolated from the active solver/home."""
+    def __init__(self, root, folder):
+        super().__init__(root, Path(folder) / 'official-baseline')
+        self.calibration_folder = Path(folder) / 'ik'
+        self.python = self.root / '.venv-moxian-official/bin/python'
+        self.worker_script = 'official_worker.py'
+        self.install_hint = '请运行 scripts/setup_moxian_official.sh 安装官方 SDK 对照环境'
+
+    def start(self, serial, side='left'):
+        key = __import__('hashlib').sha256(serial.encode()).hexdigest()[:16]
+        self.worker_arguments = ['--calibration-home', str(self.calibration_folder / key)]
+        super().start(serial, side)
+
+    def control(self, action, data):
+        raise ValueError('官方 SDK 对照只读，请在 SLSQP 骨架视图进行官方八动作标定')
+
+    def recalibrate(self, serial, restore=False):
+        raise ValueError('官方 SDK 对照只读，不能改写原标定')

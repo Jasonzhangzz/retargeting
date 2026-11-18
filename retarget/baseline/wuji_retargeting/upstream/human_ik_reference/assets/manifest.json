@@ -1,0 +1,14 @@
+{
+  "left": {
+    "file": "left_hand.urdf",
+    "sha256": "70def7b0e4a007d4c6bbb4ae4e7cb5a80909a2ff9836a73b7b2a2406ebc622e3",
+    "source": "project hand_models/cqq/left_hand.urdf",
+    "bytes": 38951
+  },
+  "right": {
+    "file": "right_hand.urdf",
+    "sha256": "c09676d29d209420111aa218962cc31b8b033bf7e1581ca4054411af9171b800",
+    "source": "project hand_models/cqq/right_hand.urdf",
+    "bytes": 36619
+  }
+}

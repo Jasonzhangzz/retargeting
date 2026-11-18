@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/dqj5182/HACO_RELEASE",
+  "sha256": {
+    "lib/models/decoder/decoder_hamer_style.py": "93951958bab82e0a45d168c4b547f07e3fa253a993e8ab6266958a37ed393435",
+    "lib/core/loss.py": "3bfca56e55aaaf8d60e47d4d78636ad099954f7cf731284d031c37e256be64f2",
+    "lib/core/base.py": "79ceccf2d0f7df4bc6b712ac7f8f440dc28929dde9b8c72e8d881544d3603681",
+    "lib/utils/human_models.py": "9c44978c525fbc1aba810cd2892d8d0e3fbfb784b93a44a0f712d635291b86fb",
+    "LICENSE": "1d8ca66080a2701508a70be4ddad4be28c509bcc3397a682fb8edf767fdd7a00"
+  },
+  "commit": "c774211b968bdf836f9511dbd5ff23bb19fe1c44"
+}

@@ -1,18 +1,32 @@
+# 来源与许可
 
-| 位置 | 来源与用途 |
+| 保留部分 | 来源 |
 | --- | --- |
-| `third_party/Dexonomy`、`retarget/env/grasp/graspadmm_*`、`retarget/env/grasp/grasp_admm_runner.py` | Dexonomy/GraspADMM `d561ff9df8545deef7a3f9e7cfb4045ef66f6913`。原版初始化/RELUQP、ADMM/Clarabel、MuJoCo、filter、squeeze/pregrasp 与六方向评测；逐文件 SHA-256 见 `GRASPADMM_UPSTREAM.json`，保留 CC BY-NC 4.0 声明。本地 WUJI2 free-root/模板/FK/完整 rigid pad 几何与输出适配独立记录。 |
-| `retarget/env/grasp/grasp_evaluation.py`、`scripts/reevaluate_grasps.py` | 各 grasp 方法的共同原版 GraspADMM 评测桥接；仅传递实际最终手物相对抓姿及真实网格，重建统一测试场景，保留历史源结果。 |
-| `retarget/task/humanoid`、`retarget/env/humanoid` | Meta SPIDER，commit `44717007de41cbef7565dff7ff9f4453557a2d3d`。原始 reward 函数体、参考插值、MPC rollout、MJWarp 参数和状态恢复。CC BY-NC 4.0，见 `licenses/SPIDER.txt`；函数核验见任务包 `source.json`。 |
-| `data/humanoid` | SPIDER 公开 retarget_example 数据，revision `8b0cdf2b24cc86d1c859050c5b0317ddbec59a63`。G1 模型许可保留在各任务 assets 中。sprint 接触标签为本地推导，见 `contact_provenance.json`。 |
-| `retarget/dynamics/comfree` | ComFree Warp commit `ba8b9969f5f7859d51b1f738f458f8d2f49be080` 的三个原始接触响应 kernel；只保留响应和接口，不包含引擎或碰撞实现。完整来源与 AST 核验见 source.json；许可见 `licenses/comfree_core-LICENSE`。MJWarp 通过已安装的外部依赖调用。 |
-| `retarget/initialization/dexonomy`、`data/grasp/templates` | Dexonomy 原始输入初始化方法和必要模板，CC BY-NC 4.0，见 `licenses/Dexonomy-NOTICE.txt`。只保留输入初始化的依赖，未保留原项目任务优化器。 |
-| `data/grasp/assets/wuji` | 本地 Wuji 手模型、网格和表面查询点；见 `licenses/Wuji-LICENSE`。 |
-| `data/grasp/assets/wuji2` | 官方 WUJI Hand 2.2，commit `5c4dfa16917355d073e2e1d7e3d03897b6cf9508`，MIT。原始模型、许可证与 adapter 核验记录保留在资产目录。 |
-| `retarget/task/dex` | 本地已准备的 DexYCB 主目标、参考和控制平滑项，来自迁移前 ForceAware 工作区。迁移保留数值目标，移除任务反向优化。 |
+| `retarget/baseline/geort/upstream`、`retarget/baseline/geort/training.py` | Meta GeoRT，commit `fb2075e2a3272be372016580c0b6ebd6120228f0`；CC BY-NC 4.0。原始文件、许可证及 SHA256 见该目录 `SOURCE.json`；设备／MuJoCo适配与网页实现单独组织。 |
+| `third_party/Dexonomy`、GraspADMM 适配 | Dexonomy/GraspADMM，commit `d561ff9df8545deef7a3f9e7cfb4045ef66f6913`；CC BY-NC 4.0。原版初始化、ADMM、QP、filter、pregrasp 和评测源码哈希见 `third_party/Dexonomy/GRASPADMM_UPSTREAM.json`。 |
+| `retarget/env/humanoid`、`retarget/task/humanoid` | Meta SPIDER，commit `44717007de41cbef7565dff7ff9f4453557a2d3d`；CC BY-NC 4.0，见 `licenses/SPIDER.txt` 和对应 `source.json`。 |
+| `retarget/dynamics/comfree` | ASU IRIS ComFree Warp，commit `ba8b9969f5f7859d51b1f738f458f8d2f49be080`；只保留接触响应 kernel 和接口。来源见同目录 `source.json`，许可见 `licenses/comfree_core-LICENSE`。 |
+| `retarget/initialization/dexonomy/util/torch_util.py` | 经 Dexonomy 保留的 PyTorch3D 数学工具；原始出处为 `https://github.com/facebookresearch/pytorch3d/tree/main`，Dexonomy 声明见 `licenses/Dexonomy-NOTICE.txt`。 |
+| `data/grasp/assets/wuji` | Wuji 模型、网格和查询点，见 `licenses/Wuji-LICENSE`。 |
+| `data/grasp/assets/wuji2` | WUJI Hand 2.2，commit `5c4dfa16917355d073e2e1d7e3d03897b6cf9508`；MIT，资产目录保留许可证和来源记录。 |
+| `data/grasp/templates` | Dexonomy 原始输入模板；见 `licenses/Dexonomy-NOTICE.txt`。 |
+| `moxian_web/static/vendor` | Three.js 与 OrbitControls，MIT；许可证声明保留于 Three.js 文件头。 |
+| 本机厂商串口 SDK、V1 解码器 | 来自用户提供的 `moxian_web/vendor/MoxianEMF-Windows-20260917`；只保留当前 moxian 的依赖，不纳入 Git。官方骨架 SDK 1.7.0／1.8.1 通过安装脚本安装。 |
 
-MANO 权重仍是仓库外资源。本次不实现原始 MANO 序列到完整运行输入的自动转换，也不复制或删除外部模型资源。
+当前 patch CEM 的 Kelvin–Voigt 弹簧阻尼和切向历史属于本地实现。MANO 模型通过外部授权权重加载。保留实现的许可证、来源声明、注释与 docstring 均保留。
+# Contact-space benchmark additions
 
-抓取正式求解仅保留当前 v5 patch CEM 与 GraspADMM。当前 CEM 使用本地 Kelvin–Voigt 弹簧阻尼和切向历史适配，不将其表述为上游 ComFree 原公式。GraspADMM 的算法内部 QP 及官方来源校验保留。DexForge/ComFree 公共依赖继续服务于人体及 Dex 任务，未作为额外抓取入口。
+- `third_party/emf_wuji_reference` contains objective mathematics and the source-graph preparation excerpt from the user-authorized remote `emf_wuji_retarget/retarget_reference`, targeting SDK 2026.8.31. `SOURCE.json` records the source path and upstream/local SHA256 values; notices and the upstream nalgebra license are retained. No SDK binary, URDF, MANO preprocessing or nalgebra eigensolver is copied. This is an independent reference subset, not an official SDK release.
 
-独立评测数值工具 `retarget/integrations/supermimic/force_margin.py` 的来源提交与文件哈希见 `third_party/DexForge/NUMERICS_SOURCE.json`；对应许可证及声明继续保留。该工具不提供 pose 求解入口。
+- Vendored library `third_party/robokit` (original SimMPC, GaussianSampler, PopulationSolver, IK/LM, Task terms and MjWarpSim), plus migrated task scene/reference/scoring definitions, derive from [OpenRoboKit](https://github.com/openrobokit/robokit), commit `736f112df93eb40930219501246032605202684a` (MIT). Licenses: `third_party/robokit/LICENSE` and `retarget/task/contact/ROBOKIT-LICENSE`; retained library per-file hashes: `third_party/robokit/SOURCE.json` (examples/gallery excluded); source task hashes: `retarget/task/contact/SOURCE.json`.
+- Sharpa Wave MJCF and meshes are copied from the pinned `openrobokit/robokit` asset revision `045838f22292b6931f7bc7490959925b1495a77c` (Apache-2.0); license included in `data/contact/assets/sharpa/LICENSE`.
+- Unitree H1 MJCF and meshes derive from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie), commit `98a70c569c4c1b6da467a20012f766ee1f8dc521`; Unitree BSD license included in `data/contact/assets/h1/LICENSE`.
+- MuJoCo 4 speculative-contact behavior was studied at tag `4.0.0`, commit `ac60eae30fa7e0d31315c38d9476752fb81be67e` (Apache-2.0). The independent predictor uses public Python APIs; no internal C function is vendored or called. Engine constraint insertion remains native.
+
+- `moxian_web/mano_calibrate_flashsac.py`：参考 Holiday-Robot/FlashSAC 的设备常驻 tensor buffer 与编译更新组织，固定 revision `87edc9061150ae9e962dd84e6544e27a1554b3ab`（MIT）。此处是直接损失参数辨识实验，不是 SAC；来源见 `licenses/FlashSAC-SOURCE.json`，许可见 `licenses/FlashSAC-LICENSE`。
+
+- Wuji 完整原生标定固定使用官方 `wuji-sdk==2026.7.1` 发行wheel（SDK项目MIT许可证见 [上游许可证](https://github.com/wuji-technology/wuji-sdk/blob/main/LICENSE)，已解包的依赖保留原声明）；原生库不纳入仓库。`moxian_web/static/gestures/wuji_native/` 的12张动作图来自本机同版 Wuji Studio，保留原始内容及 `SOURCE.json` 来源/哈希；用于当前本地界面和离线验证，不将这些素材声明为本项目原创。当前标定流程见 `docs/moxian_six_calibration.md`。
+
+- `retarget/baseline/wuji_retargeting/upstream`：用户指定的 `ssh -p 1016 8.147.67.185:/mnt/cpfs/zbl-cpfs-new/USERS/jasonzhang/emf_wuji_retarget` 原版生产 EMF、人手 IK 和机器人重定向链路。生产源码、URDF、文档和许可证逐字节引入（排除原版测试），来源和 SHA256 见目录内 `SOURCE.json`；保留 `retarget_reference/NOTICE.txt`、`LICENSE-nalgebra.txt` 及 URDF 来源清单。资产许可范围沿用原声明，不据此重新授予许可。输入与网页显示适配位于 `retarget/baseline/wuji_retargeting`。
+
+Dexonomy 的 `dexonomy/data/hand_loader.py` 仅移除独立测试函数及其 Hydra 入口；原始哈希与本地修改说明记录于 `GRASPADMM_UPSTREAM.json`。`data/` 内资产由使用者在本地提供，其来源声明不代表资产随本次代码发布上传。

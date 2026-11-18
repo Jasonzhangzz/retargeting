@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SAM2 Annotator</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  :root {
+    --bg: oklch(0.18 0.004 260);
+    --bg-2: oklch(0.21 0.005 260);
+    --panel-2: oklch(0.25 0.006 260);
+    --hair: color-mix(in oklab, white 7%, transparent);
+    --text: oklch(0.93 0.004 260);
+    --text-dim: oklch(0.72 0.006 260);
+    --text-mute: oklch(0.52 0.006 260);
+    --pos: oklch(0.78 0.11 215);
+    --neg: oklch(0.72 0.12 25);
+    --box: oklch(0.82 0.09 95);
+    --ok: oklch(0.72 0.10 155);
+    --warn: oklch(0.78 0.11 70);
+    --err: oklch(0.65 0.14 25);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    letter-spacing: -0.005em;
+  }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  button { font: inherit; color: inherit; }
+
+  input[type="checkbox"] { accent-color: var(--text-dim); }
+</style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="application/json" id="tweak-defaults">
+  </script>
+
+  <script type="text/babel" data-presets="react" src="app.jsx"></script>
+</body>
+</html>

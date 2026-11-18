@@ -1,0 +1,8 @@
+Subset of the user-provided independent emf_wuji_retarget reference for wuji-sdk 2026.8.31.
+
+Included: objectives.py, _numeric.py and prepare_targets excerpt in targets.py.
+Source location and upstream/local SHA256 values are in SOURCE.json.
+No SDK binaries, URDF assets, MANO preprocessing or nalgebra eigensolver are included.
+The upstream nalgebra license is retained for provenance; its routines are not used here.
+Other formulas were independently reconstructed in the user-provided project.
+This is not an official Wuji SDK release and asserts no new license for upstream material.

@@ -69,3 +69,70 @@ def bind_grid(triangles, sids, axis, lateral):
 
 def surface_points(vertices, faces, face_ids, barycentric):
     return (np.asarray(vertices)[np.asarray(faces)[face_ids]] * np.asarray(barycentric)[..., None]).sum(-2)
+
+
+class CurvedTaxels:
+    """Exact SID evaluation on the browser's four-segment PN triangulation.
+
+    Evaluate only the tessellation vertices supporting the 460 SID locations.
+    The control normals are area weighted, as in THREE.computeVertexNormals.
+    """
+    policy = 'pn_segments4_cap1p5mm_v1'
+
+    def __init__(self, topology, segments=4):
+        self.linear = topology.get('surface_policy') in ('official_MANO_triangles','qnbot_original_triangles')
+        self.sid_bary = np.asarray(topology['sid_barycentric'],float)
+        self.faces = np.asarray(topology['faces'], int)
+        self.sid_faces = np.asarray(topology['sid_face_ids'], int)
+        if self.linear:return
+        self.child_bary = []
+        self.interpolation = []
+        children = []
+        for i in range(segments):
+            for j in range(segments-i):
+                bc = lambda a,b: np.array([1-(a+b)/segments,a/segments,b/segments])
+                children.append([bc(i,j),bc(i+1,j),bc(i,j+1)])
+                if i+j < segments-1:
+                    children.append([bc(i+1,j),bc(i+1,j+1),bc(i,j+1)])
+        for p in topology['sid_barycentric']:
+            for tri in children:
+                a,b,c = np.asarray(tri)
+                v,w = np.linalg.solve(np.stack((b[1:]-a[1:],c[1:]-a[1:]),axis=1),np.asarray(p)[1:]-a[1:])
+                bary = np.array([1-v-w,v,w])
+                if bary.min() >= -1e-6:
+                    bary = np.maximum(bary,0);bary /= bary.sum()
+                    self.child_bary.append(tri);self.interpolation.append(bary);break
+            else:
+                raise ValueError('SID outside its material triangle')
+        self.child_bary = np.asarray(self.child_bary)
+        self.interpolation = np.asarray(self.interpolation)
+        u,v,w = self.child_bary.transpose(2,0,1)
+        self.coefficients = np.stack((u**3,v**3,w**3,3*u*u*v,3*u*v*v,3*u*u*w,3*u*w*w,3*v*v*w,3*v*w*w,6*u*v*w),-1)
+
+    def evaluate(self, vertices):
+        # The browser stores controls in Float32 BufferGeometry before normals.
+        vertices = np.asarray(vertices,dtype=np.float32).astype(float)
+        tri = vertices[self.faces]
+        cross = np.cross(tri[:,1]-tri[:,0],tri[:,2]-tri[:,0])
+        if self.linear:
+            normal=cross[self.sid_faces]
+            normal/=np.maximum(np.linalg.norm(normal,axis=1,keepdims=True),1e-12)
+            return (tri[self.sid_faces]*self.sid_bary[...,None]).sum(1),normal
+        normals = np.zeros_like(vertices)
+        for k in range(3):np.add.at(normals,self.faces[:,k],cross)
+        normals /= np.maximum(np.linalg.norm(normals,axis=1,keepdims=True),1e-12)
+        normals = normals.astype(np.float32).astype(float)
+        p = tri[self.sid_faces];n = normals[self.faces[self.sid_faces]]
+        controls = [p[:,k] for k in range(3)]
+        for a,b in ((0,1),(1,0),(0,2),(2,0),(1,2),(2,1)):
+            projection = ((p[:,b]-p[:,a])*n[:,a]).sum(-1,keepdims=True)
+            controls.append((2*p[:,a]+p[:,b]-projection*n[:,a])/3)
+        controls.append(np.mean(controls[3:9],axis=0)*1.5-p.sum(1)/6)
+        curved = np.einsum('sck,skd->scd',self.coefficients,np.stack(controls,1))
+        linear = np.einsum('sck,skd->scd',self.child_bary,p)
+        delta = curved-linear
+        curved = (linear+delta*np.minimum(1,.0015/np.maximum(np.linalg.norm(delta,axis=-1,keepdims=True),1e-12))).astype(np.float32).astype(float)
+        points = (curved*self.interpolation[...,None]).sum(1)
+        normal = np.cross(curved[:,1]-curved[:,0],curved[:,2]-curved[:,0])
+        normal /= np.maximum(np.linalg.norm(normal,axis=1,keepdims=True),1e-12)
+        return points,normal

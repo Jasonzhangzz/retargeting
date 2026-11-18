@@ -1,0 +1,15 @@
+mode: solve
+task:
+  type: contact
+  name: sharpa_coin
+  data: ../data/contact
+solver:
+  type: contact_cem
+environment:
+  device: cuda:0
+output:
+  name: contact_sharpa_coin
+visualization:
+  live: false
+  save_video: true
+seed: 0

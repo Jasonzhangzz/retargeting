@@ -1,0 +1,21 @@
+{
+  "source": "/mnt/cpfs/zbl-cpfs-new/USERS/jasonzhang/emf_wuji_retarget/retarget_reference",
+  "target_sdk": "2026.8.31",
+  "scope": "objective and source graph mathematics only; no URDF, SDK binaries or eigensolver",
+  "upstream_sha256": {
+    "objectives.py": "602afb55d5bc0343d84005ace519ba02c3f2ea187e56329c996f994d3c4fbac9",
+    "_numeric.py": "1a3e403b05d2c805a21ea90bb2ef2210416d96e8afe720674df4d2e520be4e88",
+    "preprocess.py": "fca8917409c6902cbd013df28e6dd72f819dc88a00feca3f536e5a92b58c06d8",
+    "eigen.py": "f3bb3a1e54b472973d42a9768705baf61575da7fa39d0ae2c772d004d9f0236b",
+    "NOTICE.txt": "19b5ae3ea952f783c96aac8f9d44b3771530c92a2f1b04f6fbad79b0cf665b3c",
+    "LICENSE-nalgebra.txt": "ceacfa4d7fa67df64ab09a56fe248c50a3bfc9bc00374d69bd74ad763b14b89c"
+  },
+  "local_sha256": {
+    "objectives.py": "602afb55d5bc0343d84005ace519ba02c3f2ea187e56329c996f994d3c4fbac9",
+    "_numeric.py": "1a3e403b05d2c805a21ea90bb2ef2210416d96e8afe720674df4d2e520be4e88",
+    "targets.py": "2f3b6d32ab5bac62eb5913e564af8b2a5fd60d68c08e25618d38bb56407487a4"
+  },
+  "excerpts": {
+    "targets.py": "preprocess.py:prepare_targets only; no frame estimation or pinch"
+  }
+}

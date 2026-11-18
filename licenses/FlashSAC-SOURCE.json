@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/Holiday-Robot/FlashSAC",
+  "revision": "87edc9061150ae9e962dd84e6544e27a1554b3ab",
+  "license": "MIT",
+  "reviewed_files": [
+    "flash_rl/buffers/torch_buffer.py",
+    "flash_rl/agents/flashSAC/agent.py",
+    "flash_rl/agents/flashSAC/update.py"
+  ],
+  "adaptation": "Independent fixed-data direct-loss calibration. Device tensor buffer and compiled update organization only; no SAC actor/critic/reward implementation is claimed.",
+  "sha256": {
+    "flash_rl/buffers/torch_buffer.py": "663ec003992ebda3c029c963eb93db8b902bc666cdd76f451e7cb348d37439a9",
+    "flash_rl/agents/flashSAC/agent.py": "e1bb9c49cdf1b72507705403801a5dc993471a89f69dbcee973f14949895595a",
+    "flash_rl/agents/flashSAC/update.py": "6134612e4ad43089dd44ce06cb6644546e864a3de13bb12525cb631e65aa30ef"
+  }
+}

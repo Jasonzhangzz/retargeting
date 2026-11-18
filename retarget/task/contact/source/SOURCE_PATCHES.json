@@ -1,0 +1,44 @@
+{
+  "pen": {
+    "source": "robokit/examples/sim_mpc/07_sharpa_pen.py",
+    "source_sha256": "b943f3c17588d548477b529d9e3cb88c5469c1cb51788cd59ca44fda6286f638",
+    "retained_main_lines": [
+      78,
+      134
+    ],
+    "changes": [
+      "Expose setup as prepare; return locals before constructing SimMPC",
+      "Resolve pinned local asset paths",
+      "Use execution-state mirror instead of stepping a GPU execution model",
+      "Seed plumbing; headless setup; bound coin initialization to 100 attempts"
+    ]
+  },
+  "coin": {
+    "source": "robokit/examples/sim_mpc/08_sharpa_coin.py",
+    "source_sha256": "4f238f3a34760eef8034f3ea9bdd7361a1de70cfc69a3135eaa476c3ba78a387",
+    "retained_main_lines": [
+      43,
+      190
+    ],
+    "changes": [
+      "Expose setup as prepare; return locals before constructing SimMPC",
+      "Resolve pinned local asset paths",
+      "Use execution-state mirror instead of stepping a GPU execution model",
+      "Seed plumbing; headless setup; bound coin initialization to 100 attempts"
+    ]
+  },
+  "h1": {
+    "source": "robokit/examples/sim_mpc/11_h1_jog.py",
+    "source_sha256": "0af0d69047043d58c620dddca45d6aa2d031c925df8bffacd883303f8ede3613",
+    "retained_main_lines": [
+      30,
+      115
+    ],
+    "changes": [
+      "Expose setup as prepare; return locals before constructing SimMPC",
+      "Resolve pinned local asset paths",
+      "Use execution-state mirror instead of stepping a GPU execution model",
+      "Seed plumbing; headless setup; bound coin initialization to 100 attempts"
+    ]
+  }
+}

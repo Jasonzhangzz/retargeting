@@ -335,8 +335,8 @@ class PatchGeometry(ManoRolloutGeometry):
         return parts['valid']&parts['rollout_stable']&(depth[:,0]<=self.settings.hand_object_allowance_m+1.e-8)&(depth[:,1]<=self.settings.penetration_tolerance_m)
 
     @torch.no_grad()
-    def _compute(self,value,ids,*,decoded=None):
-        _,parts=super()._compute(value,ids,decoded=decoded)
+    def _compute(self,value,ids,*,decoded=None,triangle_penetration=None):
+        _,parts=super()._compute(value,ids,decoded=decoded,triangle_penetration=triangle_penetration)
         strict,soft,_=patch_penetration_terms(parts['penetration_depth_m'],self.settings,self.patch_settings)
         parts.update(penetration=strict,soft_penetration=soft,
             anchor_distance_m=(parts['mapped_hand_points']-self.anchors[ids]).norm(dim=-1),

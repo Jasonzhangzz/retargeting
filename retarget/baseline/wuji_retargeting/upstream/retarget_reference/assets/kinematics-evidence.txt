@@ -1,0 +1,35 @@
+独立运动学资产与验证说明
+
+资产直接由wuji_sdk.so固定SHA256 a179dcb71d0a5675abe0570d83201db726e545ec7583aba34ae0bcdc54ac7fd5的.rodata提取，未采用项目URDF代替SDK模型。manifest.json记录每个完整<robot>...</robot>片段的文件偏移、长度和SHA256。省略了片段之前的XML声明；robot节点原始字节没有改写。四模型的关节几何与SDK原生FK64个姿态样本数值吻合，进一步验证了资产选择，而非只凭机器人名称归类。
+
+接口
+from retarget_reference.kinematics import HandKinematics
+model=HandKinematics('WujiHand'或'WujiHand2','left'或'right')
+P,J=model.forward(q)
+P shape(21,3)，单位m；J shape(21,3,20)，单位m/rad；q shape(20,)，单位rad。
+model.bounds shape(20,2)，另有lower、upper；joint_names、landmark_names、landmark_ids；antirev_indices。
+forward不进行关节限制投影，不依赖SDK，也不加载SDK/调用设备。只支持已提取内置模型的backoff=0；非零backoff显式NotImplementedError。
+
+模型与排列
+Hand1：掌心{side}_palm_link，然后finger1至finger5各取link2/link3/link4/tip_link。关节顺序为finger1_joint1..4，直到finger5_joint1..4。
+Hand2：{l/r}_wrist，然后thumb/index_finger/middle_finger/ring_finger/pinky各取proximal/middle/distal/tip。每指按根至指尖的4个主动关节排序。注意proximal_abd不是21点中的第一点，proximal才是；但abd关节仍属于20维q。
+两代20维q均为每指根至末端4关节、拇指到小指。解析J按相同列顺序计算。
+Hand1零点根为palm_link；Hand2根为base，包含URDF内base_to_wrist的pi绕X固定旋转。省去这条固定关节会错误翻转Hand2坐标。
+实际SDK session+e0/e8/f0内21个link ID与XML中link声明顺序中的上述name索引完全一致。SDK session+188/+190/+198的20对bounds与URDF limits逐值一致。
+实际SDK anti-reversal索引为[2,3,6,7,10,11,14,15,18,19]，只惩罚每指后两关节，不包括第一个屈曲关节和第二个外展关节。由session+170/+178/+180有界读取得到，四配置一致。
+
+纯NumPy实现
+URDF origin为T(xyz)*Rz(yaw)*Ry(pitch)*Rx(roll)，主动关节为随后局部axis的Rodrigues旋转，axis归一化。世界位置为逐父节点累积变换。某关节对后代landmark的位置导数为world_axis cross(point-world_joint_origin)；非祖先为0。64组native对照排除了错误旋转顺序、错轴、错关节排列以及错选landmark的候选实现。
+
+验证
+probe-kinematics.py在独立短期Python进程内验证。目标SDK SHA先校验；只调用公开for_hand/step确认对象内布局，然后调用原生纯FK辅助0x10a69a6作为oracle。地址在该SHA库的当前进程可执行映射内核验。PyO3完整对象816字节内，先以返回80字节唯一匹配history得到core+24，所有后续描述符读取保持对象范围内；读取动态向量前检查数量、容量和整个指针范围位于/proc/self/maps可读区域。原生结果向量暂留至进程退出，不调用未经确认的foreign free；约不到1MB。没有设备API，没有修改SDK数据或用户项目。
+四配置各16组q：全零、上下界中点、全下界、全上界、固定种子20261021的12个界内均匀随机向量。
+共64组、4032个位置标量、80640个Jacobian标量。
+P最大绝对差1.5265566588595902e-16 m，RMSE1.7509489252102216e-17 m。
+J最大绝对差1.942890293094024e-16 m/rad，RMSE7.003273001251457e-18 m/rad。
+独立中心差分h=1e-6对解析J检查，四配置最大差分别1.7979e-11、1.6170e-11、1.8152e-11、1.6528e-11 m/rad。
+明细见上级目录kinematics-verification.json，含q、逐样本误差、关节/点名字、bounds、实际link ID和anti索引。
+
+局限
+这里只验证独立FK及其解析Jacobian；不代表完整RetargetSession.step或优化轨迹误差。残余差异属于不同矩阵/四元数运算路径的浮点舍入量级，仍可能在非凸优化与紧预算迭代中放大。只有内置backoff=0、20维和该固定版本经过核对；没有实现用户自定义URDF、非零backoff或设备实际位姿反馈。
+项目replay/calibrated/topo.py是Delaunay双手几何图与缓存/回放流程，文件已单独留作probe-project-topo.py；它不是这里SDK的指数权重Laplacian图或原生FK实现，没有把其Delaunay逻辑混入参考实现。

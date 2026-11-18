@@ -1,0 +1,41 @@
+{
+  "binary_sha256": "a179dcb71d0a5675abe0570d83201db726e545ec7583aba34ae0bcdc54ac7fd5",
+  "entries": [
+    {
+      "filename": "WujiHand2_right.urdf",
+      "model": "WujiHand2",
+      "side": "right",
+      "elf_va": "0x3a3c10",
+      "file_offset": 3816464,
+      "size": 31887,
+      "sha256": "42333d66032c41b21329a39a19d64d893b209b890460e75427f0331550e7b788"
+    },
+    {
+      "filename": "WujiHand2_left.urdf",
+      "model": "WujiHand2",
+      "side": "left",
+      "elf_va": "0x3ab9de",
+      "file_offset": 3848670,
+      "size": 31253,
+      "sha256": "1c1c03871f72503f565fd262fc366773e312c12c4a08c9d555baccc636a6f1db"
+    },
+    {
+      "filename": "WujiHand_right.urdf",
+      "model": "WujiHand",
+      "side": "right",
+      "elf_va": "0x3b341a",
+      "file_offset": 3879962,
+      "size": 28888,
+      "sha256": "24a8db71efb88cf4c8d848a0fe2fe63f543acaf201666aeb4a14a8a88ce52dc4"
+    },
+    {
+      "filename": "WujiHand_left.urdf",
+      "model": "WujiHand",
+      "side": "left",
+      "elf_va": "0x3ba519",
+      "file_offset": 3908889,
+      "size": 28637,
+      "sha256": "3e2d87d1f80f69b963e3865c41e04cd80b505eaf132fd2f206815bfd9edf21dc"
+    }
+  ]
+}

@@ -6,6 +6,16 @@ DIMENSION_COUNT=20  # 5 fingers x 3 axial scales, then 5 radial scales
 PENETRATION_TOLERANCE_M=.005
 PROXIMAL_WIDTH_POLICY='fixed_proximal_lateral_scales_v1'
 
+def translate_finger_bases(vertices,joints,weights,chains,lateral,offsets):
+    x=np.asarray(offsets,dtype=float)
+    if x.shape!=(4,) or not np.isfinite(x).all() or np.max(abs(x))>.0081:raise ValueError('指根位置校正超出 8 mm')
+    out=np.array(vertices,copy=True);jn=np.array(joints,copy=True)
+    for f,c in enumerate(chains[1:]):
+        delta=np.asarray(lateral)*x[f]
+        out+=weights[:,list(c)].sum(1)[:,None]*delta
+        jn[list(c)]+=delta
+    return out,jn
+
 def scale_proximal_width(vertices,joints,weights,chains,palm_normal,log_scales):
     """Independent proximal breadth, without inflating depth or moving joints.
 

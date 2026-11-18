@@ -7,7 +7,21 @@ from __future__ import annotations
 import ctypes as C
 import json
 import math
+import hashlib
+import os
+import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
+
+def joint_limit_diagnostics(names,positions,limits,tolerance_rad=.01):
+    """Report saturation, without modifying official joint commands."""
+    result=[]
+    for name,value in zip(names,positions):
+        if name not in limits:continue
+        lo,hi=limits[name]
+        if value-lo<=tolerance_rad:result.append({'joint':name,'bound':'lower','value_rad':value,'limit_rad':lo})
+        elif hi-value<=tolerance_rad:result.append({'joint':name,'bound':'upper','value_rad':value,'limit_rad':hi})
+    return result
 
 class View(C.Structure):
     _fields_=[('data',C.c_char_p),('size',C.c_size_t)]
@@ -49,8 +63,28 @@ def matrix_quaternion(m):
     q[i]=s/4;q[j]=(m[3*i+j]+m[3*j+i])/s;q[k]=(m[3*i+k]+m[3*k+i])/s;q[3]=(m[3*k+j]-m[3*j+k])/s
     return q
 
+def registered_observation(node,transform=None):
+    """Transform a private native input, leaving raw observations untouched."""
+    p=list(node['position']);r=quaternion_matrix(node['quaternion_xyzw'])
+    if transform:
+        a=transform['rotation'];b=transform['translation_m']
+        p=[sum(a[i][j]*p[j] for j in range(3))+b[i] for i in range(3)]
+        r=[sum(a[i][k]*r[3*k+j] for k in range(3)) for i in range(3) for j in range(3)]
+    return p,r
+
 class NativeSkeleton:
-    def __init__(self,package_root,config_path):
+    def __init__(self,package_root,config_path,side="left"):
+        from .hand_side import check_side
+        self.side=check_side(side);self.side_id=1 if side=="left" else 0
+        # The native library names its generated URDF cache after the config
+        # basename, ignoring the parent directory. Independent calibrations
+        # previously raced on evaluation_left/right.urdf. Give every process
+        # and configuration a distinct cache key; preserve source files.
+        contents=Path(config_path).read_text()
+        self.config_directory=tempfile.TemporaryDirectory(prefix='qnbot-native-')
+        config_path=Path(self.config_directory.name)/f'native-{os.getpid()}-{hashlib.sha256(contents.encode()).hexdigest()[:24]}.yaml'
+        config_path.write_text(contents);self.runtime_config_path=config_path
+        self.previous_joints=None;self.previous_timestamp=None;self.frames=0
         self.lib=C.CDLL(str(Path(package_root)/'lib/libqnbot_hand.so'));lib=self.lib;self.handle=C.c_void_p();self.sdk_context=C.c_void_p()
         def sig(name,args,result):
             f=getattr(lib,name);f.argtypes=args;f.restype=result;return f
@@ -72,11 +106,17 @@ class NativeSkeleton:
         sig('qh_engine_step',[ptr,C.POINTER(GloveFrame),C.POINTER(JointBuffer)],C.c_int)
         sig('qh_engine_get_last_target',[ptr,C.POINTER(Target)],C.c_int)
         sig('qh_engine_get_last_skeleton_pose',[ptr,C.POINTER(SkeletonBuffer)],C.c_int)
-        resource_root=None
+        resource_root=None;self.input_registration={}
         for line in Path(config_path).read_text().splitlines():
             if line.startswith('__resource_root__:'):
                 value=line.split(':',1)[1].strip()
                 resource_root=json.loads(value) if value.startswith('"') else value
+            if line.startswith('__moxian_input_registration__:'):
+                from .kinematic_policy import validate_input_transform
+                self.input_registration=json.loads(line.split(':',1)[1])
+                for name,transform in self.input_registration.items():
+                    if name not in ('thumb','index','middle','ring','pinky'):raise ValueError('Unknown registered channel')
+                    validate_input_transform(transform)
         if resource_root:
             # A prior SDK session can retain its default resource context. Use
             # an explicit C ABI context so this engine owns the derived limits.
@@ -96,34 +136,50 @@ class NativeSkeleton:
         self.names=[lib.qh_engine_skeleton_node_name(self.handle,i).decode() for i in range(self.node_count)]
         self.joint_names=[lib.qh_engine_joint_name(self.handle,i).decode() for i in range(self.joint_count)]
         self.joint_side_initialized=False
+        resource=Path(resource_root) if resource_root else Path(package_root)/'share/qnbot_hand'
+        urdf=resource/f'hands/dynamic_openxr_hand/resources/pinocchio/{self.side}_skeleton.urdf'
+        self.joint_limits={}
+        for joint in ET.parse(urdf).getroot().findall('joint'):
+            limit=joint.find('limit')
+            if limit is not None:self.joint_limits[joint.get('name')]=(float(limit.get('lower')),float(limit.get('upper')))
 
     def check(self,status):
         if status:raise RuntimeError((self.lib.qh_engine_last_error(self.handle) or b'Native hand error').decode())
 
     def step(self,frame):
+        if frame.get('hand_side',self.side)!=self.side:raise ValueError('输入帧与原生引擎手侧不匹配')
         if not math.isfinite(frame['timestamp_ms']):raise ValueError('Invalid millisecond timestamp')
         for name in ('thumb','index','middle','ring','pinky'):
             p=frame['fingers'][name]['position']
             if len(p)!=3 or not all(math.isfinite(v) for v in p):raise ValueError('Invalid metre position')
-        f=GloveFrame();f.size=C.sizeof(f);f.abi=2;f.glove=View.text('moxian');f.timestamp=frame['timestamp_ms']/1000.;f.side=1;f.local_mask=31
+        f=GloveFrame();f.size=C.sizeof(f);f.abi=2;f.glove=View.text('moxian');f.timestamp=frame['timestamp_ms']/1000.;f.side=self.side_id;f.local_mask=31
         f.root.rotation[:]=[1,0,0,0,1,0,0,0,1]
         for i,name in enumerate(('thumb','index','middle','ring','pinky')):
-            node=frame['fingers'][name];f.local[i].position[:]=node['position'];f.local[i].rotation[:]=quaternion_matrix(node['quaternion_xyzw'])
-        output=JointBuffer(C.sizeof(JointBuffer),2,0,1,0,self.joint_count,self.positions)
+            p,r=registered_observation(frame['fingers'][name],self.input_registration.get(name))
+            f.local[i].position[:]=p;f.local[i].rotation[:]=r
+        output=JointBuffer(C.sizeof(JointBuffer),2,0,self.side_id,0,self.joint_count,self.positions)
         self.check(self.lib.qh_engine_step(self.handle,C.byref(f),C.byref(output)))
         if not self.joint_side_initialized:
             # The package defaults to right; first left frame selects the actual
             # hand. Query names after that switch so diagnostics name left DOFs.
             self.joint_names=[self.lib.qh_engine_joint_name(self.handle,i).decode() for i in range(self.joint_count)]
-            if not all(n.startswith('left_') for n in self.joint_names):raise ValueError('原生引擎未切换到左手')
+            if not all(n.startswith(self.side+'_') for n in self.joint_names):raise ValueError('原生引擎未切换到 '+self.side)
             self.joint_side_initialized=True
         target=Target();target.size=C.sizeof(target);target.abi=2
         self.check(self.lib.qh_engine_get_last_target(self.handle,C.byref(target)))
-        bones=SkeletonBuffer(C.sizeof(SkeletonBuffer),2,0,1,0,self.node_count,self.nodes)
+        bones=SkeletonBuffer(C.sizeof(SkeletonBuffer),2,0,self.side_id,0,self.node_count,self.nodes)
         self.check(self.lib.qh_engine_get_last_skeleton_pose(self.handle,C.byref(bones)))
-        return {'pose':{'timestamp_ms':frame['timestamp_ms'],'hand_side':'left','coordinate_frame':'wrist_local','names':self.names,
+        current=list(self.positions);steps=[]
+        if self.previous_joints is not None:
+            steps=[{'joint':name,'delta_deg':math.degrees(now-old)} for name,old,now in zip(self.joint_names,self.previous_joints,current) if name.startswith(self.side+'_thumb_')]
+        self.frames+=1
+        continuity={'engine_frames':self.frames,'reused_engine':self.frames>1,'interval_ms':None if self.previous_timestamp is None else frame['timestamp_ms']-self.previous_timestamp,
+                    'thumb_joint_steps':steps,'max_thumb_step_deg':max((abs(s['delta_deg']) for s in steps),default=0.)}
+        self.previous_joints=current;self.previous_timestamp=frame['timestamp_ms']
+        return {'continuity':continuity,'joint_limit_diagnostics':joint_limit_diagnostics(self.joint_names,current,self.joint_limits),
+                'pose':{'timestamp_ms':frame['timestamp_ms'],'hand_side':self.side,'coordinate_frame':'wrist_local','names':self.names,
                         'joint_names':self.joint_names,'joint_positions_rad':list(self.positions),'positions_local':[list(n.position) for n in self.nodes],'orientations_local_xyzw':[list(n.quaternion) for n in self.nodes]},
-                'targets':{'timestamp_ms':frame['timestamp_ms'],'hand_side':'left','coordinate_frame':'wrist_local',
+                'targets':{'timestamp_ms':frame['timestamp_ms'],'hand_side':self.side,'coordinate_frame':'wrist_local',
                            'names':['thumb','index','middle','ring','pinky'],
                            'positions_local':[list(n.position) for n in target.tips_local],
                            'rotations_local':[list(n.rotation) for n in target.tips_local],
@@ -138,3 +194,4 @@ class NativeSkeleton:
     def close(self):
         if self.handle:self.lib.qh_engine_destroy(self.handle);self.handle=C.c_void_p()
         if self.sdk_context:self.lib.qh_sdk_destroy(self.sdk_context);self.sdk_context=C.c_void_p()
+        if self.config_directory:self.config_directory.cleanup();self.config_directory=None

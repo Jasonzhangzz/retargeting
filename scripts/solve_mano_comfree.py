@@ -85,11 +85,9 @@ def main():
     parser.add_argument('--candidate-chunk', type=int, default=DEFAULTS.resources.candidate_chunk)
     parser.add_argument('--seed', type=int, default=7)
     parser.add_argument('--score-only', action='store_true')
-    parser.add_argument('--benchmark-repeats', type=int, default=3)
-    parser.add_argument('--benchmark-candidates', type=int, default=0, help='Repeat the same fixed inputs for scoring throughput only')
     args = parser.parse_args()
-    if min(args.batch_size, args.candidate_chunk, args.benchmark_repeats) < 1 or args.benchmark_candidates < 0:
-        parser.error('Positive batch/chunk/repetition counts required')
+    if min(args.batch_size, args.candidate_chunk) < 1:
+        parser.error('Positive batch/chunk counts required')
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     if (output / 'MANIFEST.json').exists():
@@ -161,16 +159,6 @@ def run_packets(args, output, decoder, mapping, skeleton, cache, frozen):
             initial_cost = adapter.validate(mean, rows)[0].clone()
             before = {k: v.clone() for k, v in adapter.last.items()}
             initial_accepted = before.get('patch_joint_accepted')
-            repeat_count = args.benchmark_candidates or n
-            select = torch.arange(repeat_count, device=args.device) % n
-            candidates = mean[select]
-            bench_rows = rows[select]
-            timings = []
-            for _ in range(args.benchmark_repeats):
-                t = sync_time(args.device)
-                adapter.evaluate(candidates, bench_rows)
-                timings.append(sync_time(args.device) - t)
-            print(json.dumps(dict(type=typ, batch_start=start, phase='scoring_ready', preparation_s=preparation, score_seconds=timings)), flush=True)
             t = sync_time(args.device)
             patch_state = None
             result = None
@@ -226,7 +214,7 @@ def run_packets(args, output, decoder, mapping, skeleton, cache, frozen):
                 metrics.append(dict(source_row=source_rows[start + i], before=metric(before), after=metric(parts), criterion=adapter.criterion))
             write(folder / 'metrics.json', metrics)
             write(folder / 'model.json', dict(model_sha256=sha(decoder.base.path), appearance=decoder.base.appearance, asset_metadata=decoder.base.asset_metadata))
-            report = dict(type=typ, rows=source_rows[start:end], samples=n, initialization_seconds=initialization, solve_seconds=solving, acceptance_seconds=acceptance, preparation_seconds=preparation, warmup_seconds=warmup, save_seconds=time.perf_counter() - t, score_candidate_count=repeat_count, score_seconds=timings, score_only=args.score_only, pose_solver='cem', objective=adapter.objective, group_names=adapter.group_names, cem_updates_per_pose=patch_state['iterations'].cpu().tolist() if patch_state else cem.iterations if result is not None else 0, candidate_evaluations_per_pose=patch_state['evaluations'].cpu().tolist() if patch_state else 0 if result is None else cem.population * cem.iterations + 1, early_stopped_poses=int(patch_state['early_stopped'].sum()) if patch_state else 0, stable_before=sum((r['before']['stable'] for r in metrics)), stable_after=sum((r['after']['stable'] for r in metrics)), geometry_before=sum((r['before']['geometry_accepted'] for r in metrics)), geometry_after=sum((r['after']['geometry_accepted'] for r in metrics)), output=str(folder))
+            report = dict(type=typ, rows=source_rows[start:end], samples=n, initialization_seconds=initialization, solve_seconds=solving, acceptance_seconds=acceptance, preparation_seconds=preparation, warmup_seconds=warmup, save_seconds=time.perf_counter() - t, score_only=args.score_only, pose_solver='cem', objective=adapter.objective, group_names=adapter.group_names, cem_updates_per_pose=patch_state['iterations'].cpu().tolist() if patch_state else cem.iterations if result is not None else 0, candidate_evaluations_per_pose=patch_state['evaluations'].cpu().tolist() if patch_state else 0 if result is None else cem.population * cem.iterations + 1, early_stopped_poses=int(patch_state['early_stopped'].sum()) if patch_state else 0, stable_before=sum((r['before']['stable'] for r in metrics)), stable_after=sum((r['after']['stable'] for r in metrics)), geometry_before=sum((r['before']['geometry_accepted'] for r in metrics)), geometry_after=sum((r['after']['geometry_accepted'] for r in metrics)), output=str(folder))
             write(folder / 'report.json', report)
             reports.append(report)
             write(output / 'status.json', dict(complete=False, reports=reports))
