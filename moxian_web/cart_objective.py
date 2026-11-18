@@ -262,16 +262,16 @@ class CartObjective:
             contact_query_valid=contact_valid,unresolved_contact_count=unresolved)
         return total,parts,metrics
 
-    def batch(self,q,rows,references=None,targets=None,acceleration=None,previous_rows=None,audit=False,normalizers=None):
+    def batch(self,q,rows,references=None,targets=None,acceleration=None,previous_rows=None,audit=False,normalizers=None,*,collect_metrics=True):
         s=self.settings
         if self.collision is not None and not audit:
             if targets is not None or any((s.lambda_lap,s.lambda_thumb_rel,s.lambda_antirev)):
                 raise ValueError('可微策略必须使用连续接触场目标；旧 CARD／轨迹代价仅供历史审计')
             from .cart_fast import fast_objective
-            return fast_objective(self,q,rows,references,acceleration,previous_rows,False,normalizers)
+            return fast_objective(self,q,rows,references,acceleration,previous_rows,False,normalizers,collect_metrics=collect_metrics)
         if self.vectorized and self.collision is not None and targets is None and not any((s.lambda_lap,s.lambda_thumb_rel,s.lambda_antirev)):
             from .cart_fast import fast_objective
-            return fast_objective(self,q,rows,references,acceleration,previous_rows,audit,normalizers)
+            return fast_objective(self,q,rows,references,acceleration,previous_rows,audit,normalizers,collect_metrics=collect_metrics)
         totals=[]; parts={}; metrics=[];groups={}
         frames=self.hand.frames(q)
         if self.collision is None:

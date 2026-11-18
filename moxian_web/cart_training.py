@@ -52,7 +52,7 @@ class RolloutTrajectory:
         rows=[row for step in self.pending for row in step[1]]
         collision.collect_queries(states,rows,frames,sample_budget=512*len(self.pending))
 
-    def loss(self,objective,*,audit=False,batch_losses=True):
+    def loss(self,objective,*,audit=False,batch_losses=True,collect_metrics=True):
         collision=objective.collision;old=collision.auditing if collision is not None else False
         if collision is not None:collision.auditing=audit
         # Native dense audit retains its step-sized scratch-memory bound.
@@ -70,7 +70,7 @@ class RolloutTrajectory:
                 weights=self.normalizers if self.normalizers is not None else group_normalizers(self.batch)
                 row_weights=[weights[t] for t in range(length) for _ in self.batch]
                 loss,parts,metrics=objective.batch(states,rows,references,acceleration=acceleration,
-                    previous_rows=previous,audit=audit,normalizers=row_weights)
+                    previous_rows=previous,audit=audit,normalizers=row_weights,collect_metrics=collect_metrics)
                 # Only the monitor excludes the first frame; its acceleration
                 # loss contribution stays zero in the T-frame average.
                 if length>1:parts['acceleration']=parts['acceleration']*length/(length-1)
@@ -206,7 +206,7 @@ def policy_update(model,objective,learner,optimizer,batch,parallel_batch_size,ch
         if progress:progress('geometry',step+1,2)
     times['sdf_s']=time.perf_counter()-started;started=time.perf_counter()
     with frozen(objective.collision.model):
-        check();loss,parts,_,_=trajectory.loss(objective,batch_losses=batch_losses)
+        check();loss,parts,_,_=trajectory.loss(objective,batch_losses=batch_losses,collect_metrics=False)
         if not torch.isfinite(loss):raise ValueError('CART loss 出现 NaN/Inf')
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(),10.,error_if_nonfinite=True);optimizer.step()

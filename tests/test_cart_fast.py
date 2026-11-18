@@ -123,6 +123,76 @@ def test_batched_cost_matches_reference_loss_and_joint_gradient(geometry):
             torch.testing.assert_close(a[key],b[key])
 
 
+def test_training_can_skip_quality_objects_without_changing_loss_or_gradient(geometry):
+    hand,collision=geometry;rows=make_rows(hand);chosen=[rows[i] for i in (4,5,7,8)]
+    previous=[rows[i-1] for i in (4,5,7,8)]
+    q=(((hand.low+hand.high)/2)[None].repeat(4,1)+.03).requires_grad_()
+    obj=CartObjective(hand,policy_settings(),collision)
+    with frozen(collision.model):
+        expected,parts,metrics=obj.batch(q,chosen,previous_rows=previous)
+        a=torch.autograd.grad(expected,q)[0]
+        actual,other,empty=obj.batch(q,chosen,previous_rows=previous,collect_metrics=False)
+        b=torch.autograd.grad(actual,q)[0]
+    assert metrics and empty==[]
+    torch.testing.assert_close(actual,expected,rtol=0,atol=0)
+    torch.testing.assert_close(a,b,rtol=0,atol=0)
+    for key in parts:torch.testing.assert_close(parts[key],other[key],rtol=0,atol=0)
+
+
+def test_retained_links_average_points_directions_and_terms_with_matching_gradient(geometry):
+    hand,collision=geometry;q=(((hand.low+hand.high)/2)[None].repeat(4,1)+.02).requires_grad_()
+    rows=make_rows(hand)[:4];previous=make_rows(hand)[:4]
+    for i,(row,old) in enumerate(zip(rows,previous)):
+        old['timestamp_ms']=i*20;row['timestamp_ms']=i*20+10
+        for item in (row,old):item['contacts'].update(object_contacts=[],self_pairs=[],tactile_ready=True)
+    def contact(region,points):return dict(region=region,position_m=points[0],observed_points_m=points)
+    clouds=[[.03,.02,.04],[.04,.01,.05]]
+    for item in (rows[1],previous[1]):
+        item['contacts']['object_contacts']=[contact('index_distal',clouds)]
+        item['contacts']['self_pairs']=[dict(regions=['thumb_distal','index_distal'])]
+    for item in (rows[2],previous[2]):item['contacts']['object_contacts']=[contact('index_distal',clouds),contact('middle_distal',clouds[:1])]
+    previous[0]=None
+    frames=hand.frames(q);p,r=frames[:2];original=collision.distance
+    def distance(local,links,**kwargs):return .2*local[...,0]+.1*local[...,1]+.03
+    collision.distance=distance
+    try:actual,counts=collision.retention(q,rows,previous,frames,scale=.1)
+    finally:collision.distance=original
+    def penalty(row,owner,world):
+        local=(r[row,owner].T@(world-p[row,owner])[...,None]).squeeze(-1)
+        cost=(distance(local,None)/.1).square()
+        return 1-(torch.softmax(-cost,0)*torch.exp(-.5*cost)).sum()
+    points=q.new_tensor(clouds)
+    a=penalty(1,8,points)
+    directions=[]
+    for source,target in ((4,8),(8,4)):
+        material=collision.oracle.surface_by_link[source]
+        directions.append(penalty(1,target,(r[1,source]@material[...,None]).squeeze(-1)+p[1,source]))
+    expected=torch.stack((q.sum()*0,(a+torch.stack(directions).mean())/2,
+        (penalty(2,8,points)+penalty(2,12,points[:1]))/2,q.sum()*0))
+    assert counts==[0,2,2,0]
+    torch.testing.assert_close(actual,expected,rtol=2.e-6,atol=1.e-7)
+    a=torch.autograd.grad(actual.sum(),q,retain_graph=True)[0];b=torch.autograd.grad(expected.sum(),q)[0]
+    torch.testing.assert_close(a,b,rtol=2.e-5,atol=2.e-7)
+
+
+def test_label_collection_is_bounded_and_never_expands_the_dense_query_set(geometry,monkeypatch):
+    hand,collision=geometry;q=((hand.low+hand.high)/2)[None].repeat(128,1).requires_grad_()
+    rows=make_rows(hand)
+    for row in rows:
+        row['contacts'].update(object_contacts=[],self_pairs=[])
+        row['_cart_active_points']=torch.zeros(460,3)
+    rows=(rows*4)[:128]
+    def forbidden(*args,**kwargs):raise AssertionError('Dense query generation is for losses, not label sampling')
+    monkeypatch.setattr(collision.oracle,'self_queries',forbidden);monkeypatch.setattr(collision.oracle,'tactile_queries',forbidden)
+    monkeypatch.setattr(torch,'randperm',forbidden)
+    collision.collected=[];collision.collect_queries(q,rows,hand.frames(q),sample_budget=32)
+    assert len(collision.collected)==2
+    for points,links in collision.collected:
+        assert 0<len(points)<=32 and not points.requires_grad
+        assert torch.isfinite(points).all() and links.min()>=0 and links.max()<21
+    collision.collected=[]
+
+
 def test_one_parallel_batch_has_one_policy_update_and_no_accumulation(geometry):
     hand,collision=geometry;rows=make_rows(hand);sessions=[(dict(id='one'),rows,{})]
     all_windows=windows(sessions,length=2);prepare_windows(sessions,all_windows,'cpu')

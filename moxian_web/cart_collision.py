@@ -72,6 +72,8 @@ class MeshOracle:
         ids=torch.as_tensor(selected,device=self.device)
         self.surface=self.points[ids];self.surface_owners=self.owners[ids]
         self.surface_by_link=[self.surface[self.surface_owners==i] for i in range(21)]
+        cpu_points=self.surface.cpu().tolist();cpu_owners=self.surface_owners.cpu().tolist()
+        self.surface_by_link_cpu=[[point for point,owner in zip(cpu_points,cpu_owners) if owner==i] for i in range(21)]
         self.allowed=wp.to_torch(hand.collision.allowed).bool()
         self.collar=wp.to_torch(hand.collision.collar)
         self.query_sources,self.query_targets=self.allowed[self.surface_owners].nonzero(as_tuple=True)
@@ -110,9 +112,8 @@ class MeshOracle:
         reverse=((b==0)&(self.collar[source]>0))[None]&(self.surface[a].norm(dim=-1)<=self.collar[source])[None]
         return local,b.expand(len(p),-1),~(collar|reverse)
 
-    def tactile_queries(self,frames,rows):
-        """Only confirmed active taxels; every target link including the palm."""
-        p,r=frames[:2];clouds=[];counts=[]
+    def active_clouds(self,frames,rows):
+        p=frames[0];clouds=[];counts=[]
         for i,row in enumerate(rows):
             if '_cart_active_points' in row:points=row['_cart_active_points']
             else:
@@ -120,14 +121,46 @@ class MeshOracle:
                 mask=torch.as_tensor(row['tactile_valid'],device=p.device,dtype=torch.bool)&torch.as_tensor(row['tactile_state'],device=p.device,dtype=torch.bool)
                 points=positions[mask]
             clouds.append(points);counts.append(len(points))
+        return clouds,counts
+
+    def tactile_queries(self,frames,rows):
+        """Only confirmed active taxels; every target link including the palm."""
+        local,links,counts=self.flat_tactile_queries(frames,rows)
+        return list(zip(local.split(counts),links.split(counts)))
+
+    def flat_tactile_queries(self,frames,rows):
+        p,r=frames[:2];clouds,counts=self.active_clouds(frames,rows)
         points=torch.cat(clouds)
         # One FK gather/transform for all ragged point clouds, instead of a
         # sequence of tiny CUDA launches for every window and time step.
-        ids=torch.as_tensor([i for i,n in enumerate(counts) for _ in range(n)],device=p.device)
+        ids=torch.arange(len(rows),device=p.device).repeat_interleave(torch.as_tensor(counts,device=p.device))
         if len(points):local=(r[ids].transpose(-1,-2)@(points[:,None]-p[ids])[...,None]).squeeze(-1)
         else:local=p.new_empty((0,21,3))
         links=torch.arange(21,device=p.device).expand(len(points),-1)
-        return list(zip(local.split(counts),links.split(counts)))
+        return local,links,counts
+
+    def sampled_queries(self,frames,rows,budget):
+        """Uniform detached label candidates, sampled before dense expansion."""
+        p,r=frames[:2];a,b=self.query_sources,self.query_targets
+        flat=torch.randint(len(p)*len(a),(2*budget,),device=p.device)
+        pose=flat//len(a);selected=flat%len(a);source=a[selected];target=b[selected]
+        owners=self.surface_owners[source];material=self.surface[source]
+        world=(r[pose,owners]@material[...,None]).squeeze(-1)+p[pose,owners]
+        local=(r[pose,target].transpose(-1,-2)@(world-p[pose,target])[...,None]).squeeze(-1)
+        collar=(owners==0)&(self.collar[target]>0)&(local.norm(dim=-1)<=self.collar[target])
+        reverse=(target==0)&(self.collar[owners]>0)&(material.norm(dim=-1)<=self.collar[owners])
+        valid=~(collar|reverse)
+        result=[(local[valid][:budget],target[valid][:budget])]
+        clouds,counts=self.active_clouds(frames,rows);points=torch.cat(clouds)
+        if len(points):
+            # Sampling a point and target independently is uniform over the
+            # same all-link query set used by the penetration objective.
+            ids=torch.randint(len(points),(budget,),device=p.device)
+            poses=torch.searchsorted(torch.as_tensor(counts,device=p.device).cumsum(0),ids,right=True)
+            links=torch.randint(21,(budget,),device=p.device)
+            local=(r[poses,links].transpose(-1,-2)@(points[ids]-p[poses,links])[...,None]).squeeze(-1)
+            result.append((local,links))
+        return result
 
 
 class CollisionModel:
@@ -173,7 +206,7 @@ class CollisionModel:
     def collect_contact(self,local,direction,links,palmar):
         n=local.numel()//3
         if n:
-            ids=torch.randperm(n,device=local.device)[:512] if n>512 else slice(None)
+            ids=torch.randint(n,(512,),device=local.device) if n>512 else slice(None)
             self.contact_collected.append(tuple(v.detach().reshape(n,-1)[ids] if v.ndim==local.ndim else v.detach().reshape(n)[ids]
                 for v in (local,direction,links,palmar)))
 
@@ -205,15 +238,13 @@ class CollisionModel:
         x=local.detach().reshape(-1,3);l=links.detach().reshape(-1)
         if valid is not None:x=x[valid.flatten()];l=l[valid.flatten()]
         if len(x):
-            select=torch.randperm(len(x),device=x.device)[:max_samples] if len(x)>max_samples else slice(None)
+            select=torch.randint(len(x),(max_samples,),device=x.device) if len(x)>max_samples else slice(None)
             self.collected.append((x[select],l[select]))
 
     def collect_queries(self,q,rows,frames,sample_budget=512):
         """Collect the same moving surfaces/taxels without evaluating any loss."""
-        self.collect_local(*self.oracle.self_queries(frames),max_samples=sample_budget)
-        tactile=self.oracle.tactile_queries(frames,rows)
-        self.collect_local(torch.cat([x.reshape(-1,3) for x,_ in tactile]),
-            torch.cat([l.flatten() for _,l in tactile]),max_samples=512*len(rows))
+        for points,links in self.oracle.sampled_queries(frames,rows,sample_budget):
+            self.collect_local(points,links,max_samples=sample_budget)
         from .cart_contacts import link_owner
         p,r=frames[:2];objects={};pairs={}
         for i,row in enumerate(rows):
@@ -222,6 +253,7 @@ class CollisionModel:
             for c in row['contacts']['self_pairs']:
                 pairs.setdefault(tuple(map(link_owner,c['regions'])),[]).append(i)
         for owner,items in objects.items():
+            if len(items)>512:items=[items[i] for i in torch.randint(len(items),(512,)).tolist()]
             ids=torch.as_tensor([i for i,_ in items],device=q.device)
             points=q.new_tensor([c['position_m'] for _,c in items]);normals=q.new_tensor([c['normal'] for _,c in items])
             inverse=r[ids,owner].transpose(-1,-2)
@@ -230,6 +262,7 @@ class CollisionModel:
             links=torch.full((len(ids),),owner,device=q.device,dtype=torch.long)
             self.collect_contact(local,direction,links,torch.ones_like(links,dtype=torch.bool))
         for (a,b),indices in pairs.items():
+            if len(indices)>128:indices=[indices[i] for i in torch.randint(len(indices),(128,)).tolist()]
             ids=torch.as_tensor(indices,device=q.device)
             for _,owner,_,_,local,direction in self.pair_queries(p[ids],r[ids],a,b):
                 links=torch.full(local.shape[:-1],owner,device=q.device,dtype=torch.long)
@@ -237,16 +270,16 @@ class CollisionModel:
 
     def penalties(self,q,rows,frames):
         local,links,valid=self.oracle.self_queries(frames)
-        tactile=self.oracle.tactile_queries(frames,rows)
-        shapes=[local.numel()//3]+[x.numel()//3 for x,_ in tactile]
-        points=torch.cat([local.reshape(-1,3)]+[x.reshape(-1,3) for x,_ in tactile])
-        owners=torch.cat([links.flatten()]+[l.flatten() for _,l in tactile])
+        tactile,tactile_links,counts=self.oracle.flat_tactile_queries(frames,rows)
+        self_size=local.numel()//3;counts=[n*21 for n in counts]
+        points=torch.cat((local.reshape(-1,3),tactile.reshape(-1,3)))
+        owners=torch.cat((links.flatten(),tactile_links.flatten()))
         poses=None
         if hasattr(self.model,'at_frames'):
-            poses=torch.cat((torch.arange(len(q),device=q.device).repeat_interleave(shapes[0]//len(q)),
-                torch.arange(len(q),device=q.device).repeat_interleave(torch.as_tensor(shapes[1:],device=q.device))))
-        values=self.distance(points,owners,configuration=q,pose_ids=poses,frames=frames).split(shapes)
-        sdf=values[0].reshape(links.shape)
+            poses=torch.cat((torch.arange(len(q),device=q.device).repeat_interleave(self_size//len(q)),
+                torch.arange(len(q),device=q.device).repeat_interleave(torch.as_tensor(counts,device=q.device))))
+        values=self.distance(points,owners,configuration=q,pose_ids=poses,frames=frames)
+        sdf=values[:self_size].reshape(links.shape)
         if self.auditing:self_depth=torch.where(valid,(-sdf).clamp_min(0),0.).amax(-1)
         else:
             # The fixed mechanical exclusions are already absent from queries.
@@ -263,8 +296,8 @@ class CollisionModel:
             attention=torch.softmax(logits,dim=-1)
             self_depth=(attention*depth).sum(-1)
         if not self.auditing:
-            flat=torch.cat(values[1:]);counts=[v.numel() for v in values[1:]]
-            ids=torch.as_tensor([i for i,n in enumerate(counts) for _ in range(n)],device=q.device,dtype=torch.long)
+            flat=values[self_size:]
+            ids=torch.arange(len(rows),device=q.device).repeat_interleave(torch.as_tensor(counts,device=q.device))
             depth=F.softplus(-flat/.00005)*.00005;logits=depth/.00005
             maximum=q.new_full((len(rows),),-torch.inf).scatter_reduce(0,ids,logits.detach(),reduce='amax',include_self=True)
             weight=torch.exp(logits-maximum[ids])
@@ -272,7 +305,7 @@ class CollisionModel:
             numerator=q.new_zeros(len(rows)).index_add(0,ids,weight*depth)
             return self_depth,numerator/denominator.clamp_min(1.e-20)
         point_depth=[]
-        for d in values[1:]:
+        for d in values[self_size:].split(counts):
             if not d.numel():point_depth.append(q.new_zeros(()))
             elif self.auditing:point_depth.append((-d).clamp_min(0).amax())
             else:
@@ -286,7 +319,7 @@ class CollisionModel:
         segment_count=0
         def entry(points,source,target,batch):
             nonlocal segment_count
-            n=len(points);clouds.append(points);sources.extend([source]*n);targets.extend([target]*n)
+            n=len(points);clouds.extend(points);sources.extend([source]*n);targets.extend([target]*n)
             batches.extend([batch]*n);segments.extend([segment_count]*n)
             segment_count+=1;return segment_count-1
         def active(row):
@@ -300,20 +333,19 @@ class CollisionModel:
                     # Current witnesses may slide or switch SID on the same link.
                     contacts=[c for c in row['contacts']['object_contacts'] if link_owner(c['region'])==owner]
                     points=[point for c in contacts for point in c.get('observed_points_m',[c['position_m']])]
-                    world=q.new_tensor(points)
-                    if len(world):row_terms.append([entry(world,-1,owner,i)])
+                    if points:row_terms.append([entry(points,-1,owner,i)])
                 old_pairs={tuple(sorted(c['regions'])) for c in previous['contacts']['self_pairs']}
                 for pair in row['contacts']['self_pairs']:
                     if tuple(sorted(pair['regions'])) not in old_pairs:continue
                     a,b=map(link_owner,pair['regions'])
                     pair_segments=[]
                     for source,target in ((a,b),(b,a)):
-                        material=self.oracle.surface_by_link[source]
+                        material=self.oracle.surface_by_link_cpu[source]
                         pair_segments.append(entry(material,source,target,i))
                     row_terms.append(pair_segments)
             counts.append(len(row_terms));terms.append(row_terms)
         if not clouds:return q.new_zeros(len(q)),counts
-        point=torch.cat(clouds);source=torch.tensor(sources,device=q.device);target=torch.tensor(targets,device=q.device)
+        point=q.new_tensor(clouds);source=torch.tensor(sources,device=q.device);target=torch.tensor(targets,device=q.device)
         batch=torch.tensor(batches,device=q.device);segment=torch.tensor(segments,device=q.device)
         world=(r[batch,source.clamp_min(0)]@point[...,None]).squeeze(-1)+p[batch,source.clamp_min(0)]
         world=torch.where((source>=0)[:,None],world,point)
@@ -324,8 +356,17 @@ class CollisionModel:
         denominator=q.new_zeros(segment_count).index_add(0,segment,weight)
         numerator=q.new_zeros(segment_count).index_add(0,segment,weight*reward)
         rewards=numerator/denominator.clamp_min(1.e-20)
-        values=[torch.stack([1-rewards[ids].mean() for ids in row_terms]).mean() if row_terms else q.new_zeros(()) for row_terms in terms]
-        return torch.stack(values),counts
+        # First average the two directions of each retained link pair, then
+        # average semantic terms within each row. No per-row CUDA reductions.
+        segment_terms=[0]*segment_count;term_rows=[];term_sizes=[]
+        for row,row_terms in enumerate(terms):
+            for ids in row_terms:
+                term=len(term_rows);term_rows.append(row);term_sizes.append(len(ids))
+                for segment_id in ids:segment_terms[segment_id]=term
+        term_index=torch.as_tensor(segment_terms,device=q.device)
+        reward=q.new_zeros(len(term_rows)).index_add(0,term_index,rewards)/q.new_tensor(term_sizes)
+        values=q.new_zeros(len(q)).index_add(0,torch.as_tensor(term_rows,device=q.device),1-reward)
+        return values/q.new_tensor(counts).clamp_min(1),counts
 
     @torch.no_grad()
     def audit(self,q,rows,frames):

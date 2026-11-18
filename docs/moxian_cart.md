@@ -257,6 +257,10 @@ python -m moxian_web.cart_cli --root /path/to/cart train \
 
 新 checkpoint 包含完整距离网络和两个 optimizer，恢复及 Predictor 不依赖原来的 `best.pt` 路径。策略初始化使用相同 seed，导入网络在单独的 RNG 上下文内构造。该比较同时改变距离网络结构和初始化，不能将全部差异只归因于预训练。正式启用仍以独立真实 mesh 验收为准。
 
+在线 mesh 标签先在查询索引域中有放回抽样，再执行所选点的 FK 变换，避免为少量标签展开全部窗口的密集查询或对数千万索引执行 `randperm`。自碰撞标签继续排除 MCP collar，接触头标签保持原来的方向与语义约束；距离标签每类每 batch 最多 `512×窗口长度` 个，接触头每语义组最多 512 个。策略损失仍检查所有窗口、固定自碰撞表面候选及全部活动触点的 21 个 link，没有以标签采样替代完整损失。
+
+策略更新将不等长触点查询保持为连续张量；保持奖励使用两级 `index_add`，依次平均自接触双向和每帧语义项，避免逐帧 CUDA reduction。训练跳过只用于质量报告的角度、最大间隙及接触点视图构造；独立真实 mesh 验证仍生成完整指标。回归检查比较损失与 q 梯度。单次本地 RTX 5060 Ti 检查中，112 个并行窗口、16 步、BF16 与 encoder 重算的稳定更新由 3.52 s 变为 3.14 s；这不是收敛时间或远端吞吐保证。
+
 ```bash
 python -m moxian_web.cart_cli --root /path/to/second/cart train \
   --datasets TRAIN_ID VALIDATION_ID --architecture attention \

@@ -125,7 +125,7 @@ def group_normalizers(windows):
     return result
 
 
-def fast_objective(objective,q,rows,references=None,acceleration=None,previous_rows=None,audit=False,normalizers=None):
+def fast_objective(objective,q,rows,references=None,acceleration=None,previous_rows=None,audit=False,normalizers=None,*,collect_metrics=True):
     h=objective.hand;s=objective.settings;frames=h.frames(q);p,r,j=frames[:3];size=len(q)
     constants=[objective.fast_constants(row) for row in rows]
     # prepare_targets may remove degenerate edges; group by the exact edge set.
@@ -137,7 +137,7 @@ def fast_objective(objective,q,rows,references=None,acceleration=None,previous_r
         dirs=F.normalize(j[ids][:,edges[:,1]]-j[ids][:,edges[:,0]],dim=-1,eps=1.e-8)
         index=torch.as_tensor(ids,device=q.device)
         dir_cost=dir_cost.index_copy(0,index,.5*s.lambda_pose*(dirs-desired).square().sum((1,2)))
-        dir_error=dir_error.index_copy(0,index,torch.rad2deg(torch.acos((dirs.detach()*desired).sum(-1).clamp(-1,1))).mean(-1))
+        if collect_metrics:dir_error=dir_error.index_copy(0,index,torch.rad2deg(torch.acos((dirs.detach()*desired).sum(-1).clamp(-1,1))).mean(-1))
     smooth=.5*s.lambda_smooth*(q-references).square().sum(-1) if references is not None else q.new_zeros(size)
     self_depth,point_depth=objective.collision.penalties(q,rows,frames)
     depth=torch.maximum(self_depth,point_depth);valid=torch.ones(size,device=q.device,dtype=torch.bool)
@@ -164,7 +164,7 @@ def fast_objective(objective,q,rows,references=None,acceleration=None,previous_r
                 distance,angle,pa,pb,na,nb,ok,centre=objective.collision.soft_pair(p[ids],r[ids],a,b,target,s.contact_scale_m,angle_scale)
             position=(distance+.02*centre)/s.contact_scale_m**2
             norm=angle/angle_scale
-            degrees=torch.rad2deg(torch.acos((-na.detach()*nb.detach()).sum(-1).clamp(-1,1)))
+            if collect_metrics:degrees=torch.rad2deg(torch.acos((-na.detach()*nb.detach()).sum(-1).clamp(-1,1)))
         else:
             owner=items[0][1]['owner'];desired=torch.stack([item['normal'] for _,item in items])
             query=(r[ids,owner].transpose(-1,-2)@(target-p[ids,owner])[...,None]).squeeze(-1)
@@ -178,14 +178,15 @@ def fast_objective(objective,q,rows,references=None,acceleration=None,previous_r
             dot=(nn*desired).sum(-1);distance=(pa-target).square().sum(-1)
             rho=q.new_tensor([item['rho'] for _,item in items])
             position=rho.square()*distance/s.contact_scale_m**2;norm=rho.square()*(1-dot)/angle_scale
-            degrees=torch.rad2deg(torch.acos(dot.detach().clamp(-1,1)))
+            if collect_metrics:degrees=torch.rad2deg(torch.acos(dot.detach().clamp(-1,1)))
         weight=q.new_tensor([(weights[i][key] if isinstance(weights,list) else weights[key])/duplicates[i] for i,_ in items])
         contact=contact.index_add(0,ids,torch.where(ok,position,0.)*weight)
         normal_cost=normal_cost.index_add(0,ids,torch.where(ok,norm,0.)*weight)
-        max_gap=max_gap.scatter_reduce(0,ids,torch.where(ok,distance.detach().clamp_min(0).sqrt(),0.),reduce='amax',include_self=True)
-        max_angle=max_angle.scatter_reduce(0,ids,degrees,reduce='amax',include_self=True)
-        unresolved=unresolved.index_add(0,ids,(~ok).long())
-        for k,(i,_) in enumerate(items):counts[i]+=1;contact_points[i].append((pa[k:k+1],pb[k:k+1]))
+        if collect_metrics:
+            max_gap=max_gap.scatter_reduce(0,ids,torch.where(ok,distance.detach().clamp_min(0).sqrt(),0.),reduce='amax',include_self=True)
+            max_angle=max_angle.scatter_reduce(0,ids,degrees,reduce='amax',include_self=True)
+            unresolved=unresolved.index_add(0,ids,(~ok).long())
+            for k,(i,_) in enumerate(items):counts[i]+=1;contact_points[i].append((pa[k:k+1],pb[k:k+1]))
     valid=valid&(unresolved==0)
     keep,keep_counts=objective.collision.retention(q,rows,previous_rows or [None]*size,frames,s.contact_scale_m)
     total=dir_cost+smooth+s.contact*contact+s.normal*normal_cost+s.penetration*barrier+s.contact_keep*keep
@@ -195,6 +196,7 @@ def fast_objective(objective,q,rows,references=None,acceleration=None,previous_r
     for key in ('laplacian','antireverse','thumb_relative'):parts[key]=q.new_zeros(())
     if acceleration is not None:
         parts['acceleration']=acceleration.square().mean();total=total+s.acceleration*acceleration.square().mean(-1)
+    if not collect_metrics:return total.mean(),parts,[]
     feasible=valid&torch.isfinite(total)&(depth<=s.penetration_limit_m)&(max_gap<=s.contact_limit_m)&(max_angle<=s.normal_deg)&(q>=h.low-1.e-6).all(-1)&(q<=h.high+1.e-6).all(-1)
     metrics=[dict(feasible=feasible[i:i+1],contact_count=counts[i],max_gap_m=max_gap[i:i+1],max_normal_deg=max_angle[i:i+1],
         max_penetration_m=depth[i:i+1],bone_direction_deg=dir_error[i:i+1],points=contact_points[i],query_valid=valid[i:i+1],
