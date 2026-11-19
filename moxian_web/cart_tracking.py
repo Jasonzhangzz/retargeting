@@ -15,7 +15,7 @@ class CartTracking:
         self.run=wandb.init(project=project,entity=entity,id=config['run_id'],name=config['run_id'],
             resume='must' if resume and mode=='online' else 'never',mode=mode,
             dir=str(Path(folder)),config=config,allow_val_change=resume,save_code=False,settings=wandb.Settings(**settings))
-        if resume and 'error' in self.run.summary:del self.run.summary['error']
+        if resume and self.run.summary.get('error') is not None:del self.run.summary['error']
         (Path(folder)/'wandb_run.json').write_text(json.dumps(dict(id=self.run.id,url=self.run.url,project=project,
             entity=entity,base_url=host,mode=mode),indent=2))
         for namespace,axis in (('train','optimizer_step'),('geometry','update'),('validation','epoch')):

@@ -36,3 +36,16 @@ def test_online_curves_resume_and_final_acceptance(monkeypatch,tmp_path):
     tracker.finish(report=dict(accepted=False,rejection_reasons=['penetration']))
     assert run.summary['final/accepted'] is False and finished==[dict(exit_code=0)]
     assert 'https://wandb.example' in (tmp_path/'wandb_run.json').read_text()
+
+
+def test_resume_clears_real_sdk_summary_error(monkeypatch,tmp_path):
+    import pytest
+    wandb=pytest.importorskip('wandb')
+    run=wandb.init(project='cart-sdk-test',mode='offline',dir=str(tmp_path))
+    try:
+        run.summary['error']='previous OOM'
+        monkeypatch.setattr(wandb,'init',lambda **kwargs:run)
+        tracker=CartTracking(tmp_path,dict(run_id=run.id),project='cart-sdk-test',mode='offline',resume=True)
+        assert tracker.run is run and run.summary.get('error') is None
+    finally:
+        run.finish()
