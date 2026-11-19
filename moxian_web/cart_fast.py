@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 from .cart_contacts import link_owner
+from .cart_reward import exp_cost
 
 DEFAULT_BATCH_SIZE = 0  # actual simultaneous windows, selected from free memory
 
@@ -15,15 +16,19 @@ DEFAULT_BATCH_SIZE = 0  # actual simultaneous windows, selected from free memory
 class ObservationStore:
     def __init__(self, rows, device):
         self.device=device
-        names=dict(future_emf='emf_pose',emf_valid='emf_valid',tactile_positions='tactile_positions_m',
+        if any('ik_valid' not in r or r.get('ik_valid') and 'ik_q_rad' not in r for r in rows):
+            raise ValueError('常驻观测缺少离线 Wuji2 IK 轨迹')
+        names=dict(tactile_positions='tactile_positions_m',
                    tactile_state='tactile_state',tactile_valid='tactile_valid')
         self.values={k:torch.as_tensor(np.asarray([r[v] for r in rows]),device=device,
             dtype=torch.bool if k.endswith('valid') else torch.float32) for k,v in names.items()}
+        self.values.update(future_ik=torch.as_tensor(np.asarray([r.get('ik_q_rad',[0.]*20) for r in rows]),device=device,dtype=torch.float32),
+            ik_valid=torch.as_tensor([r['ik_valid'] for r in rows],device=device,dtype=torch.bool))
         self.stamps=torch.as_tensor([r['timestamp_ms'] for r in rows],device=device,dtype=torch.float64)
         self.cpu_stamps=np.asarray([r['timestamp_ms'] for r in rows],np.float64)
         self.initial_states=torch.as_tensor(np.asarray([r.get('ik_q_rad',[0.]*20) for r in rows]),device=device,dtype=torch.float32) if any('ik_q_rad' in r for r in rows) else None
-        v=self.values;ev=v['emf_valid'];tv=v['tactile_valid']
-        if not torch.isfinite(v['future_emf'][ev]).all() or not torch.isfinite(v['tactile_positions'][tv]).all():
+        v=self.values;ev=v['ik_valid'];tv=v['tactile_valid']
+        if not torch.isfinite(v['future_ik'][ev]).all() or not torch.isfinite(v['tactile_positions'][tv]).all():
             raise ValueError('Nonfinite prepared CART observation')
         state=v['tactile_state'][tv]
         if not ((state==0)|(state==1)).all():raise ValueError('Prepared tactile state is not binary')
@@ -127,6 +132,7 @@ def group_normalizers(windows):
 
 def fast_objective(objective,q,rows,references=None,acceleration=None,previous_rows=None,audit=False,normalizers=None,*,collect_metrics=True):
     h=objective.hand;s=objective.settings;frames=h.frames(q);p,r,j=frames[:3];size=len(q)
+    exponential=s.loss_kind=='multiscale_exp_card_v1'
     constants=[objective.fast_constants(row) for row in rows]
     # prepare_targets may remove degenerate edges; group by the exact edge set.
     edge_groups={}
@@ -136,13 +142,22 @@ def fast_objective(objective,q,rows,references=None,acceleration=None,previous_r
         edges=constants[ids[0]]['edges'];desired=torch.stack([constants[i]['desired'] for i in ids])
         dirs=F.normalize(j[ids][:,edges[:,1]]-j[ids][:,edges[:,0]],dim=-1,eps=1.e-8)
         index=torch.as_tensor(ids,device=q.device)
-        dir_cost=dir_cost.index_copy(0,index,.5*s.lambda_pose*(dirs-desired).square().sum((1,2)))
+        error=(dirs-desired).square().sum(-1)
+        value=s.lambda_pose*exp_cost(error/(2*(1-np.cos(np.deg2rad(s.direction_deg))))).mean(-1) if exponential else .5*s.lambda_pose*error.sum(-1)
+        dir_cost=dir_cost.index_copy(0,index,value)
         if collect_metrics:dir_error=dir_error.index_copy(0,index,torch.rad2deg(torch.acos((dirs.detach()*desired).sum(-1).clamp(-1,1))).mean(-1))
     smooth=.5*s.lambda_smooth*(q-references).square().sum(-1) if references is not None else q.new_zeros(size)
+    if exponential and references is not None:
+        smooth=s.lambda_smooth*exp_cost((2*(q-references)/(h.high-h.low)).square().mean(-1),s.smooth_scale)
     self_depth,point_depth=objective.collision.penalties(q,rows,frames)
     depth=torch.maximum(self_depth,point_depth);valid=torch.ones(size,device=q.device,dtype=torch.bool)
     if audit:depth,valid=objective.collision.audit(q,rows,frames)
     barrier=(depth/s.penetration_scale_m).square() if audit else (self_depth/s.penetration_scale_m).square()+(point_depth/s.penetration_scale_m).square()
+    self_barrier=(self_depth/s.penetration_scale_m).square();point_barrier=(point_depth/s.penetration_scale_m).square()
+    if exponential:
+        self_barrier=exp_cost(self_depth.square(),s.penetration_scale_m,s.penetration_broad_ratio)
+        point_barrier=exp_cost(point_depth.square(),s.penetration_scale_m,s.penetration_broad_ratio)
+        barrier=exp_cost(depth.square(),s.penetration_scale_m,s.penetration_broad_ratio) if audit else .5*(self_barrier+point_barrier)
     groups={};contact_points=[[] for _ in rows]
     for i,c in enumerate(constants):
         for item in c['contacts']:groups.setdefault(item['key'],[]).append((i,item))
@@ -161,9 +176,12 @@ def fast_objective(objective,q,rows,references=None,acceleration=None,previous_r
                 distance,angle,pa,pb,na,nb,ok=h.pair(p[ids],r[ids],a,b,True)
                 centre=((pa+pb)*.5-target).square().sum(-1)
             else:
-                distance,angle,pa,pb,na,nb,ok,centre=objective.collision.soft_pair(p[ids],r[ids],a,b,target,s.contact_scale_m,angle_scale)
+                distance,angle,pa,pb,na,nb,ok,centre=objective.collision.soft_pair(p[ids],r[ids],a,b,target,s.correspondence_scale_m if exponential else s.contact_scale_m,angle_scale)
             position=(distance+.02*centre)/s.contact_scale_m**2
             norm=angle/angle_scale
+            if exponential:
+                position=exp_cost(distance+.02*centre,s.contact_scale_m,s.contact_broad_ratio)
+                norm=exp_cost(angle/angle_scale)
             if collect_metrics:degrees=torch.rad2deg(torch.acos((-na.detach()*nb.detach()).sum(-1).clamp(-1,1)))
         else:
             owner=items[0][1]['owner'];desired=torch.stack([item['normal'] for _,item in items])
@@ -178,6 +196,9 @@ def fast_objective(objective,q,rows,references=None,acceleration=None,previous_r
             dot=(nn*desired).sum(-1);distance=(pa-target).square().sum(-1)
             rho=q.new_tensor([item['rho'] for _,item in items])
             position=rho.square()*distance/s.contact_scale_m**2;norm=rho.square()*(1-dot)/angle_scale
+            if exponential:
+                position=rho.square()*exp_cost(distance,s.contact_scale_m,s.contact_broad_ratio)
+                norm=rho.square()*exp_cost((1-dot)/angle_scale)
             if collect_metrics:degrees=torch.rad2deg(torch.acos(dot.detach().clamp(-1,1)))
         weight=q.new_tensor([(weights[i][key] if isinstance(weights,list) else weights[key])/duplicates[i] for i,_ in items])
         contact=contact.index_add(0,ids,torch.where(ok,position,0.)*weight)
@@ -191,8 +212,8 @@ def fast_objective(objective,q,rows,references=None,acceleration=None,previous_r
     keep,keep_counts=objective.collision.retention(q,rows,previous_rows or [None]*size,frames,s.contact_scale_m)
     total=dir_cost+smooth+s.contact*contact+s.normal*normal_cost+s.penetration*barrier+s.contact_keep*keep
     parts=dict(direction=dir_cost.mean(),smooth=smooth.mean(),contact=contact.mean(),normal=normal_cost.mean(),
-        penetration=barrier.mean(),self_penetration=(self_depth/s.penetration_scale_m).square().mean(),
-        tactile_penetration=(point_depth/s.penetration_scale_m).square().mean(),contact_keep=keep.mean())
+        penetration=barrier.mean(),self_penetration=self_barrier.mean(),
+        tactile_penetration=point_barrier.mean(),contact_keep=keep.mean())
     for key in ('laplacian','antireverse','thumb_relative'):parts[key]=q.new_zeros(())
     if acceleration is not None:
         parts['acceleration']=acceleration.square().mean();total=total+s.acceleration*acceleration.square().mean(-1)

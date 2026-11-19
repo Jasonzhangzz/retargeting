@@ -57,7 +57,9 @@ def pack_future(current_stamp, rows, device='cpu'):
     stamps=np.asarray([r['timestamp_ms'] for r in rows],np.float64)
     if not np.isfinite(stamps).all() or not np.isfinite(current_stamp) or np.any(np.diff(np.r_[current_stamp,stamps])<=0) or np.any(np.diff(np.r_[current_stamp,stamps])>250):
         raise ValueError('CART future window crosses a sensor boundary')
-    values = dict(future_emf=[r['emf_pose'] for r in rows],emf_valid=[r['emf_valid'] for r in rows],
+    if any('ik_valid' not in r or r.get('ik_valid') and 'ik_q_rad' not in r for r in rows):
+        raise ValueError('未来窗口缺少已对齐的 Wuji2 IK 轨迹')
+    values = dict(future_ik=[r.get('ik_q_rad',[0.]*20) for r in rows],ik_valid=[r['ik_valid'] for r in rows],
         future_dt=(stamps-current_stamp)/1000,tactile_positions=[r['tactile_positions_m'] for r in rows],
         tactile_state=[r['tactile_state'] for r in rows],tactile_valid=[r['tactile_valid'] for r in rows])
     return {k:torch.as_tensor(np.asarray(v),device=device,dtype=torch.bool if k.endswith('valid') else torch.float32) for k,v in values.items()}

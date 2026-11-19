@@ -90,6 +90,14 @@ class Replay:
         self.last_index=-1
         self.epoch=0
         self.contact_rows=None;self.linked_emf=None
+        self.cart_ik=None
+        if self.meta.get('protocol','').startswith('cart_') and (folder/'cart_ik.npz').exists():
+            from moxian_web.cart_data import file_hash
+            info=json.loads((folder/'cart_ik.json').read_text())
+            if info['sha256']!=file_hash(folder/'cart_ik.npz'):raise ValueError('回放 IK 缓存校验失败')
+            with np.load(folder/'cart_ik.npz',allow_pickle=False) as saved:
+                if not np.array_equal(saved['timestamps_ms'],self.stamps):raise ValueError('回放 IK 时间轴不匹配')
+                self.cart_ik=(saved['q'].copy(),saved['valid'].copy())
         if (folder/'cart_emf.jsonl').exists():
             self.linked_emf=[json.loads(line) for line in (folder/'cart_emf.jsonl').open()]
             if len(self.linked_emf)!=len(self.stamps) or any(r['timestamp_ms']!=s for r,s in zip(self.linked_emf,self.stamps)):
@@ -138,7 +146,9 @@ class Replay:
         emf=recorded.get('emf_observation') or (self.linked_emf[index]['emf_observation'] if self.linked_emf else None)
         if emf:
             emf=dict(emf,timestamp_ms=stamp+emf['timestamp_ms']-float(self.stamps[index]))
-        return dict(emf_observation=emf,vertices_m=v[0].cpu().numpy(),joints_m=j[0].cpu().numpy(),
+        ik={} if self.cart_ik is None else dict(cart_ik_valid=bool(self.cart_ik[1][index]),
+            cart_ik_q_rad=self.cart_ik[0][index].tolist() if self.cart_ik[1][index] else None)
+        return dict(**ik,emf_observation=emf,vertices_m=v[0].cpu().numpy(),joints_m=j[0].cpu().numpy(),
             geometry_version=self.topology['geometry_version'],binding_version=self.topology['binding_version'],
             model_hash=source['model_hash'],hand_side=source['hand_side'],serial=source['serial'],
             surface_backend=self.topology['surface_backend'],coordinate_frame=self.topology['coordinate_frame'],

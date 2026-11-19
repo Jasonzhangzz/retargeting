@@ -111,11 +111,12 @@ def test_fixed_collar_exclusions_cannot_hide_another_penetration():
     collision=CollisionModel.__new__(CollisionModel);collision.auditing=False
     local=torch.zeros(1,2,3);links=torch.tensor([[0,1]])
     collision.oracle=SimpleNamespace(self_queries=lambda frames:(local,links,torch.tensor([[False,True]])),
-        tactile_queries=lambda frames,rows:[(torch.empty(0,21,3),torch.empty(0,21,dtype=torch.long))],
+        flat_tactile_queries=lambda frames,rows:(torch.empty(0,21,3),torch.empty(0,21,dtype=torch.long),[0]),
         query_sources=torch.tensor([0,1]),query_targets=torch.tensor([0,1]),surface_owners=torch.tensor([1,2]),
         surface=torch.zeros(2,3),collar=torch.tensor([0.,.01,0.]))
     sdf=torch.tensor([-.02,-.001],requires_grad=True)
-    collision.distance=lambda points,owners:sdf
+    collision.model=SimpleNamespace()
+    collision.distance=lambda points,owners,**kw:sdf
     depth,_=collision.penalties(torch.zeros(1,20),[{}],None)
     assert depth.item()==pytest.approx(.001,abs=1.e-7)
     gradient=torch.autograd.grad(depth.sum(),sdf)[0]

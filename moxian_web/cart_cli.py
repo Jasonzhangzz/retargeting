@@ -52,7 +52,7 @@ def main():
             p.add_argument('--length',type=int,default=16)
             p.add_argument('--window-stride',type=int,default=0,help='Training window start spacing; 0 keeps length//2. Validation sampling is unchanged.')
             p.add_argument('--resume-run');p.add_argument('--sdf-warmup-steps',type=int)
-            p.add_argument('--initialize-from',help='Initialize a new run from a compatible v5 checkpoint; not exact resume')
+            p.add_argument('--initialize-from',help='Initialize a new run from a compatible IK-input policy checkpoint; not exact resume')
             p.add_argument('--initialize-geometry-from',help='Reuse geometry and its optimizer/replay; initialize a fresh delta policy')
             p.add_argument('--initialize-sdf-from',type=Path,help='Load a q-conditioned Neural SDF checkpoint; may combine with contact/replay initialization')
             p.add_argument('--wandb-project');p.add_argument('--wandb-entity')

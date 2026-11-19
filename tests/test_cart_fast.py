@@ -18,6 +18,7 @@ def one_thread():torch.set_num_threads(1)
 
 def row_at(stamp,joints):
     return dict(timestamp_ms=float(stamp),joints_m=joints,stream_epoch=0,
+        ik_valid=True,ik_q_rad=[.4]*20,
         emf_pose=np.zeros((5,9)).tolist(),emf_valid=[True]*5,
         tactile_positions_m=np.zeros((460,3)).tolist(),tactile_state=[0]*460,tactile_valid=[True]*460,
         contacts=dict(tactile_ready=True,tactile_status='valid',self_pairs=[],object_contacts=[]))
@@ -62,6 +63,7 @@ def make_rows(hand):
     ln=torch.tensor(hand.surface.contact_surface(8)['normals'][0],dtype=torch.float32)
     point=(r[0,8]@tri.mean(0)+p[0,8]).tolist();normal=(r[0,8]@ln).tolist()
     for i,row in enumerate(rows):
+        row['ik_q_rad']=q[0].tolist()
         if i%3:
             row['contacts']['object_contacts']=[dict(region='index_distal',position_m=point,normal=normal,force=1.,observed_points_m=[point])]
         if i%4==0:
@@ -81,10 +83,10 @@ def test_prepared_future_matches_public_packer_and_preserves_boundaries(geometry
     with pytest.raises(ValueError):prepare_windows(sessions,windows(sessions,2)+[dict(rows=rows[:14],indices=list(range(14)),length=2,dataset='one')],'cpu')
 
 
-def test_training_reads_recorded_next_ten_emf_and_tactile_frames(geometry):
+def test_training_reads_recorded_next_ten_ik_and_tactile_frames(geometry):
     hand,_=geometry;rows=make_rows(hand)
     for i,row in enumerate(rows):
-        row['emf_pose'][0][0]=i+.25
+        row['ik_q_rad'][0]=i/100.+.25
         row['tactile_positions_m'][0]=[i/100.,i/200.,i/300.]
         row['tactile_state'][0]=i%2;row['tactile_valid'][0]=i%3!=0
     sessions=[(dict(id='measured'),rows,{})];selected=windows(sessions,length=2)
@@ -93,14 +95,14 @@ def test_training_reads_recorded_next_ten_emf_and_tactile_frames(geometry):
     current=window['indices'][offset]
     future=PreparedBatch([window],'cpu').future_inputs([offset])
     ids=list(range(current+1,current+11))
-    torch.testing.assert_close(future['future_emf'][0,:,0,0],torch.tensor([i+.25 for i in ids]))
+    torch.testing.assert_close(future['future_ik'][0,:,0],torch.tensor([i/100.+.25 for i in ids]))
     torch.testing.assert_close(future['tactile_positions'][0,:,0],torch.tensor([rows[i]['tactile_positions_m'][0] for i in ids]))
     assert future['tactile_state'][0,:,0].tolist()==[i%2 for i in ids]
     assert future['tactile_valid'][0,:,0].tolist()==[i%3!=0 for i in ids]
     assert window['rows'][offset+1]['timestamp_ms']==rows[current+1]['timestamp_ms']
     # The following rollout step shifts all three modalities by exactly one.
     next_inputs=PreparedBatch([window],'cpu').future_inputs([offset+1])
-    torch.testing.assert_close(next_inputs['future_emf'][0,:,0,0],torch.tensor([i+.25 for i in range(current+2,current+12)]))
+    torch.testing.assert_close(next_inputs['future_ik'][0,:,0],torch.tensor([i/100.+.25 for i in range(current+2,current+12)]))
     assert all(w['indices'][len(w['rows'])-w['length']-10]+w['length']-1+10<len(rows) for w in selected)
 
 
@@ -109,7 +111,7 @@ def test_batched_cost_matches_reference_loss_and_joint_gradient(geometry):
     # Also exercise multiple observations in one semantic group of a row.
     chosen[1]['contacts']['object_contacts']*=2
     reference=((hand.low+hand.high)/2)[None].repeat(4,1)
-    q=(reference+.03).requires_grad_();obj=CartObjective(hand,policy_settings(),collision)
+    q=(reference+.03).requires_grad_();obj=CartObjective(hand,replace(policy_settings(),loss_kind='quadratic_legacy'),collision)
     with frozen(collision.model):
         obj.vectorized=False;expected,parts,old_metrics=obj.batch(q,chosen,reference,previous_rows=[rows[i-1] for i in (4,5,7,8)],audit=True)
         old_gradient=torch.autograd.grad(expected,q)[0]

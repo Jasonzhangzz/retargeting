@@ -16,6 +16,7 @@ from .cart_contact_witness import contact_witness, DEEP_PENETRATION_M
 
 @dataclass(frozen=True)
 class ObjectiveSettings:
+    loss_kind: str = 'quadratic_legacy'
     contact: float = 20.
     normal: float = 5.
     penetration: float = 100.
@@ -25,6 +26,11 @@ class ObjectiveSettings:
     contact_scale_m: float = .001
     penetration_scale_m: float = .0005
     normal_deg: float = 30.
+    direction_deg: float = 30.
+    contact_broad_ratio: float = 4.
+    penetration_broad_ratio: float = 6.
+    smooth_scale: float = .05
+    correspondence_scale_m: float = .001
     contact_limit_m: float = .0005
     penetration_limit_m: float = .0005
     lambda_warm: float = 1.
@@ -320,5 +326,10 @@ class CartObjective:
 
 
 def policy_settings():
-    """No offline teacher or unrelated pose priors in the v5 objective."""
-    return ObjectiveSettings(trajectory=0.,acceleration=0.,lambda_lap=0.,lambda_thumb_rel=0.,lambda_antirev=0.)
+    """Bounded policy costs at CARD's geometric radius, separate from gates."""
+    from retarget.baseline.card.math import CardSettings
+    card=CardSettings()
+    return ObjectiveSettings(loss_kind='multiscale_exp_card_v1',contact=2.,normal=.5,penetration=2.,
+        contact_scale_m=card.radius_mm/1000,penetration_scale_m=.001,
+        penetration_broad_ratio=card.margin_mm,lambda_pose=1.,lambda_smooth=.1,
+        trajectory=0.,acceleration=0.,lambda_lap=0.,lambda_thumb_rel=0.,lambda_antirev=0.)

@@ -19,7 +19,7 @@ const context={document:{getElementById:id=>{assert(ids.has(id),`Missing DOM id 
 async function main(){
  vm.runInNewContext(fs.readFileSync('moxian_web/static/cart.js','utf8'),context);
  await new Promise(resolve=>setImmediate(resolve));
- const state={connected:true,hand_model:{ready:true,calibrated:true},cart:{protocol:'cart_diff_v5',split:'train',recording:{},
+ const state={connected:true,hand_model:{ready:true,calibrated:true},cart:{protocol:'cart_diff_ik_v6',split:'train',recording:{},
   ready:true,hull:{self_contacts:1,object_contacts:2,tactile_status:'valid'},preview_age_ms:1},wuji2:{}};
  context.window.updateCartUI(state);
  assert.equal(ids.get('cartRecordStart').disabled,false);
@@ -30,7 +30,7 @@ async function main(){
  await ids.get('cartRefresh').onclick();ids.get('cartDatasets').children[0].selected=true;ids.get('cartDatasets').onchange();
  assert.equal(ids.get('cartTrain').disabled,true);assert.equal(ids.get('cartPreprocess').disabled,false);
  assert.match(ids.get('cartTrainingHint').textContent,/训练 1 段、验证 0 段/);
- assert.match(ids.get('cartDatasets').children[0].textContent,/已录制原始 EMF/);
+ assert.match(ids.get('cartDatasets').children[0].textContent,/需准备观测与 IK/);
  recordings.push({id:'validation',split:'validation',protocol:'cart_diff_v5',emf_recorded:true,frames:100,complete:true});
  await ids.get('cartRefresh').onclick();ids.get('cartDatasets').children[1].selected=true;ids.get('cartDatasets').onchange();
  assert.equal(ids.get('cartTrain').disabled,false);
@@ -48,7 +48,7 @@ async function main(){
  state.cart.protocol='cart_contact_v3';context.window.updateCartUI(state);
  assert.equal(ids.get('cartRecordStart').disabled,true);
  assert.match(ids.get('cartHullStatus').textContent,/版本不匹配/);
- state.cart.protocol='cart_diff_v5';
+ state.cart.protocol='cart_diff_ik_v6';
  state.cart.job={status:'running'};context.window.updateCartUI(state);
  assert.equal(ids.get('cartTrain').disabled,true);assert.equal(ids.get('cartPreprocess').disabled,true);
  console.log('CART controller: DOM bindings, free-motion commands, evidence display and busy guards passed');

@@ -7,10 +7,12 @@ import numpy as np
 
 LEGACY_PROTOCOL = 'cart_contact_v3'
 TUBE_PROTOCOL = 'cart_contact_tube_v4'
-PROTOCOL = 'cart_diff_v5'
-SUPPORTED_RECORDINGS = (PROTOCOL, TUBE_PROTOCOL, LEGACY_PROTOCOL)
-ARCHITECTURES = {'attention': 'cart_cross_attention128_delta_v2', 'fsq': 'cart_future_fsq8_delta_v2'}
+PROTOCOL = 'cart_diff_ik_v6'
+SUPPORTED_RECORDINGS = (PROTOCOL, 'cart_diff_v5', TUBE_PROTOCOL, LEGACY_PROTOCOL)
+ARCHITECTURES = {'attention': 'cart_ik_cross_attention128_delta_v3', 'fsq': 'cart_ik_future_fsq8_delta_v3'}
 POLICY_OUTPUT = 'normalized_delta_q_v1'
+POLICY_INPUT = 'future_ik10_rad_v1'
+POLICY_TRANSITION = 'ik_reference_plus_bounded_residual_v1'
 ARCHITECTURE = ARCHITECTURES['attention']
 LOOKAHEAD = 10
 HISTORY_LENGTH = 10

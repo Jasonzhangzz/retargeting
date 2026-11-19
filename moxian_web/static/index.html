@@ -103,7 +103,7 @@
           <p id="cartRecordStatus" role="status">未录制</p><p id="cartGeometryStatus" role="status"></p>
           <label>录制会话（多选训练与验证数据）<select id="cartDatasets" multiple size="6" style="width:100%"></select></label><button id="cartDeleteDatasets" class="text-button">删除所选录制</button><ul id="cartRecordings"></ul>
           <p id="cartTrainingHint" class="muted" aria-live="polite"></p>
-          <div class="guide-actions"><button id="cartPreprocess" class="button">准备观测、触点与 IK</button><label>轮数 <input id="cartEpochs" type="number" min="1" max="2000" value="200"></label><label>并行窗口数（0 按显存自动） <input id="cartBatchSize" type="number" min="0" max="65536" value="0"></label><label>IK 初始噪声 ±rad <input id="cartInitialNoise" type="number" min="0" max="0.5" step="0.01" value="0.1"></label><label>结构 <select id="cartArchitecture"><option value="attention">Attention · EMF＋触觉</option><option value="fsq">FSQ · EMF</option></select></label><button id="cartTrain" class="button">训练可微策略</button><button id="cartCancel" class="text-button">取消后台任务</button></div>
+          <div class="guide-actions"><button id="cartPreprocess" class="button">准备观测、触点与 IK</button><label>轮数 <input id="cartEpochs" type="number" min="1" max="2000" value="200"></label><label>并行窗口数（0 按显存自动） <input id="cartBatchSize" type="number" min="0" max="65536" value="0"></label><label>IK 初始噪声 ±rad <input id="cartInitialNoise" type="number" min="0" max="0.5" step="0.01" value="0.1"></label><label>结构 <select id="cartArchitecture"><option value="attention">Attention · 未来 IK＋触觉</option><option value="fsq">FSQ · 未来 IK</option></select></label><button id="cartTrain" class="button">训练可微策略</button><button id="cartCancel" class="text-button">取消后台任务</button></div>
           <p id="cartBufferStatus" role="status"></p><p id="cartJob" role="status">请选择独立的训练和验证会话</p><pre id="cartLosses" style="white-space:pre-wrap"></pre>
           <section class="ik-viewer" aria-label="缓存 IK 轨迹回放">
             <div class="guide-actions"><strong>IK 轨迹回放</strong><button id="cartIKLoad" class="button">查看／刷新 IK 轨迹</button></div>
@@ -117,7 +117,7 @@
             <p id="cartIKStatus" role="status">先点击准备观测、触点与 IK，再选择一段录制查看缓存。</p>
           </section>
           <div class="guide-actions"><label>模型 <select id="cartModels"></select></label><button id="cartSelect" class="button">启用 CART 网络</button><button id="cartEvaluate" class="button">评估验证会话</button><button id="cartDeleteModel" class="text-button">删除所选模型</button></div>
-          <p class="footnote">在线输入为当前 Wuji2 关节角与未来10帧实测 EMF；Attention 还输入未来触觉三维点和0/1。网络输出归一化 Δq，叠加到当前状态并限制在关节域内，得到下一帧角度。触觉与几何用于可微训练及独立诊断，IK 只用于训练初始化。</p>
+          <p class="footnote">输入为当前 Wuji2 关节角与未来10帧 IK 轨迹；Attention 还输入未来触觉三维点和0/1。以 IK 为跟踪基线，网络学习有界修正，输出相对当前状态的归一化 Δq。训练使用指数误差，真实 mesh 验收仍以毫米和角度报告。回放读取缓存 IK，实时对已缓冲帧求解 IK。</p>
           <div class="guide-actions"><button id="cartReplayLoad" class="button">回放所选一段</button><button id="cartReplayPause" class="button">暂停／继续</button><button id="cartReplayStop" class="text-button">返回实时</button></div><input id="cartSeek" aria-label="CART 回放进度" type="range" min="0" max="1" value="0" style="width:100%">
           <p id="cartContactStatus" role="status"></p><p id="cartError" role="alert" style="color:#b44738">CART 控件加载中…</p>
         </details>

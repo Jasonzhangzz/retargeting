@@ -18,15 +18,15 @@ def one_thread(): torch.set_num_threads(1)
 
 
 def inputs(batch=2):
-    return dict(current_q=torch.rand(batch,20),future_emf=torch.randn(batch,10,5,9)*.01,
-        emf_valid=torch.ones(batch,10,5,dtype=torch.bool),future_dt=torch.arange(1,11)[None].expand(batch,-1)*.02,
+    return dict(current_q=torch.rand(batch,20)*.4+.3,future_ik=torch.rand(batch,10,20)*.4+.3,
+        ik_valid=torch.ones(batch,10,dtype=torch.bool),future_dt=torch.arange(1,11)[None].expand(batch,-1)*.02,
         tactile_positions=torch.rand(batch,10,460,3)*.1,tactile_state=torch.zeros(batch,10,460),
         tactile_valid=torch.ones(batch,10,460,dtype=torch.bool))
 
 
 def test_sensor_checkpointing_preserves_outputs_and_all_gradients():
     torch.manual_seed(31);model=CartNetwork(torch.zeros(20),torch.ones(20),'attention')
-    args=inputs(batch=1);args['current_q'].requires_grad_();args['future_emf'].requires_grad_()
+    args=inputs(batch=1);args['current_q'].requires_grad_();args['future_ik'].requires_grad_()
     args['tactile_positions'].requires_grad_();records=[]
     for enabled in (False,True):
         model.checkpoint_observations=enabled;model.zero_grad(set_to_none=True)
@@ -47,7 +47,7 @@ def test_bf16_attention_keeps_decoder_and_joint_gradients_fp32(unknown):
     model.set_attention_precision('bfloat16');model.checkpoint_observations=True
     args={k:v.cuda() for k,v in inputs(batch=1).items()}
     if unknown:
-        args['tactile_valid'].fill_(False);args['emf_valid'].fill_(False)
+        args['tactile_valid'].fill_(False);args['ik_valid'].fill_(False)
     args['current_q'].requires_grad_();dtypes=[]
     handle=model.blocks[0].attention.register_forward_hook(lambda m,i,o:dtypes.append(o[0].dtype))
     try:
@@ -62,10 +62,11 @@ def test_bf16_attention_keeps_decoder_and_joint_gradients_fp32(unknown):
 @pytest.mark.parametrize('architecture',['attention','fsq'])
 def test_future_policy_gradients_bounds_and_unknowns(architecture):
     torch.manual_seed(1);model=CartNetwork(torch.zeros(20),torch.ones(20),architecture)
-    args=inputs();args['current_q'].requires_grad_();args['future_emf'].requires_grad_()
+    with torch.no_grad():model.decoder[-2].weight.normal_(std=.01)
+    args=inputs();args['current_q'].requires_grad_();args['future_ik'].requires_grad_()
     output=model(**args);output.sum().backward()
     assert output.shape==(2,20) and output.abs().max()<=1
-    assert args['current_q'].grad.abs().sum()>0 and args['future_emf'].grad.abs().sum()>0
+    assert args['current_q'].grad.abs().sum()>0 and args['future_ik'].grad.abs().sum()>0
     assert model.decoder[-2].weight.grad.abs().sum()>0
     if architecture=='fsq':assert model.encoder[-1].weight.grad.abs().sum()>0
     with torch.no_grad():
@@ -75,27 +76,29 @@ def test_future_policy_gradients_bounds_and_unknowns(architecture):
         args['tactile_valid'][:]=False;unknown=model(**args)
         args['tactile_positions'][:]=float('nan');args['tactile_state'][:]=float('nan')
         torch.testing.assert_close(unknown,model(**args))
-        args['emf_valid'][:]=False;args['future_emf'][:]=float('nan')
+        args['ik_valid'][:]=False;args['future_ik'][:]=float('nan')
         assert model(**args).isfinite().all()
     with pytest.raises(ValueError):model(**dict(args,future_dt=torch.zeros(2,10)))
 
 
 def test_unknown_tactile_is_distinct_from_valid_zero():
     model=CartNetwork(torch.zeros(20),torch.ones(20));args=inputs()
+    with torch.no_grad():model.decoder[-2].weight.normal_(std=.01)
     a=model(**args);args['tactile_valid'][:]=False;b=model(**args)
     assert not torch.allclose(a,b)
 
 
 @pytest.mark.parametrize('architecture',['attention','fsq'])
-def test_normalized_delta_has_no_absolute_offset_and_preserves_identity(architecture):
+def test_normalized_delta_tracks_ik_baseline_and_preserves_feedback_transition(architecture):
     low=torch.linspace(-1.3,-.2,20);high=torch.linspace(.4,1.7,20)
     model=CartNetwork(low,high,architecture)
     args=inputs(batch=2);args['current_q']=low+(high-low)*torch.linspace(.1,.9,20)
     args['current_q']=args['current_q'][None].repeat(2,1)
+    args['future_ik']=args['current_q'][:,None,:].repeat(1,10,1)+.01
     with torch.no_grad():model.decoder[-2].weight.zero_();model.decoder[-2].bias.zero_()
     delta=model(**args)
-    torch.testing.assert_close(delta,torch.zeros_like(delta),rtol=0,atol=0)
-    torch.testing.assert_close(model.apply_delta(args['current_q'],delta),args['current_q'])
+    torch.testing.assert_close(delta,2*(args['future_ik'][:,0]-args['current_q'])/(high-low),atol=2.e-7,rtol=1.e-5)
+    torch.testing.assert_close(model.apply_delta(args['current_q'],delta),args['future_ik'][:,0])
     torch.testing.assert_close(model.delta_to_radians(torch.ones_like(delta)),((high-low)/2).expand(2,-1))
     current=args['current_q'].clone().requires_grad_();delta=delta.detach().requires_grad_()
     next_q=model.apply_delta(current,delta)
@@ -134,6 +137,7 @@ def test_emf_rotation_and_left_reflection():
 
 def sensor_row(stamp):
     return dict(timestamp_ms=float(stamp),emf_pose=np.zeros((5,9)).tolist(),emf_valid=[True]*5,
+        ik_valid=True,ik_q_rad=[.4]*20,
         tactile_positions_m=np.zeros((460,3)).tolist(),tactile_state=[0]*460,tactile_valid=[True]*460,
         contacts=dict(tactile_ready=True,self_pairs=[],object_contacts=[]))
 
@@ -144,8 +148,8 @@ def test_exact_horizon_pack_and_buffer_boundaries():
     window=buffer.append(200.,rows[10],0)
     assert len(window)==11 and window[0][0]==0 and window[-1][0]==200
     packed=pack_future(0.,[x[1] for x in window[1:]])
-    before=packed['future_emf'].clone();rows[11]['emf_pose'][0][0]=1000
-    torch.testing.assert_close(before,pack_future(0.,[x[1] for x in window[1:]])['future_emf'])
+    before=packed['future_ik'].clone();rows[11]['ik_q_rad'][0]=1000
+    torch.testing.assert_close(before,pack_future(0.,[x[1] for x in window[1:]])['future_ik'])
     assert buffer.append(220.,rows[11],1) is None and len(buffer.entries)==1
     assert buffer.append(600.,sensor_row(600.),1) is None and len(buffer.entries)==1
     assert buffer.append(600.,sensor_row(600.),1) is None and len(buffer.entries)==1

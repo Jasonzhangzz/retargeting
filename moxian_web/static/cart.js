@@ -6,7 +6,7 @@
  const selected=()=>Array.from(el('cartDatasets').selectedOptions).map(o=>o.value);
  function render(){
   const c=state.cart||{},r=c.recording||{},w=state.wuji2||{};
-  const compatible=c.protocol==='cart_diff_v5';
+  const compatible=c.protocol==='cart_diff_ik_v6';
   const live=!!(compatible&&state.connected&&state.hand_model?.ready&&state.hand_model?.calibrated&&!c.replay_active&&!state.geort?.replay_active);
   if(!pending)el('cartSplit').value=c.split||'train';
   el('cartSplit').disabled=!!(pending||r.active||r.saving);
@@ -54,7 +54,7 @@
    const responses=await Promise.all(['/api/cart/recordings','/api/cart/models'].map(url=>fetch(url,{cache:'no-store'})));
    const [records,models]=await Promise.all(responses.map(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'读取失败');return d.items||[];}));
    recordings=records;
-   options(el('cartDatasets'),records,r=>`${r.split==='validation'?'验证':'训练'} · ${r.label||r.id} · ${r.frames}帧 ${r.complete?'已保存':'保存中'}${r.ik?` · IK 已缓存 ${r.ik.valid_frames}/${r.frames}帧`:''}${r.preprocessing?.protocol==='cart_diff_v5'?` · 观测已准备 · EMF ${r.preprocessing.emf_frames||0}/${r.frames}帧`:r.emf_recorded?' · 已录制原始 EMF · 需准备观测':' · 需准备观测（旧录制需关联原始 EMF）'}`);
+   options(el('cartDatasets'),records,r=>`${r.split==='validation'?'验证':'训练'} · ${r.label||r.id} · ${r.frames}帧 ${r.complete?'已保存':'保存中'}${r.ik?` · IK 已缓存 ${r.ik.valid_frames}/${r.frames}帧`:''}${r.preprocessing?.protocol==='cart_diff_ik_v6'?' · IK／触点观测已准备':' · 需准备观测与 IK'}`);
    options(el('cartModels'),models,m=>`${m.id} · ${m.status}`);
    el('cartRecordings').replaceChildren(...records.map(r=>{const li=document.createElement('li'),a=document.createElement('a');a.href='/api/cart/recording?id='+encodeURIComponent(r.id);a.textContent=`${r.label||r.id} · 接触数据`;li.appendChild(a);if(r.capture_geometry?.status==='completed'){const geometry=document.createElement('a');geometry.href='/api/cart/geometry?id='+encodeURIComponent(r.id);geometry.textContent=' · Wrist 三维点完整记录';li.appendChild(geometry);}if(r.ik){const ik=document.createElement('a');ik.href='/api/cart/ik?id='+encodeURIComponent(r.id);ik.textContent=' · IK 轨迹缓存 NPZ';li.appendChild(ik);}return li;}));lastRefresh=Date.now();render();
   }catch(error){el('cartError').textContent=error.message;}finally{refreshing=false;}

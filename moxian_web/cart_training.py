@@ -13,7 +13,7 @@ from .cart_network import CartNetwork,LEVELS
 from .cart_observations import batch_future,pack_future
 from .cart_collision import CollisionModel,SDFLearner,frozen
 from .cart_objective import CartHand,CartObjective,policy_settings
-from .cart_protocol import PROTOCOL,ARCHITECTURES,POLICY_OUTPUT
+from .cart_protocol import PROTOCOL,ARCHITECTURES,POLICY_OUTPUT,POLICY_INPUT,POLICY_TRANSITION
 from .cart_fast import DEFAULT_BATCH_SIZE,PreparedBatch,ObservationStore,prepare_windows,group_normalizers,choose_parallel_batch
 from .cart_contact_field import CONTACT_FIELD_VERSION
 from .cart_initialization import prepare_ik,attach_ik,perturb_initial_states,IK_VERSION,DEFAULT_INITIAL_NOISE_RAD
@@ -30,6 +30,7 @@ def implementation_identity():
         contact_field=file_hash(Path(__file__).with_name('cart_contact_field.py')),
         kinematics=file_hash(Path(__file__).with_name('cart_kinematics.py')),
         pretrained_sdf=file_hash(Path(__file__).with_name('cart_pretrained_sdf.py')),
+        policy_reward=file_hash(Path(__file__).with_name('cart_reward.py')),
         initialization=file_hash(Path(__file__).with_name('cart_initialization.py')))
 
 
@@ -126,7 +127,7 @@ def predict_trajectory(model,objective,batch,normalizers=None,*,batch_observatio
         encoder_batch=512 if str(device).startswith('cuda') else 64
         pieces=[model.encode_prepared_observations(**{key:value[start:start+encoder_batch] for key,value in values.items()})
             for start in range(0,len(batch)*length,encoder_batch)]
-        encoded=tuple(torch.cat([part[k] for part in pieces]) for k in (0,1))
+        encoded=tuple(torch.cat([part[k] for part in pieces]) for k in range(len(pieces[0])))
     for t in range(length):
         indices=[i+t for i in offsets]
         rows=[w['rows'][i+1] for w,i in zip(batch,indices)]
@@ -217,9 +218,9 @@ def policy_update(model,objective,learner,optimizer,batch,parallel_batch_size,ch
 
 
 def position_statistics(sessions):
-    points=np.concatenate([np.asarray(r['emf_pose'],np.float32)[np.asarray(r['emf_valid'],bool),:3]
+    points=np.concatenate([np.asarray(r['tactile_positions_m'],np.float32)[np.asarray(r['tactile_valid'],bool)]
         for _,rows,_ in sessions for r in rows])
-    if not len(points):raise ValueError('训练会话没有有效 EMF 观测')
+    if not len(points):return np.zeros(3,np.float32),np.ones(3,np.float32)*.1
     return points.mean(0),np.maximum(points.std(0),.001)
 
 
@@ -285,12 +286,16 @@ def full_session(model,objective,sessions,check=lambda:None):
         with torch.no_grad():
             for meta,rows,_ in sessions:
                 store=ObservationStore(rows,objective.hand.device)
-                q=neutral(objective.hand)[None];segment=0
+                q=None;segment=0
                 for i in range(max(0,len(rows)-10)):
                     check()
                     delta=np.diff(store.cpu_stamps[i:i+11])
                     if np.any(delta<=0) or np.any(delta>250) or any(row.get('stream_epoch')!=rows[i].get('stream_epoch') for row in rows[i:i+11]):
-                        q=neutral(objective.hand)[None];segment+=1;continue
+                        q=None;segment+=1;continue
+                    if q is None:
+                        if rows[i].get('ik_valid') is not True:
+                            segment+=1;continue
+                        q=objective.hand.tensor(rows[i]['ik_q_rad'])[None]
                     window=dict(store=store,indices=list(range(i,i+11)))
                     inputs=PreparedBatch([window],objective.hand.device).future_inputs([0]);inputs['validate']=False
                     start=time.perf_counter();next_q=model.apply_delta(q,model(q,**inputs))
@@ -405,6 +410,8 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             selection='minimum_true_mesh_validation_loss',sdf_capacity=learner.capacity,sdf_batch_size=learner.batch_size)
         config.update(micro_batch_size=micro_batch_size,batch_semantics='parallel_windows_per_optimizer_step',
             policy_output=POLICY_OUTPUT,delta_normalization='2*delta_rad/(upper-lower)',state_transition='clamp(normalize(q)+delta,-1,1)',
+            policy_input=POLICY_INPUT,policy_transition=POLICY_TRANSITION,residual_scale=model.residual_scale,
+            objective_version='multiscale_exp_card_v1',reference_initialization='current_frame_cached_ik',
             gradient_accumulation=False,parallel_batch_size=parallel_size,
             window_stride=window_stride or max(1,length//2),training_windows=len(train_windows),
             sdf_backend=sdf_spec,
@@ -419,12 +426,12 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             loss_execution='time_batched_fk_contact',
             contact_field=CONTACT_FIELD_VERSION,contact_selection='learned_directional_field_soft_pair',
             state_initialization=IK_VERSION,initial_noise_rad=initial_noise_rad,ik_datasets=ik_reports,
-            full_session_initialization='neutral_closed_loop')
-        epoch_start=0;resume_cursor=0;order=None;sums={};batches=0;best=float('inf');best_epoch=None
+            full_session_initialization='current_frame_ik_then_closed_loop')
+        epoch_start=0;resume_cursor=0;order=None;sums={};batches=0;loss_samples=0;best=float('inf');best_epoch=None
         def state(epoch,next_batch,order):
             return dict(model=model.state_dict(),collision=collision.model.state_dict(),policy_optimizer=optimizer.state_dict(),
                 sdf_learner=learner.state_dict(),epoch=epoch,next_batch=next_batch,order=torch.as_tensor(order) if order is not None else None,
-                sums=sums,batches=batches,best=best,best_epoch=best_epoch,holdout=tuple(v.cpu() for v in holdout),
+                sums=sums,batches=batches,loss_samples=loss_samples,best=best,best_epoch=best_epoch,holdout=tuple(v.cpu() for v in holdout),
                 parallel_batch_size=parallel_size,
                 policy_updates=policy_updates,
                 numpy_rng=rng.bit_generator.state,torch_rng=torch.get_rng_state(),
@@ -450,7 +457,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             epoch_start=restored['epoch'];resume_cursor=restored['next_batch'];order=restored['order'].numpy() if restored['order'] is not None else None
             parallel_size=restored['parallel_batch_size']
             policy_updates=restored['policy_updates']
-            sums=restored['sums'];batches=restored['batches'];best=restored['best'];best_epoch=restored['best_epoch']
+            sums=restored['sums'];batches=restored['batches'];loss_samples=restored['loss_samples'];best=restored['best'];best_epoch=restored['best_epoch']
             holdout=tuple(v.to(device) for v in restored['holdout'])
             rng.bit_generator.state=restored['numpy_rng'];torch.set_rng_state(restored['torch_rng'])
             if torch.cuda.is_available() and restored['cuda_rng']:torch.cuda.set_rng_state_all(restored['cuda_rng'])
@@ -467,8 +474,8 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             if initialize_from or initialize_geometry_from:
                 source_folder=root/'models'/(initialize_from or initialize_geometry_from)
                 origin=json.loads((source_folder/'config.json').read_text())
-                required=('protocol','robot','output_domain','source','source_binding_version','sdf_capacity','sdf_batch_size')
-                if initialize_from:required+=('architecture','policy_output','levels','position_mean','position_scale','train_ids','validation_ids','datasets')
+                required=('robot','output_domain','source','source_binding_version','sdf_capacity','sdf_batch_size')
+                if initialize_from:required+=('protocol','architecture','policy_input','policy_transition','policy_output','levels','position_mean','position_scale','train_ids','validation_ids','datasets')
                 if initialize_from and origin.get('policy_output')!=POLICY_OUTPUT:
                     raise ValueError('绝对 q 权重不能用作 delta q 策略；可用 initialize_geometry_from 仅迁移几何模型')
                 if any(config[k]!=origin[k] for k in required):raise ValueError('初始化 checkpoint 的架构、数据、坐标或碰撞模型配置不匹配')
@@ -495,7 +502,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             warmup(first_warmup)
         for epoch in range(epoch_start,epochs):
             model.train()
-            if order is None:order=rng.permutation(len(train_windows));sums={};batches=0
+            if order is None:order=rng.permutation(len(train_windows));sums={};batches=0;loss_samples=0
             for start in range(resume_cursor,len(order),parallel_size):
                 check();batch=[train_windows[i] for i in order[start:start+parallel_size]]
                 def stage_progress(stage,completed,total):
@@ -506,11 +513,12 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 loss,parts,sdf_losses,timings=policy_update(model,objective,learner,optimizer,batch,parallel_size,check,stage_progress,initial_noise_rad)
                 batches+=1;policy_updates+=1
                 batch_losses={k:float(v.detach()) for k,v in dict(total=loss,**parts).items()}
-                for k,v in batch_losses.items():sums[k]=sums.get(k,0.)+v
+                loss_samples+=len(batch)
+                for k,v in batch_losses.items():sums[k]=sums.get(k,0.)+v*len(batch)
                 save_checkpoint(folder/'resume.pth',state(epoch,start+parallel_size,order))
                 progress('retargeting',epoch=epoch+1,epochs=epochs,batch=batches,batches=math_ceil(len(order),parallel_size),
                     parallel_batch_size=len(batch),requested_batch_size=batch_size,gradient_accumulation=False,
-                    losses={k:v/batches for k,v in sums.items()},sdf_losses=sdf_losses,sdf_updates=learner.steps,timings=timings,
+                    losses={k:v/loss_samples for k,v in sums.items()},sdf_losses=sdf_losses,sdf_updates=learner.steps,timings=timings,
                     batch_losses=batch_losses,optimizer_step=policy_updates,
                     transitions_per_s=len(batch)*length/sum(timings.values()))
             validation_batch=validation_schedule(validation_windows,epoch+1,epochs,validation_interval,validation_window_budget)
@@ -535,7 +543,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             else:
                 progress('epoch_complete',epoch=epoch+1,epochs=epochs,validation_performed=False,
                     next_validation_epoch=min(epochs,((epoch+1)//validation_interval+1)*validation_interval))
-            order=None;resume_cursor=0;sums={};batches=0
+            order=None;resume_cursor=0;sums={};batches=0;loss_samples=0
             save_checkpoint(folder/'resume.pth',state(epoch+1,0,None))
         checkpoint=torch.load(folder/'last.pth',map_location=device,weights_only=True)
         model.load_state_dict(checkpoint['model']);collision.model.load_state_dict(checkpoint['collision'])
@@ -568,7 +576,7 @@ def math_ceil(n,d):return (n+d-1)//d
 
 def validate_model_geometry(config):
     name=config.get('architecture_name')
-    if config.get('protocol')!=PROTOCOL or name not in ARCHITECTURES or config.get('architecture')!=ARCHITECTURES[name] or config.get('policy_output')!=POLICY_OUTPUT:
+    if config.get('protocol')!=PROTOCOL or name not in ARCHITECTURES or config.get('architecture')!=ARCHITECTURES[name] or config.get('policy_output')!=POLICY_OUTPUT or config.get('policy_input')!=POLICY_INPUT or config.get('policy_transition')!=POLICY_TRANSITION:
         raise ValueError('旧 CART 模型与未来帧可微训练架构不兼容，请重新训练')
     if config.get('geometry')!=implementation_identity():raise ValueError('CART 几何／训练实现已变化，请重新训练')
 
@@ -594,10 +602,10 @@ class Predictor:
         self.collision.model.load_state_dict(checkpoint['collision']);self.collision.model.eval()
         for p in self.collision.model.parameters():p.requires_grad_(False)
 
-    def predict(self,current_q,future_emf,emf_valid,future_dt,tactile_positions=None,tactile_state=None,tactile_valid=None,*,normalized=True,output='delta'):
+    def predict(self,current_q,future_ik,ik_valid,future_dt,tactile_positions=None,tactile_state=None,tactile_valid=None,*,normalized=True,output='delta'):
         if output not in ('delta','next'):raise ValueError('output must be delta or next')
         q=np.asarray(current_q,np.float32);single=q.shape==(20,)
-        values=dict(current_q=q,future_emf=future_emf,emf_valid=emf_valid,future_dt=future_dt,
+        values=dict(current_q=q,future_ik=future_ik,ik_valid=ik_valid,future_dt=future_dt,
             tactile_positions=tactile_positions,tactile_state=tactile_state,tactile_valid=tactile_valid)
         args={}
         for k,value in values.items():
@@ -628,6 +636,7 @@ def evaluate(root,model_id,dataset_ids,check=lambda:None,allow_smoke=False):
         folder,meta=manifest(root,key)
         if not preprocessing_current(folder,meta,full=not allow_smoke):preprocess(root,key,full=not allow_smoke,check=check)
     sessions,source=load_sessions(root,dataset_ids,'validation',require_complete=not allow_smoke)
+    attach_ik(root,sessions)
     if source!=predictor.config['source']:raise ValueError('验证数据与模型标定不匹配')
     if set(dataset_ids)&set(predictor.config['train_ids']):raise ValueError('不能使用训练录制作为独立验证')
     train_groups={manifest(root,key)[1].get('session_id',key) for key in predictor.config['train_ids']}
