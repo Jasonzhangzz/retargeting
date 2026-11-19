@@ -104,6 +104,7 @@ def main():
     parser.add_argument('--architecture',choices=('both','attention','fsq'),default='both')
     parser.add_argument('--device',default='cpu');parser.add_argument('--length',type=int,default=2)
     parser.add_argument('--initialize-sdf-from',type=Path,help='Also validate importing/restoring an articulated Neural SDF')
+    parser.add_argument('--geometry-resume-probe',action='store_true',help='Also interrupt/resume a policy initialized from another CART geometry checkpoint')
     args=parser.parse_args();torch.set_num_threads(1)
     # Compare checkpoint recovery under controlled reductions. Fast BF16 CUDA
     # attention may use nondeterministic backward reductions; two fresh runs
@@ -143,8 +144,30 @@ def main():
             for key in a[group]:
                 torch.testing.assert_close(a[group][key],b[group][key],rtol=1.e-5 if args.device.startswith('cuda') else 0,atol=1.e-6 if args.device.startswith('cuda') else 0)
                 max_delta=max(max_delta,float((a[group][key]-b[group][key]).abs().max()))
+        geometry_resume_delta=None
+        if args.geometry_resume_probe:
+            reference=architecture+'_geometry_reference';probe=architecture+'_geometry_resume'
+            train(root,['train'],['validation'],reference,epochs=1,batch_size=1,length=args.length,smoke=True,
+                architecture=architecture,device=args.device,initialize_geometry_from=architecture)
+            with patch.object(cart_training,'save_checkpoint',interrupt):
+                try:
+                    train(root,['train'],['validation'],probe,epochs=1,batch_size=1,length=args.length,smoke=True,
+                        architecture=architecture,device=args.device,initialize_geometry_from=architecture)
+                except InterruptedError:pass
+            train(root,['train'],['validation'],probe,epochs=1,batch_size=1,length=args.length,smoke=True,
+                architecture=architecture,device=args.device,resume=True)
+            c=torch.load(root/'models'/reference/'resume.pth',map_location='cpu',weights_only=True)
+            d=torch.load(root/'models'/probe/'resume.pth',map_location='cpu',weights_only=True)
+            geometry_resume_delta=0.
+            for group in ('model','collision'):
+                for key in c[group]:
+                    torch.testing.assert_close(c[group][key],d[group][key],rtol=1.e-5 if args.device.startswith('cuda') else 0,
+                        atol=1.e-6 if args.device.startswith('cuda') else 0)
+                    geometry_resume_delta=max(geometry_resume_delta,float((c[group][key]-d[group][key]).abs().max()))
+            assert json.loads((root/'models'/probe/'config.json').read_text())['initialize_geometry_from']==architecture
         result=evaluate(root,architecture,['validation'],allow_smoke=True)
         result.update(interrupted_resume_exact=max_delta==0.,interrupted_resume_max_delta=max_delta,interrupted_resume_within_tolerance=True)
+        if geometry_resume_delta is not None:result['geometry_initialized_resume_max_delta']=geometry_resume_delta
         result.update(runtime_probe(root,model));reports[architecture]=result
     atomic_json(root/'smoke_report.json',dict(architectures=reports,emf_synthetic=True,published=False,source=str(source),
         deterministic_cuda_check=args.device.startswith('cuda')))

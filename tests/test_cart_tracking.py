@@ -13,13 +13,15 @@ def test_disabled_tracking_never_imports_wandb(monkeypatch,tmp_path):
 
 def test_online_curves_resume_and_final_acceptance(monkeypatch,tmp_path):
     calls=[];logs=[];definitions=[];finished=[]
-    run=SimpleNamespace(id='run',url='https://wandb.example/user/cart/run',summary={},
+    run=SimpleNamespace(id='run',url='https://wandb.example/user/cart/run',summary={'error':'previous OOM'},
         define_metric=lambda *a,**kw:definitions.append((a,kw)),log=logs.append,
         finish=lambda **kw:finished.append(kw))
     def init(**kwargs):calls.append(kwargs);return run
     monkeypatch.setitem(sys.modules,'wandb',SimpleNamespace(init=init,Settings=lambda **kw:kw))
     tracker=CartTracking(tmp_path,dict(run_id='run'),project='cart',base_url='https://wandb.example/',resume=True)
     assert calls[0]['resume']=='must' and calls[0]['settings']['base_url']=='https://wandb.example'
+    assert calls[0]['allow_val_change'] is True
+    assert 'error' not in run.summary
     assert calls[0]['save_code'] is False and len(definitions)==6
     tracker.log('batch_compute',dict(compute_stage='collect'))
     assert not logs

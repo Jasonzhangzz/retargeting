@@ -439,6 +439,9 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                     progress('sdf_warmup',completed=step+1,total=warmup_steps,sdf_losses=losses)
         if resume:
             saved=json.loads((folder/'config.json').read_text())
+            # Initialization belongs to the run's history, not the resume call.
+            for key in ('initialize_from','initialize_geometry_from'):
+                config[key]=saved.get(key)
             if config!=saved:raise ValueError('恢复训练的配置、数据或实现指纹发生变化')
             checkpoint_path=folder/'resume.pth' if (folder/'resume.pth').exists() else folder/'warmup.pth'
             restored=torch.load(checkpoint_path,map_location='cpu',weights_only=True)

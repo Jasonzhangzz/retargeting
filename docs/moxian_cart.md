@@ -216,6 +216,8 @@ CUDA 合成端到端检查会启用 Torch 确定性算法，排除快速 BF16 at
 
 恢复时保持原 epochs、batch、length、seed、IK 初始噪声幅度和热启动配置，以及 checkpoint 中的实际并行数。训练不写活动模型选择文件。
 
+从旧模型初始化的新 run 在恢复时保留原来的 `initialize_from`／`initialize_geometry_from` 来源记录，不再次执行初始化。W&B 沿用原 run ID 和 optimizer step，并清除上次失败的当前错误标记。若更新的实现只修正恢复元数据，也需先逐项核对实现指纹、保存原配置及迁移记录；不直接放开数据、网络或损失的兼容性检查。
+
 改变 batch 或执行版本时不能冒充精确恢复。可在新 run 显式使用 `--initialize-from OLD_RUN_ID`，检查输入、关节域、架构、标定、统计量和数据指纹一致后初始化新 run，不复用旧 iteration 光标。同接触场版本可导入两个 optimizer、replay 并计入已有热启动。没有接触头的旧 run 仅显式迁移策略、策略 optimizer、距离头及 embedding，新接触头、几何 optimizer 与回放重新热启动完整预算。旧 run 和 checkpoint 保留。
 
 验证同时执行短窗口和完整会话闭环，使用真实 mesh 的距离、符号及密集自穿透，报告接触、法向、骨轴、保持奖励、速度、加速度、SDF 距离误差及穿透漏检。正式启用要求全部被评估帧通过现有接触间隙 0.5 mm、穿透 0.5 mm 和法向 30° 阈值，验证中有活动接触，另要求 SDF 距离 p95≤0.5 mm、深度超过 0.5 mm 的至少 20 个穿透样本漏检率≤1%，以及至少 20 个有效接触场验证样本的位置 p95≤0.5 mm、法向 p95≤30°。未达标记为 `rejected`；smoke 始终不可启用。
