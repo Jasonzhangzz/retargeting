@@ -425,7 +425,7 @@ class RobokitCardSolver:
         self.rotation_reference=None
         self.initialized=False
 
-    def solve(self,initial,c):
+    def solve(self,initial,c,*,elite_archive=None):
         began=time.perf_counter();o=self.owner;s=self.settings;device=str(o.device)
         previous=pack(c['previous']) if c['previous'] is not None else None
         self.rotation_reference=previous[3:6] if previous is not None else None
@@ -465,6 +465,10 @@ class RobokitCardSolver:
             idx=len(costs);cost=self._parts_vector(value,total=True);seed_costs.append(cost)
             xs=np.vstack((xs,value));costs=np.r_[costs,cost];ids=np.r_[ids,idx]
         finite=ids[np.isfinite(costs[ids])&np.isfinite(xs[ids]).all(1)]
+        if elite_archive is not None:
+            from .math import retained_elites
+            elite_archive.update(retained_elites([o.tensor(xs[ids])],[o.tensor(costs[ids])],
+                max(1,int(s.population*s.elite_fraction))))
         feasible=bool(len(finite));chosen=int(finite[np.argmin(costs[finite])]) if feasible else None
         value=xs[chosen] if feasible else project_value(current)
         best=(o.tensor(value[:3]),o.tensor(Rotation.from_rotvec(value[3:6]).as_matrix()),o.tensor(value[6:]))

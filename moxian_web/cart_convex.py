@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
-from .cart_protocol import PROTOCOL, STAGES
+from .cart_protocol import LEGACY_PROTOCOL as PROTOCOL, STAGES
 from .cart_primitives import templates
 from retarget.baseline.geort.adapter import digest
 

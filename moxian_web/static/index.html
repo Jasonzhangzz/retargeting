@@ -34,6 +34,14 @@
         <div class="pose-stage"><canvas id="manoCanvas" hidden aria-label="MANO 手部曲面模型"></canvas><canvas id="poseCanvas" aria-label="可旋转的官方骨架或指尖姿态"></canvas><div class="stage-top"><span><i class="dot"></i><b id="poseStatus">等待骨架</b></span><span id="poseSource">OFFICIAL SKELETON IK</span></div><div class="stage-scale"><span id="frameLabel">腕部局部坐标系</span><span>单位 mm</span></div><button id="resetCamera" class="reset-camera" title="重置相机" aria-label="重置相机">↺</button><div id="poseEmpty" class="empty-state"><span>⌁</span><b id="poseEmptyText">等待骨架标定</b></div><div class="stage-help">拖动旋转 <span>·</span> 滚轮缩放 <span>·</span> 仅显示腕部局部手型</div></div>
         <section id="wujiCompare" hidden>
           <div class="wuji-tools"><label>求解器 <select id="wujiSolver"><option value="slsqp_graph">SLSQP · 离散接触图 + Laplacian</option><option value="wuji-retargeting">wuji-retargeting</option><option value="cem">CEM · CARD</option><option value="geort">GeoRT · 已训练网络</option><option value="cart">CART · 接触驱动网络</option></select></label><label>SID <input id="wujiSid" type="number" min="0" max="459" value="0"></label><label><input id="wujiNormals" type="checkbox"> 法向 · 8 mm</label><label><input id="wujiRays" type="checkbox"> 关节原点射线</label><label><input id="wujiErrors" type="checkbox"> 接触误差连线</label><button id="wujiRestart" class="text-button">重启求解</button><button id="wujiRebuild" class="text-button">重建映射</button></div>
+          <section id="wujiRVQ" class="rvq-panel" aria-label="RVQ 手势识别与重建">
+            <div class="rvq-heading"><h3>RVQ · 手势识别与重建</h3><label><input id="wujiRVQOverlay" type="checkbox" checked> 叠加重建手型</label></div>
+            <p id="wujiRVQStatus" role="status">等待 Wuji2 重定向结果</p>
+            <div class="rvq-fields"><div><span>预测手势</span><strong id="wujiRVQLabel">—</strong></div><div><span>模型概率</span><strong id="wujiRVQProbability">—</strong></div><div><span>重建关节均差</span><strong id="wujiRVQError">—</strong></div></div>
+            <p id="wujiRVQTop3" class="footnote">Top-3：—</p>
+            <details class="rvq-codes"><summary>离散编码</summary><p id="wujiRVQTokens">—</p></details>
+            <p class="footnote">输入为重定向后的 Wuji2 手型。灰色为重定向结果，蓝色线框为 RVQ 重建；关节均差相对同帧重定向输入计算。</p>
+          </section>
           <details id="geortPanel" class="ik-guide" open>
             <summary>GeoRT · 动作录制与网络训练</summary>
             <p class="footnote">完成六动作手型标定后，自由伸展、弯曲各指并自然对指，覆盖日常使用的活动范围。可录制多段，再选择训练数据。建议另录一段独立动作进行评估。</p>
@@ -74,24 +82,42 @@
             <input id="geortReplaySeek" aria-label="GeoRT 回放进度" type="range" min="0" max="1" value="0" style="width:100%"><p id="geortReplayStatus" role="status">实时输入</p>
             <p id="geortError" role="alert" style="color:#b44738">录制控件加载中…</p><pre id="geortEvaluation" style="white-space:pre-wrap"></pre>
           </details>
-          <div class="wuji-canvas-wrap"><canvas id="wujiCanvas" aria-label="同步视角的 Moxian glove 与 Wuji2 触觉对照"></canvas><span class="wuji-left-label">Moxian · 源手套模型</span><span class="wuji-right-label">WUJI2.2 · 虚拟触觉映射</span></div>
+          <div class="wuji-canvas-wrap"><canvas id="wujiCanvas" aria-label="同步视角的 Moxian glove 与 Wuji2 触觉对照"></canvas><span class="wuji-left-label">Moxian · 源手套模型</span><span class="wuji-right-label">WUJI2.2 · 虚拟触觉映射</span>
+            <aside id="wujiGraspPreview" class="grasp-preview" aria-label="预测 grasp type 与 primitive 示意图">
+              <div class="grasp-preview-heading"><span>预测 GRASP TYPE</span><b id="wujiGraspConfidence">—</b></div>
+              <strong id="wujiGraspType">等待预测</strong>
+              <img id="wujiPrimitiveImage" width="384" height="276" alt="" hidden>
+              <p id="wujiPrimitiveStatus">等待手套姿态</p>
+            </aside>
+          </div>
           <p id="wujiStatus" role="status">等待 Moxian 输入</p><p id="wujiFrameIdentity" role="status">画面后端：等待首帧</p><p id="wujiError"></p><p id="wujiSidInfo" class="footnote"></p><p id="wujiSourceQuality" class="footnote"></p><p class="footnote">共同虚拟世界 · 相同单位与比例 · 紫色：阵列；黄色：手套二值接触标签。离散图 SLSQP 使用骨架与接触点统一图，跨语义 link 接触边高权重；橙线显示接触边及材料点到骨架的连接。wuji-retargeting 使用当前已标定 Moxian 骨架和原版两阶段机器人重定向。各后端按自身时序策略输出，动力学关闭，力权重仅为相对触觉强度。</p>
         </section>
         <details id="cartPanel" class="ik-guide" open>
-          <summary>CART · 五类抓取与三维接触</summary>
-          <p class="footnote">每个子动作自然完成两次张开→闭合→张开。非对指动作请让拇指参与对向夹持或包围。根据当前手型估计球或圆柱尺寸，必要时局部补形；每根关键手指至少有一处指定表面接触即可。低置信度或接触不全时放弃该帧目标；机器人保持源手同帧目标的形状与尺寸。</p>
-          <div class="guide-actions"><label>分区 <select id="cartSplit"><option value="train">训练会话</option><option value="validation">独立验证会话</option></select></label><label>引导动作 <select id="cartStage"></select></label><button id="cartPreview" class="button">预览当前接触目标</button><button id="cartNext" class="button">下一子动作</button></div>
-          <p id="cartPrompt" role="status">等待动作协议</p>
-          <div class="guide-actions"><label><input id="cartShowHull" type="checkbox" checked> 显示 primitive／接触点</label><strong id="cartVolume">—</strong><span id="cartArea">—</span></div>
-          <p id="cartHullStatus" role="status">等待接触几何</p>
-          <div class="cart-preview-wrap"><canvas id="cartPreviewCanvas" aria-label="CART 录制时的源手网格与三维接触目标，可拖动旋转"></canvas></div>
-          <p id="cartPreviewStatus" role="status">独立采集预览 · 不需要已训练模型。绿色显示接触区域与有效 primitive；橙色为诊断候选，不用于训练监督。</p>
-          <div class="guide-actions"><input id="cartLabel" aria-label="CART录制名称" placeholder="会话名称（可选）"><button id="cartRecordStart" class="button" disabled>录制当前子动作／重录</button><button id="cartRecordStop" class="button" disabled>停止并保存</button><button id="cartRefresh" class="text-button">刷新数据与模型</button></div>
-          <p id="cartRecordStatus" role="status">未录制</p>
-          <label>五类抓取会话（多选训练与验证数据）<select id="cartDatasets" multiple size="6" style="width:100%"></select></label><button id="cartDeleteDatasets" class="text-button">删除所选 CART 录制</button><ul id="cartRecordings"></ul>
-          <div class="guide-actions"><button id="cartPreprocess" class="button">完整接触目标预处理</button><label>轮数 <input id="cartEpochs" type="number" min="1" max="2000" value="200"></label><button id="cartTrain" class="button">训练独立 CART 网络</button><button id="cartCancel" class="text-button">取消后台任务</button></div>
-          <p id="cartJob" role="status">需要训练和验证各8个子动作，每段两次完整周期</p><pre id="cartLosses" style="white-space:pre-wrap"></pre>
-          <div class="guide-actions"><label>模型 <select id="cartModels"></select></label><button id="cartSelect" class="button">启用 CART 网络</button><button id="cartEvaluate" class="button">评估所选验证会话</button><button id="cartDeleteModel" class="text-button">删除所选 CART 模型</button><label>实时动作 <select id="cartAction"><option value="auto">自动识别</option></select></label></div>
+          <summary>CART · 任意动作与接触监督</summary>
+          <p class="footnote">自然录制任意动作，例如拧瓶盖、揉搓、接触与释放。训练和独立验证分开采集，无需指定抓取类别。使用已应用的源手几何标定。逐帧保存 EMF、460 路触觉 0/1，以及全部检测到的穿透／接触点和触觉点在 wrist 下的三维位置；停止后等待几何保存完成。</p>
+          <div class="guide-actions"><label>分区 <select id="cartSplit"><option value="train">训练会话</option><option value="validation">独立验证会话</option></select></label><button id="cartPreview" class="button">预览接触</button><label><input id="cartShowHull" type="checkbox" checked> 显示接触点与局部 patch</label></div>
+          <p id="cartPrompt">黄色点为触觉或网格穿透证据；蓝色点云仅表示估计的局部接触 patch。</p>
+          <div class="cart-preview"><canvas id="cartPreviewCanvas" style="width:100%;height:280px" aria-label="CART 手套与接触预览"></canvas><p id="cartPreviewStatus" role="status">等待接触预览</p></div>
+          <p id="cartHullStatus" role="status"></p>
+          <div class="guide-actions"><input id="cartLabel" aria-label="CART录制名称" placeholder="动作／会话名称（可选）"><button id="cartRecordStart" class="button" disabled>录制任意动作</button><button id="cartRecordStop" class="button" disabled>停止并保存</button><button id="cartRefresh" class="text-button">刷新</button></div>
+          <p id="cartRecordStatus" role="status">未录制</p><p id="cartGeometryStatus" role="status"></p>
+          <label>录制会话（多选训练与验证数据）<select id="cartDatasets" multiple size="6" style="width:100%"></select></label><button id="cartDeleteDatasets" class="text-button">删除所选录制</button><ul id="cartRecordings"></ul>
+          <p id="cartTrainingHint" class="muted" aria-live="polite"></p>
+          <div class="guide-actions"><button id="cartPreprocess" class="button">准备观测、触点与 IK</button><label>轮数 <input id="cartEpochs" type="number" min="1" max="2000" value="200"></label><label>并行窗口数（0 按显存自动） <input id="cartBatchSize" type="number" min="0" max="65536" value="0"></label><label>IK 初始噪声 ±rad <input id="cartInitialNoise" type="number" min="0" max="0.5" step="0.01" value="0.1"></label><label>结构 <select id="cartArchitecture"><option value="attention">Attention · 未来 IK＋触觉</option><option value="fsq">FSQ · 未来 IK</option></select></label><button id="cartTrain" class="button">训练可微策略</button><button id="cartCancel" class="text-button">取消后台任务</button></div>
+          <p id="cartBufferStatus" role="status"></p><p id="cartJob" role="status">请选择独立的训练和验证会话</p><pre id="cartLosses" style="white-space:pre-wrap"></pre>
+          <section class="ik-viewer" aria-label="缓存 IK 轨迹回放">
+            <div class="guide-actions"><strong>IK 轨迹回放</strong><button id="cartIKLoad" class="button">查看／刷新 IK 轨迹</button></div>
+            <p class="footnote">选择一段已完成准备的录制。左侧为同帧手套，右侧为缓存的 wuji-retargeting IK 状态；回放不重新求解。此角度用于训练窗口初始化。</p>
+            <div id="cartIKStage" hidden>
+              <div class="ik-canvas-wrap"><canvas id="cartIKCanvas" aria-label="同步回放的手套与 Wuji2 IK 轨迹"></canvas><span class="ik-source-label">Moxian · 录制轨迹</span><span class="ik-robot-label">Wuji2 · 缓存 IK 状态</span></div>
+              <div class="guide-actions"><button id="cartIKPlay" class="button">播放</button><button id="cartIKValid" class="button">下一个有效 IK 帧</button><button id="cartIKClose" class="text-button">关闭回放</button><label>速度 <select id="cartIKSpeed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label><label><input id="cartIKTrails" type="checkbox" checked> 指尖轨迹</label></div>
+              <div class="ik-timeline"><canvas id="cartIKTimeline" aria-label="IK 有效帧，绿色为有效、橙色为缺失"></canvas><input id="cartIKSeek" type="range" min="0" max="0" value="0" aria-label="拖动 IK 时间轴"></div>
+              <p id="cartIKTime">0.00 / 0.00 s</p>
+            </div>
+            <p id="cartIKStatus" role="status">先点击准备观测、触点与 IK，再选择一段录制查看缓存。</p>
+          </section>
+          <div class="guide-actions"><label>模型 <select id="cartModels"></select></label><button id="cartSelect" class="button">启用 CART 网络</button><button id="cartEvaluate" class="button">评估验证会话</button><button id="cartDeleteModel" class="text-button">删除所选模型</button></div>
+          <p class="footnote">输入为当前 Wuji2 关节角与未来10帧 IK 轨迹；Attention 还输入未来触觉三维点和0/1。以 IK 为跟踪基线，网络学习有界修正，输出相对当前状态的归一化 Δq。训练使用指数误差，真实 mesh 验收仍以毫米和角度报告。回放读取缓存 IK，实时对已缓冲帧求解 IK。</p>
           <div class="guide-actions"><button id="cartReplayLoad" class="button">回放所选一段</button><button id="cartReplayPause" class="button">暂停／继续</button><button id="cartReplayStop" class="text-button">返回实时</button></div><input id="cartSeek" aria-label="CART 回放进度" type="range" min="0" max="1" value="0" style="width:100%">
           <p id="cartContactStatus" role="status"></p><p id="cartError" role="alert" style="color:#b44738">CART 控件加载中…</p>
         </details>
@@ -178,8 +204,9 @@
 <script src="/geort-coverage.js?v=clickable-reference-v6"></script>
 <script type="module" src="/geort-workspace-pose.js?v=1"></script>
 <script src="/geort.js?v=pair-balanced-contact-v2-flat"></script>
-<script src="/cart.js?v=primitive-delta-v5"></script>
-<script type="module" src="/cart-preview.js?v=primitive-delta-v5"></script>
-<script type="module" src="/cart-overlay.js?v=collection-preview-v1"></script>
+<script src="/cart.js?v=diff-time-batched-v7"></script>
+<script type="module" src="/cart-preview.js?v=diff-capture-v5"></script>
+<script type="module" src="/cart-ik-view.js?v=ik-reference-v1"></script>
+<script type="module" src="/cart-overlay.js?v=observed-contacts-v5"></script>
 </body>
 </html>

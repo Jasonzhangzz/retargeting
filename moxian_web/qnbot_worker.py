@@ -21,6 +21,7 @@ from moxian_web.shared_capture import SharedHandCapture,load_official_capture
 from moxian_web.background_io import CaptureCheckpoints
 from moxian_web.recording import SnapshotRecorder
 from moxian_web.hand_model import public_fit_report
+from moxian_web.cart_observations import capture_emf
 
 
 def save(path,value):
@@ -421,6 +422,7 @@ def main():
             emit(dict(type='frame',status='preview' if preview else 'calibrated' if profile else 'default',ready=True,error=None,surface_backend='qnbot',runtime_backend='wuji_native21_qnbot_display_v1' if runtime.wuji else REVISION,
                 hand_side=args.side,coordinate_frame='wrist_local',timestamp_ms=frame['timestamp_ms'],skeleton_timestamp_ms=frame['skeleton']['timestamp_ms'],geometry_version=geometry_version,binding_version=model.binding_hash,
                 source_contact=frame.get('contact'),tactile_timestamp_ms=frame.get('tactile_timestamp_ms'),
+                emf_observation=capture_emf(frame,model),
                 calibration_fingerprint=frame.get('calibration_fingerprint'),skeleton_runtime_revision=frame.get('skeleton_runtime_revision'),
                 source_joint_positions_rad=q[0].cpu().tolist(),
                 mesh_frame=dict(sequence=sequence,vertex_count=len(vertices),joint_count=len(joints)),mesh_f32_b64=base64.b64encode(payload).decode(),

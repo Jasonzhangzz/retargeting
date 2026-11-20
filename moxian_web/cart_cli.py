@@ -4,12 +4,14 @@ from pathlib import Path
 from retarget.baseline.geort.adapter import ROOT
 
 def preview():
-    import queue,threading
-    import numpy as np
+    import contextlib,queue,threading
+    import torch
     from .cart_data import SourceGeometry
-    from .cart_protocol import MotionTracker
-    from .cart_geometry import transform_hull
-    init=json.loads(sys.stdin.readline());source=SourceGeometry(init['topology'],init['profile'])
+    from .cart_contacts import transform_contacts,overlay
+    init=json.loads(sys.stdin.readline())
+    torch.set_num_threads(1)
+    with contextlib.redirect_stdout(sys.stderr):
+        source=SourceGeometry(init['topology'],init['profile'],'cuda:0' if torch.cuda.is_available() else 'cpu')
     pending=queue.Queue(maxsize=1)
     def read():
         for line in sys.stdin:
@@ -18,26 +20,20 @@ def preview():
             except queue.Empty:pass
             pending.put(item)
         pending.put(None)
-    threading.Thread(target=read,daemon=True).start();tracker=MotionTracker();last=None
+    threading.Thread(target=read,daemon=True).start()
     while True:
         item=pending.get()
         if item is None:return
         try:
-            identity=(item['stage'],item.get('generation'))
-            if identity!=last:tracker.reset();last=identity
-            row,v,j=source.frame(item['qpos'],item['stage'],item['timestamp_ms'],tracker)
-            root=j[source.adapter.indices[0]];hull=transform_hull(row['target'],source.adapter.transform,root)
-            if row['target'].get('ready'):
-                # Row-vector canonical->wrist uses transform.T.
-                hull=transform_hull(row['target'],source.adapter.transform,root)
-            hull['coordinate_frame']='wrist_local';hull['timestamp_ms']=item['timestamp_ms']
-            frame=dict(ready=True,vertices_m=v.tolist(),joints_m=j.tolist(),cart_hull=hull,
-                timestamp_ms=item['timestamp_ms'],geometry_version=init['topology']['geometry_version'],
-                binding_version=init['topology']['binding_version'])
-            hull['contact_points_m']=[p for pair in row['target'].get('pairs',[]) for p in
-                (np.asarray(pair['points_m'])@source.adapter.transform.T+root).tolist()]
-            hull['contact_points_m'] += [p for c in hull.get('contacts',[]) for p in (c['point_m'],c['object_point_m'])]
-            print(json.dumps(dict(generation=item.get('generation'),hull=hull,motion=dict(phase=row['phase'],cycles=row['cycles']),preview_frame=frame),allow_nan=False),flush=True)
+            with contextlib.redirect_stdout(sys.stderr):
+                row,v,j=source.frame(item['qpos'],item['timestamp_ms'],item)
+            root=j[source.adapter.indices[0]]
+            contacts=transform_contacts(row['contacts'],source.adapter.transform,root,inverse=True)
+            hull=overlay(contacts,timestamp_ms=item['timestamp_ms'],geometry_version=init['topology']['geometry_version'],
+                         processing_ms=row['processing_ms'],coordinate_frame='wrist_local')
+            frame=dict(ready=True,vertices_m=v.tolist(),joints_m=j.tolist(),timestamp_ms=item['timestamp_ms'],
+                geometry_version=init['topology']['geometry_version'],binding_version=init['topology']['binding_version'])
+            print(json.dumps(dict(generation=item.get('generation'),hull=hull,preview_frame=frame),allow_nan=False),flush=True)
         except Exception as exc:print(json.dumps(dict(error=str(exc))),flush=True)
 
 def main():
@@ -45,11 +41,39 @@ def main():
     sub=parser.add_subparsers(dest='action',required=True);sub.add_parser('preview')
     for name in ('preprocess','train','evaluate'):
         p=sub.add_parser(name);p.add_argument('--datasets',nargs='+',required=True);p.add_argument('--job-id')
-        if name=='train':p.add_argument('--epochs',type=int,default=200);p.add_argument('--smoke-test',action='store_true')
+        if name=='train':
+            p.add_argument('--epochs',type=int,default=200);p.add_argument('--smoke-test',action='store_true')
+            p.add_argument('--architecture',choices=('attention','fsq'),default='attention')
+            p.add_argument('--batch-size',type=int,default=0,help='Simultaneous windows per optimizer step; 0 selects from free memory')
+            p.add_argument('--micro-batch-size',type=int,default=0,help='Deprecated alias for a simultaneous-window cap; never gradient accumulation')
+            p.add_argument('--attention-precision',choices=('auto','float32','bfloat16'),default='auto',help='Only CUDA attention uses BF16; geometry and output stay FP32')
+            p.add_argument('--validate-every',type=int,default=10,help='Periodic true-mesh selection audit; first and final epochs are always checked')
+            p.add_argument('--validation-windows',type=int,default=32,help='Fixed true-mesh selection window budget; 0 means all. Final full-session acceptance is never sampled.')
+            p.add_argument('--length',type=int,default=16)
+            p.add_argument('--window-stride',type=int,default=0,help='Training window start spacing; 0 keeps length//2. Validation sampling is unchanged.')
+            p.add_argument('--resume-run');p.add_argument('--sdf-warmup-steps',type=int)
+            p.add_argument('--initialize-from',help='Initialize a new run from a compatible IK-input policy checkpoint; not exact resume')
+            p.add_argument('--initialize-geometry-from',help='Reuse geometry and its optimizer/replay; initialize a fresh delta policy')
+            p.add_argument('--initialize-sdf-from',type=Path,help='Load a q-conditioned Neural SDF checkpoint; may combine with contact/replay initialization')
+            p.add_argument('--wandb-project');p.add_argument('--wandb-entity')
+            p.add_argument('--wandb-base-url',help='Self-hosted W&B origin, without /home')
+            p.add_argument('--wandb-mode',choices=('online','offline'),default='online')
+            p.add_argument('--initial-noise-rad',type=float,default=.1,help='Uniform IK reset noise in [-amplitude, amplitude]; 0 disables')
         if name=='evaluate':p.add_argument('--model',required=True)
+    cap=sub.add_parser('capture');cap.add_argument('--dataset',required=True);cap.add_argument('--follow',action='store_true');cap.add_argument('--device')
+    imp=sub.add_parser('import-emf');imp.add_argument('--dataset',required=True);imp.add_argument('--raw',type=Path,required=True)
     ctrl=sub.add_parser('control');ctrl.add_argument('command');ctrl.add_argument('--data',default='{}');ctrl.add_argument('--url',default='http://127.0.0.1:8890')
     args=parser.parse_args()
     if args.action=='preview':return preview()
+    if args.action=='capture':
+        from .cart_capture import follow,capture_recording
+        result=follow(args.root,args.dataset,args.device) if args.follow else capture_recording(args.root,args.dataset,device=args.device)
+        print(json.dumps(result,ensure_ascii=False));return
+    if args.action=='import-emf':
+        from .cart_data import import_emf
+        from .saved_assets import asset_lock
+        with asset_lock(args.root):print(json.dumps(import_emf(args.root,args.dataset,args.raw),ensure_ascii=False))
+        return
     if args.action=='control':
         import urllib.request
         request=urllib.request.Request(args.url+'/api/command',data=json.dumps(dict(command=args.command,**json.loads(args.data))).encode(),headers={'Content-Type':'application/json'})
@@ -76,7 +100,10 @@ def run(args):
         progress('starting')
         if args.action=='preprocess':
             from .cart_data import preprocess
-            for dataset in args.datasets:check();preprocess(args.root,safe_id(dataset),progress=progress,check=check)
+            from .cart_initialization import prepare_ik
+            for dataset in args.datasets:
+                check();preprocess(args.root,safe_id(dataset),progress=progress,check=check)
+                prepare_ik(args.root,safe_id(dataset),check=check,progress=progress)
             result=dict(processed=args.datasets)
         elif args.action=='train':
             from .cart_data import manifest
@@ -84,7 +111,13 @@ def run(args):
             ids={s:[] for s in ('train','validation')}
             for dataset in args.datasets:
                 _,m=manifest(args.root,dataset);ids[m['split']].append(dataset)
-            result=dict(model=str(train(args.root,ids['train'],ids['validation'],key,args.epochs,smoke=args.smoke_test)))
+            result=dict(model=str(train(args.root,ids['train'],ids['validation'],safe_id(args.resume_run) if args.resume_run else key,args.epochs,smoke=args.smoke_test,
+                architecture=args.architecture,batch_size=args.batch_size,micro_batch_size=args.micro_batch_size,length=args.length,resume=bool(args.resume_run),warmup_steps=args.sdf_warmup_steps,initialize_from=args.initialize_from,
+                initial_noise_rad=args.initial_noise_rad,attention_precision=args.attention_precision,
+                validation_interval=args.validate_every,validation_window_budget=args.validation_windows,
+                initialize_geometry_from=args.initialize_geometry_from,wandb_project=args.wandb_project,wandb_entity=args.wandb_entity,
+                wandb_base_url=args.wandb_base_url,wandb_mode=args.wandb_mode,window_stride=args.window_stride,
+                initialize_sdf_from=args.initialize_sdf_from)))
         else:
             from .cart_training import evaluate
             result=evaluate(args.root,safe_id(args.model),args.datasets,check=check)

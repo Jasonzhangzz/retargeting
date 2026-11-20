@@ -120,7 +120,77 @@ def project(t,r,j,previous,low,high,settings):
     return t,r,j
 
 
-def cem(initial,previous,low,high,evaluate,settings,generator,incumbents=(),verify=None):
+def retained_elites(values, costs, count):
+    """Stable best finite distinct candidates; never change the sampler/RNG."""
+    values, costs = torch.cat(values), torch.cat(costs)
+    finite = torch.isfinite(costs) & torch.isfinite(values).all(-1)
+    ids = torch.nonzero(finite).flatten()
+    ids = ids[torch.argsort(costs[ids], stable=True)]
+    selected = []
+    seen = set()
+    for i in ids.tolist():
+        key = tuple(torch.round(values[i].detach().cpu() * 1e6).long().tolist())
+        if key not in seen:
+            selected.append(i); seen.add(key)
+            if len(selected) >= count: break
+    indices = torch.as_tensor(selected, device=values.device, dtype=torch.long)
+    return dict(values=values[indices].detach(), costs=costs[indices].detach())
+
+
+@torch.no_grad()
+def joint_elite_cem(centers, low, high, evaluate, settings, generator, *, check=lambda: None, constrain=None):
+    """Fixed-wrist, multimodal local CEM for CART's offline tube.
+
+    Unlike the paper CARD path, infeasible candidates may guide recovery but
+    NEVER enter the returned archive. No full-domain random poses are drawn.
+    ``constrain`` audits nominees inside each generation, before the mean update
+    and archive insertion. It may change costs and remove infeasible candidates.
+    """
+    if centers.ndim != 2 or centers.shape[1] != len(low) or not len(centers):
+        raise ValueError('Invalid local CEM centers')
+    roots = centers.clamp(low, high).clone(); means = roots.clone()
+    count = max(1, int(settings.population * settings.elite_fraction))
+    values=[]; costs=[]; evaluated=0; generations=[]
+    best_recovery=means[0]; best_cost=torch.tensor(torch.inf,device=means.device)
+    def record(q):
+        nonlocal evaluated,best_cost,best_recovery
+        cost, feasible = evaluate(q); evaluated += len(q)
+        cost=torch.where(torch.isfinite(cost),cost,torch.inf)
+        if constrain is not None:
+            cost,feasible=constrain(q,cost,feasible)
+            cost=torch.where(torch.isfinite(cost),cost,torch.inf)
+        feasible=feasible & torch.isfinite(cost)
+        generations.append(int(feasible.sum()))
+        values.append(q.clone()); costs.append(torch.where(feasible,cost,torch.inf))
+        idx=cost.argmin()
+        if cost[idx]<best_cost:best_cost=cost[idx].clone();best_recovery=q[idx].clone()
+        return cost,feasible
+    record(means)
+    assignment=torch.arange(settings.population,device=means.device)%len(means)
+    local_low=torch.maximum(low,roots-settings.joint_step_rad)
+    local_high=torch.minimum(high,roots+settings.joint_step_rad)
+    for iteration in range(settings.iterations):
+        check()
+        sigma=settings.joint_sigma_rad*settings.gamma**(iteration/settings.iterations)
+        q=means[assignment]+torch.randn((settings.population,len(low)),device=means.device,generator=generator)*sigma
+        q=q.clamp(local_low[assignment],local_high[assignment]); score,feasible=record(q)
+        for branch in range(len(means)):
+            ids=torch.nonzero(assignment==branch).flatten()
+            branch_score=score[ids]
+            if constrain is not None and feasible[ids].any():
+                branch_score=torch.where(feasible[ids],branch_score,torch.inf)
+            selected,weights=elite_weights(branch_score,max(1,int(len(ids)*settings.elite_fraction)),settings.temperature)
+            if len(selected):means[branch]=(weights[:,None]*q[ids[selected]]).sum(0)
+    record(means)
+    archive=retained_elites(values,costs,count)
+    archive.update(recovery=best_recovery, recovery_cost=float(best_cost), evaluations=evaluated,
+                   local_only=True, centers=roots, joint_radius_rad=settings.joint_step_rad,
+                   constraints_in_cem=constrain is not None,generation_feasible=generations,
+                   device=str(means.device),gpu_parallel=means.device.type=='cuda')
+    return archive
+
+
+def cem(initial,previous,low,high,evaluate,settings,generator,incumbents=(),verify=None,*,elite_archive=None):
     """Paper CEM: fixed Gaussian schedule, strict constraints, best seen.
 
     ``verify`` is a diagnostic callback only. Tuple costs are accepted for
@@ -146,6 +216,8 @@ def cem(initial,previous,low,high,evaluate,settings,generator,incumbents=(),veri
     # Explicit experimental seeds remain supported; production supplies none.
     seeds.extend(projection(pack(state)) for state in incumbents)
     xs=torch.stack(seeds);cost=score(xs);evaluations=len(xs)
+    archive_values=[xs.clone()] if elite_archive is not None else []
+    archive_costs=[cost.clone()] if elite_archive is not None else []
     index=cost.argmin();best_cost=cost[index].clone();best_x=xs[index].clone()
     previous_cost=cost[1].clone() if previous is not None else None
     initial_cost=cost[0].clone();rejected=int((~torch.isfinite(cost)).sum());empty=0
@@ -155,6 +227,8 @@ def cem(initial,previous,low,high,evaluate,settings,generator,incumbents=(),veri
         noise=torch.randn((settings.population,len(mean)),device=mean.device,dtype=mean.dtype,generator=generator)
         xs=projection(mean+noise*sigma0*settings.gamma**(i/settings.iterations))
         cost=score(xs);evaluations+=len(xs);rejected+=int((~torch.isfinite(cost)).sum())
+        if elite_archive is not None:
+            archive_values.append(xs.clone());archive_costs.append(cost.clone())
         index=cost.argmin()
         if cost[index]<best_cost:best_cost=cost[index].clone();best_x=xs[index].clone()
         ids,weights=elite_weights(cost,elite_count,settings.temperature)
@@ -162,6 +236,9 @@ def cem(initial,previous,low,high,evaluate,settings,generator,incumbents=(),veri
         else:empty+=1
     # The final updated mean is also evaluated, as in the population backend.
     final_cost=score(mean[None])[0];evaluations+=1;rejected+=int(not torch.isfinite(final_cost))
+    if elite_archive is not None:
+        archive_values.append(mean[None].clone());archive_costs.append(final_cost[None].clone())
+        elite_archive.update(retained_elites(archive_values,archive_costs,elite_count))
     if final_cost<best_cost:best_cost=final_cost.clone();best_x=mean.clone()
     feasible=bool(torch.isfinite(best_cost))
     best=unpack(best_x if feasible else projection(current))

@@ -62,12 +62,26 @@ class GeoRTService:
             item=dict(source=source,points=points.tolist(),timestamp_ms=stamp,
                       joints_m=np.asarray(joints).tolist(),qpos=q.tolist())
             if frame.get('cart_label'):item['cart_label']=frame['cart_label']
+            if frame.get('cart_label'):
+                # Preserve sensor evidence before the bounded geometry preview.
+                import copy
+                item['source_contact']=copy.deepcopy(frame.get('source_contact'))
+                item['tactile_timestamp_ms']=frame.get('tactile_timestamp_ms')
+                item['emf_observation']=copy.deepcopy(frame.get('emf_observation'))
+                item['input_stream_epoch']=frame.get('input_stream_epoch')
+                if len(topology.get('sid_face_ids',[]))==460:
+                    from .cart_capture_schema import binary_taxels
+                    state,valid,_=binary_taxels(frame,topology)
+                    item['tactile_state']=state.tolist();item['tactile_valid']=valid.tolist()
             with self.lock:
                 self.latest=(item,topology);self.latest_at=time.monotonic()
                 capture=self.capture
                 if not capture:return
                 if source!=capture['source']:
                     self._stop_locked('标定、设备或手侧已变化，已停止录制');return
+                if (capture['meta'].get('capture_mode','').startswith('cart') and
+                        capture.get('binding_version',topology.get('binding_version'))!=topology.get('binding_version')):
+                    self._stop_locked('触觉材料绑定已变化，已停止并保留录制');return
                 if stamp==capture['last_stamp']:return
                 if stamp<capture['last_stamp']:
                     self._stop_locked('源时间戳回退，已停止录制');return
@@ -173,7 +187,7 @@ class GeoRTService:
 
     def start_recording(self, label='', capture_mode='geort', metadata=None):
         with self.lock:
-            if capture_mode not in ('geort','cart','cart_v2','cart_v3'):raise ValueError('无效动作录制模式')
+            if capture_mode not in ('geort','cart','cart_v2','cart_v3','cart_v4','cart_v5'):raise ValueError('无效动作录制模式')
             if self.capture or self.recording.get('saving'):raise ValueError('上一段录制尚未保存')
             if not self.latest or time.monotonic()-self.latest_at>.5:
                 raise ValueError('请先连接手套并完成六动作标定，等待有效的标定后手部模型')
@@ -192,7 +206,7 @@ class GeoRTService:
                       cart_algorithm='cart_current_five_fingertips_v1' if capture_mode=='cart' else None)
             if metadata:meta.update(metadata)
             write_json(folder/'manifest.json',meta)
-            self.capture=dict(id=key,source=source,folder=folder,queue=queue.Queue(maxsize=256),
+            self.capture=dict(id=key,source=source,binding_version=topology.get('binding_version'),folder=folder,queue=queue.Queue(maxsize=256),
                               stop=threading.Event(),last_stamp=-float('inf'),meta=meta)
             self.recording=dict(active=True,saving=False,id=key,frames=0,invalid_frames=0,error=None,
                                 started_at=time.time(),capture_mode=capture_mode)
@@ -236,6 +250,8 @@ class GeoRTService:
                                              ('qpos',row['qpos'],'<f4'),('joints',row['joints_m'],'<f4')):
                         arrays[name].write(np.asarray(value,dtype=dtype).tobytes())
                     count+=1
+                    if capture['meta'].get('capture_geometry_schema'):
+                        stream.flush()  # Let the lossless geometry follower consume complete raw rows.
                     with self.lock:
                         capture['coverage'].add(row['points'],row['timestamp_ms'])
                         self.coverage_total.add(row['points'],row['timestamp_ms'])

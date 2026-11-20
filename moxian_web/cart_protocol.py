@@ -1,7 +1,21 @@
-"""Versioned CART action semantics, independent of SDK, UI and training."""
+"""Current CART version and retained, inactive v3 primitive helpers.
+
+The v5 differentiable policies use no action or phase labels. The definitions
+below remain solely for inspecting old primitive assets, never new supervision.
+"""
 import numpy as np
 
-PROTOCOL = 'cart_contact_v3'
+LEGACY_PROTOCOL = 'cart_contact_v3'
+TUBE_PROTOCOL = 'cart_contact_tube_v4'
+PROTOCOL = 'cart_diff_ik_v6'
+SUPPORTED_RECORDINGS = (PROTOCOL, 'cart_diff_v5', TUBE_PROTOCOL, LEGACY_PROTOCOL)
+ARCHITECTURES = {'attention': 'cart_ik_cross_attention128_delta_v3', 'fsq': 'cart_ik_future_fsq8_delta_v3'}
+POLICY_OUTPUT = 'normalized_delta_q_v1'
+POLICY_INPUT = 'future_ik10_rad_v1'
+POLICY_TRANSITION = 'ik_reference_plus_bounded_residual_v1'
+ARCHITECTURE = ARCHITECTURES['attention']
+LOOKAHEAD = 10
+HISTORY_LENGTH = 10
 FINGERS = ('thumb', 'index', 'middle', 'ring', 'pinky')
 LABELS = ('拇指', '食指', '中指', '无名指', '小指')
 PHASES = ('open', 'closing', 'hold', 'release')

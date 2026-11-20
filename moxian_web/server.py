@@ -405,7 +405,7 @@ class Runtime:
     def observe_hand_output(self, frame, topology, joints, serial):
         self.geort.observe(frame,topology,joints,serial)
         self.cart.observe(frame,topology,joints,serial)
-        return dict(ready=False,status='cart_contact_v3')
+        return dict(ready=False,status='cart_diff_v5')
 
     def geort_diagnostic_input(self):
         """A sampled paired result, never a fresh Glove mixed with an old robot."""
@@ -450,7 +450,6 @@ class Runtime:
 
     def cart_command(self,name,data):
         from .geort_service import safe_id
-        from .cart_protocol import STAGES,stage
         if name in ('cart_recordings_delete','cart_models_delete'):
             return self.delete_learning_assets(self.cart,'recordings' if name=='cart_recordings_delete' else 'models',
                                                data.get('ids'),'cart')
@@ -459,28 +458,22 @@ class Runtime:
             if self.geort.recording.get('active') or self.geort.recording.get('saving'):raise ValueError('GeoRT 正在录制或保存')
             return self.cart.start_recording(data)
         if name=='cart_record_stop':return self.cart.recorder.stop_recording()
-        if name=='cart_stage_set':
+        if name in ('cart_stage_set','cart_configure','cart_preview'):
             result=self.cart.configure(data);self.cart.start_preview();return result
         if name=='cart_stage_next':
-            motion=self.cart.motion
-            if motion.get('cycles',0)<2:raise ValueError('请完成两次闭合—张开后再进入下一动作')
-            index=stage(self.cart.stage_id)['index']+1
-            if index>=len(STAGES):return dict(complete=True)
-            return self.cart.configure(dict(stage=STAGES[index]['id']))
+            raise ValueError('CART 已改为任意动作采集，无需切换子动作')
         if name=='cart_preview_stop':self.cart.stop_preview();return dict(stopped=True)
         if name in ('cart_preprocess','cart_train','cart_evaluate'):
             return self.cart.start_job(name.removeprefix('cart_'),data)
         if name=='cart_cancel':return self.cart.cancel()
         if name=='cart_action_set':
-            mode=data.get('stage','auto')
-            if mode!='auto':stage(mode)
-            self.cart.manual=mode
-            if self.wuji.proc and self.wuji.backend=='cart':self.wuji.control('cart_action_set',dict(stage=mode))
-            return dict(stage=mode)
+            raise ValueError('CART 可微策略不使用动作类别条件')
         if name=='cart_model_select':
             key=safe_id(data.get('model'));folder=self.cart.model_folder(key)
             config=json.loads((folder/'config.json').read_text())
             if self.cart.recorder.latest and config['source']!=self.cart.recorder.latest[0]['source']:raise ValueError('CART 模型与当前标定／设备不匹配')
+            if self.cart.recorder.latest and config.get('source_binding_version')!=self.cart.recorder.latest[1].get('binding_version'):
+                raise ValueError('CART 模型与当前触觉材料绑定不匹配')
             if not self.wuji.proc or self.wuji.proc.poll() is not None:self.wuji.start(config['source']['serial'])
             self.wuji.control('model_set',dict(model_path=str(folder),solver='cart'))
             self.wuji.backend='cart';self.wuji.source_version=None;self.wuji.cart_model_path=str(folder);self.cart.activate(key)
@@ -491,6 +484,8 @@ class Runtime:
             folder,meta=manifest(self.cart.root,safe_id(data.get('dataset')))
             config=json.loads((self.cart.model_folder(self.cart.selected)/'config.json').read_text())
             if config['source']!=meta['source']:raise ValueError('回放与模型源不兼容')
+            if config.get('source_binding_version')!=json.loads((folder/'topology.json').read_text()).get('binding_version'):
+                raise ValueError('回放与模型的触觉材料绑定不兼容')
             if self.cart.recorder.recording.get('active'):raise ValueError('请先停止录制')
             if self.geort.replay_active:self.geort_command('geort_replay_stop',{})
             if self.wuji.backend!='cart':self.cart_command('cart_model_select',dict(model=self.cart.selected))
@@ -777,20 +772,32 @@ def handler(runtime):
                 return self.respond(200,runtime.cart.preview_packet())
             if route=='/api/cart/preview/topology':
                 return self.respond(200,runtime.cart.preview_topology or {'ready':False})
-            if route=='/api/cart/recording':
+            if route=='/api/cart/ik/viewer/close':
+                runtime.cart.ik_view.close()
+                return self.respond(200,{'closed':True})
+            if route in ('/api/cart/ik/viewer/topology','/api/cart/ik/viewer/frame'):
+                query=parse_qs(urlparse(self.path).query)
+                try:
+                    index=int(query.get('index',['0'])[0]) if route.endswith('/frame') else None
+                    return self.respond(200,runtime.cart.ik_view.request(query.get('id',[''])[0],index),fast=True)
+                except (OSError,ValueError) as exc:return self.respond(400,{'error':str(exc)})
+            if route in ('/api/cart/recording','/api/cart/ik','/api/cart/geometry'):
                 from .geort_service import safe_id
                 try:
                     key=safe_id(parse_qs(urlparse(self.path).query).get('id',[None])[0])
                     folder=runtime.cart.root/'recordings'/key
                     if not folder.exists():folder=runtime.geort.root/'recordings'/key
                     meta=json.loads((folder/'manifest.json').read_text())
-                    if meta.get('capture_mode') not in ('cart','cart_v2','cart_v3'):return self.respond(404,{'error':'不是 CART 录制'})
+                    if meta.get('capture_mode') not in ('cart','cart_v2','cart_v3','cart_v4','cart_v5'):return self.respond(404,{'error':'不是 CART 录制'})
                     if not meta.get('complete'):return self.respond(409,{'error':'请先停止录制并等待保存完成'})
-                    path=folder/'cart_targets.jsonl' if (folder/'cart_targets.jsonl').exists() else folder/'frames.jsonl'
+                    ik=route.endswith('/ik');geometry=route.endswith('/geometry')
+                    path=folder/'cart_capture.jsonl' if geometry else folder/'cart_ik.npz' if ik else folder/('cart_targets.jsonl' if (folder/'cart_targets.jsonl').exists() else 'frames.jsonl')
+                    if not path.exists():return self.respond(404,{'error':'请等待 wrist 几何保存完成，或点击准备观测补算' if geometry else '请先准备观测、触点与 IK'})
                     with path.open('rb') as stream:
-                        self.send_response(200);self.send_header('Content-Type','application/x-ndjson')
+                        self.send_response(200);self.send_header('Content-Type','application/octet-stream' if ik else 'application/x-ndjson')
                         self.send_header('Content-Length',str(path.stat().st_size));self.send_header('Cache-Control','no-store')
-                        self.send_header('Content-Disposition',f'attachment; filename="cart_{key}.jsonl"');self.end_headers()
+                        suffix='_wrist_geometry.jsonl' if geometry else '_ik.npz' if ik else '.jsonl'
+                        self.send_header('Content-Disposition',f'attachment; filename="cart_{key}{suffix}"');self.end_headers()
                         import shutil
                         shutil.copyfileobj(stream,self.wfile,64*1024)
                     return
@@ -871,6 +878,7 @@ def handler(runtime):
             if route in guides:file=guides[route]
             if route == '/contact-prediction.css':file=STATIC/'contact-prediction.css'
             if route == '/calibration-contact-targets.json':file=STATIC/'calibration-contact-targets.json'
+            if route == '/cart-ik-view.js':file=STATIC/'cart-ik-view.js'
             if file.is_file():
                 return self.respond(200, file.read_bytes(), mimetypes.guess_type(file)[0] or "text/plain")
             self.respond(404, {"error": "Not found"})
