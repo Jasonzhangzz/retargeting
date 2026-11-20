@@ -8,7 +8,7 @@ import numpy as np
 import torch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from moxian_web.cart_data import load_sessions,manifest
-from moxian_web.cart_training import windows,position_statistics,policy_update
+from moxian_web.cart_training import windows,position_statistics,policy_update,make_objective
 from moxian_web.cart_fast import prepare_windows,choose_parallel_batch
 from moxian_web.cart_protocol import POLICY_OUTPUT
 from moxian_web.cart_objective import CartHand,CartObjective,policy_settings
@@ -23,6 +23,7 @@ def main():
     parser.add_argument('--root',type=Path,default=ROOT/'output/moxian/cart')
     parser.add_argument('--geometry-only',action='store_true',help='Transfer geometry/replay only, leaving the delta policy freshly initialized')
     parser.add_argument('--initialize-sdf-from',type=Path,help='Benchmark the pretrained articulated SDF distance backend')
+    parser.add_argument('--policy-objective',choices=('multiscale_exp_card_v1','card_raw_neural_collision_v1','card_raw_neural_surface_v2'),default='multiscale_exp_card_v1')
     parser.add_argument('--dataset',required=True);parser.add_argument('--model')
     parser.add_argument('--architecture',choices=('attention','fsq'),default='attention')
     parser.add_argument('--batch-size',type=int,default=16);parser.add_argument('--micro-batch-size',type=int,default=0)
@@ -52,7 +53,10 @@ def main():
     if args.initialize_sdf_from:
         from moxian_web.cart_pretrained_sdf import load_pretrained
         collision.model,_=load_pretrained(hand,args.initialize_sdf_from)
-    objective=CartObjective(hand,policy_settings(),collision);objective.cache_rows=True
+    objective=make_objective(hand,collision,args.policy_objective);objective.cache_rows=True
+    if args.policy_objective in ('card_raw_neural_collision_v1','card_raw_neural_surface_v2'):
+        from moxian_web.cart_card_cost import attach_card_targets
+        attach_card_targets(args.root,sessions,args.device)
     mean,scale=position_statistics(sessions)
     model=CartNetwork(hand.low,hand.high,args.architecture,position_mean=mean,position_scale=scale).to(args.device)
     learner=SDFLearner(collision);optimizer=torch.optim.AdamW(model.parameters(),lr=1.e-4)
@@ -90,10 +94,13 @@ def main():
         sync()
         if args.device.startswith('cuda'):torch.cuda.reset_peak_memory_stats(args.device)
         started=time.perf_counter()
-        loss,_,geometry_losses,timings=policy_update(model,objective,learner,optimizer,batch,micro,initial_noise_rad=args.initial_noise_rad,batch_losses=not args.serial_losses)
+        before=[p.detach().clone() for p in model.parameters()]
+        loss,cost_parts,geometry_losses,timings=policy_update(model,objective,learner,optimizer,batch,micro,initial_noise_rad=args.initial_noise_rad,batch_losses=not args.serial_losses)
         sync();elapsed=time.perf_counter()-started
         result=dict(repeat=repeat,warmup=repeat==0,elapsed_s=elapsed,windows_per_s=len(batch)/elapsed,
-            transitions_per_s=len(batch)*args.length/elapsed,loss=float(loss.detach()),phase_wall_s=timings,geometry_losses=geometry_losses)
+            transitions_per_s=len(batch)*args.length/elapsed,loss=float(loss.detach()),phase_wall_s=timings,geometry_losses=geometry_losses,
+            cost_parts={k:float(v) for k,v in cost_parts.items()},
+            policy_parameter_change_l2=float(sum((p.detach()-old).square().sum() for p,old in zip(model.parameters(),before)).sqrt()))
         if args.device.startswith('cuda'):result['peak_allocated_mb']=torch.cuda.max_memory_allocated(args.device)/2**20
         results.append(result);print(json.dumps(result),flush=True)
     report=dict(device=torch.cuda.get_device_name(args.device) if args.device.startswith('cuda') else 'CPU',

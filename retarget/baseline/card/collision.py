@@ -50,6 +50,17 @@ class WujiMeshCollision:
                 palm=a==0 and (b-1)%4>=1
                 distant=a>0 and (a-1)//4==(b-1)//4 and b-a>1
                 if cross or palm or distant:allowed[a,b]=allowed[b,a]=1
+        # Resolve mechanical adjacency from the native body tree, including
+        # intervening fixed bodies, rather than trusting link-number spacing.
+        owners={body:i for i,body in enumerate(surface.body_ids)}
+        self.parent_owners=np.full(n,-1,np.int32)
+        for owner,body in enumerate(surface.body_ids):
+            parent=int(surface.model.body_parentid[body])
+            while parent and parent not in owners:parent=int(surface.model.body_parentid[parent])
+            if parent in owners:
+                neighbour=owners[parent];self.parent_owners[owner]=neighbour
+                allowed[owner,neighbour]=allowed[neighbour,owner]=0
+        self.allowed_mask=allowed.astype(bool)
         self.allowed=wp.array(allowed,dtype=int,device=self.device)
         collar=np.zeros(n,np.float32)
         for owner in (2,6,10,14,18):
@@ -88,11 +99,16 @@ class WujiMeshCollision:
         return result,valid
 
     def report(self,depth,valid):
-        values=depth.detach().cpu().numpy();pairs={}
+        raw=depth.detach().cpu().numpy();pairs={}
+        valid=bool(valid) and bool(np.isfinite(raw).all())
+        # Never export a mechanical connection as a collision, even if an
+        # upstream/legacy buffer contains a nonzero depth for an excluded pair.
+        values=np.where(self.allowed_mask & np.isfinite(raw),raw,0.)
         for a in range(21):
             for b in range(a+1,21):
                 value=float(max(values[a,b],values[b,a]))
                 if value>1e-5:pairs[self.names[a]+'__'+self.names[b]]=value
-        return dict(max_penetration_mm=float(values.max()),pair_depths_mm=pairs,query_valid=bool(valid),
+        return dict(max_penetration_mm=float(values.max()),pair_depths_mm=pairs if valid else {},query_valid=valid,
+            connection_exclusions_applied=True,display_threshold_mm=.5,
             method='native_mesh_winding_vertices_and_face_centres',continuous_intersection_proof=False,
             checked_scope='all_cross_finger_links_nonadjacent_same_finger_and_palm_except_connected_MCP_collars')

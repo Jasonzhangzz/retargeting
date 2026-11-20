@@ -261,9 +261,9 @@ class TactileRetarget:
         intended=set(c.get('self_pairs',[]));cross_mask=theta.new_tensor([pair not in intended for pair in self.cross_pairs])
         parts['collision_self']=s.wself**2*((s.margin_mm-gap[:,:len(self.cross_pairs)]*1000).clamp_min(0).square()*cross_mask).sum(-1)
         palm_gap=gap[:,len(self.cross_pairs):];palm_mask=torch.tensor([pair not in intended for pair in self.palm_pairs],device=theta.device)
-        # Appendix D: palm-finger clearance is hard; finger-finger is soft.
+        # Keep main's collision energy; clearance no longer rejects candidates.
         parts['collision_self']+=s.wself**2*((s.margin_mm-palm_gap*1000).clamp_min(0).square()*palm_mask).sum(-1)
-        hard_palm=((palm_gap*1000<s.margin_mm)&palm_mask).any(-1);hard_pair=torch.zeros_like(hard_palm)
+        hard_palm=torch.zeros(batch,dtype=torch.bool,device=theta.device);hard_pair=torch.zeros_like(hard_palm)
         anchor_by_region={a['region']:a for a in c['anchors']};pair_gaps={};pair_points={}
         for a,b in intended:
             if a not in selected or b not in selected:continue
@@ -297,12 +297,11 @@ class TactileRetarget:
                 penetration=c['sdf'].penetration(samples,c['joints'])*1000
                 max_pen=torch.maximum(max_pen,penetration.amax(-1))
                 parts['collision_object']+=weight**2*(penetration-s.allowance_mm).clamp_min(0).square().sum(-1)
-            hard|=max_pen>s.hard_penetration_mm
         groups=dict(contact=parts['contact_position']+parts['contact_direction']+parts['contact_force_vector']+parts['contact_normal_force']+parts['contact_fix']+parts['contact_self_closure'],style=parts['style_tip']+parts['style_normal']+parts['style_bone'],smooth=parts['smooth_joint']+parts['smooth_translation']+parts['smooth_rotation']+parts['motion_joint'],collision=parts['collision_self']+parts['collision_mesh']+parts['collision_object'])
         raw_cost=sum(groups.values());cost=torch.where(hard|~torch.isfinite(raw_cost),torch.inf,raw_cost)
         if search:return raw_cost,hard.to(raw_cost.dtype)
         if not details:return cost
-        return cost,dict(parts=parts,groups=groups,points=selected,normals=selected_normals,local_points=local_selected,material_points=material_selected,force_support=force_support,hard=hard,hard_palm=hard_palm,hard_pair=hard_pair,hard_mesh=hard_mesh,mesh_depth=mesh_depth,mesh_valid=mesh_valid,hard_object=max_pen>s.hard_penetration_mm,pair_gaps=pair_gaps,pair_points=pair_points,max_penetration_mm=torch.maximum(max_pen,mesh_max),object_max_penetration_mm=max_pen,min_palm_gap_mm=palm_gap.amin(-1)*1000)
+        return cost,dict(parts=parts,groups=groups,points=selected,normals=selected_normals,local_points=local_selected,material_points=material_selected,force_support=force_support,hard=hard,hard_palm=hard_palm,hard_pair=hard_pair,hard_mesh=hard_mesh,mesh_depth=mesh_depth,mesh_valid=mesh_valid,hard_object=torch.zeros_like(hard),pair_gaps=pair_gaps,pair_points=pair_points,max_penetration_mm=torch.maximum(max_pen,mesh_max),object_max_penetration_mm=max_pen,min_palm_gap_mm=palm_gap.amin(-1)*1000)
 
     def verify_mesh(self,t,r,theta):
         p,rr=self.frames(t,r,theta);depth,valid=self.mesh_collision.query(p,rr,dense=True)
@@ -468,7 +467,7 @@ class TactileRetarget:
             collision=dict(source='CARD_capsules_and_object_SDF_with_native_mesh_diagnostics',dynamics=False,max_penetration_mm=float(detail['max_penetration_mm'][0]),
                 self_mesh=self.mesh_collision.report(detail['mesh_depth'][0],detail['mesh_valid'][0]),self_hard_limit_mm=None,mesh_diagnostic_limit_mm=self.settings.self_penetration_mm,mesh_role='diagnostic_only',
                 object_max_penetration_mm=float(detail['object_max_penetration_mm'][0]),mesh_hard_rejected=False,mesh_diagnostic_exceeded=bool(detail['hard_mesh'][0]),
-                object_hard_gate_enabled=True,
+                object_hard_gate_enabled=False,palm_hard_gate_enabled=False,
                 min_palm_gap_mm=float(detail['min_palm_gap_mm'][0]),palm_hard_rejected=bool(detail['hard_palm'][0]),pair_hard_rejected=bool(detail['hard_pair'][0]),object_hard_rejected=bool(detail['hard_object'][0])),
             quality=dict(active_taxels=int(weights['mask'].sum()),active_patches=int(weights['active'].sum()),active_anchors=len(anchors),contact_rmse_mm=float(np.sqrt(np.mean(np.square(errors)))) if errors else None,
                 contact_max_error_mm=max(errors) if errors else None,patch_center_rmse_mm=float(np.sqrt(np.mean(np.square(errors)))) if errors else None,contact_normal_mean_deg=float(np.mean(angular)) if angular else None,

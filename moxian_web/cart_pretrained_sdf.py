@@ -119,5 +119,9 @@ class PretrainedSDF(nn.Module):
 def restore_geometry(hand,spec):
     if spec.get('kind','link_sdf_v1')=='link_sdf_v1':
         from .cart_collision import LinkSDF
-        return LinkSDF().to(hand.device)
-    return PretrainedSDF(hand,spec)
+        model=LinkSDF().to(hand.device)
+    else:model=PretrainedSDF(hand,spec)
+    if spec.get('q_collision'):
+        from .cart_q_collision import QCollisionField
+        model.q_collision=QCollisionField(hand,spec['q_collision'])
+    return model

@@ -18,6 +18,8 @@ from .cart_fast import DEFAULT_BATCH_SIZE,PreparedBatch,ObservationStore,prepare
 from .cart_contact_field import CONTACT_FIELD_VERSION
 from .cart_initialization import prepare_ik,attach_ik,perturb_initial_states,IK_VERSION,DEFAULT_INITIAL_NOISE_RAD
 from .cart_tracking import CartTracking
+from .cart_loss_scaling import normalized_policy_cost,policy_cost_scaling_spec
+from .cart_optim import policy_optimizer,cosine_multiplier,scale_learning_rates
 from retarget.baseline.geort.training import atomic_json
 
 
@@ -27,11 +29,28 @@ def neutral(hand):
 
 def implementation_identity():
     return dict(geometry_identity(),batch_execution=file_hash(Path(__file__).with_name('cart_fast.py')),
+        loss_scaling=file_hash(Path(__file__).with_name('cart_loss_scaling.py')),
+        optimizers=file_hash(Path(__file__).with_name('cart_optim.py')),
         contact_field=file_hash(Path(__file__).with_name('cart_contact_field.py')),
         kinematics=file_hash(Path(__file__).with_name('cart_kinematics.py')),
         pretrained_sdf=file_hash(Path(__file__).with_name('cart_pretrained_sdf.py')),
+        q_collision=file_hash(Path(__file__).with_name('cart_q_collision.py')),
         policy_reward=file_hash(Path(__file__).with_name('cart_reward.py')),
-        initialization=file_hash(Path(__file__).with_name('cart_initialization.py')))
+        initialization=file_hash(Path(__file__).with_name('cart_initialization.py')),
+        card_cost={name:file_hash(Path(__file__).parents[1]/name) for name in
+            ('moxian_web/cart_card_cost.py','moxian_web/cart_card_neural_surface.py','retarget/baseline/card/retarget.py',
+             'retarget/baseline/card/math.py','retarget/baseline/card/geometry.py')})
+
+
+def make_objective(hand,collision,kind='multiscale_exp_card_v1'):
+    if kind=='card_raw_neural_surface_v2':
+        from .cart_card_neural_surface import NeuralCardCostObjective
+        return NeuralCardCostObjective(hand,collision)
+    if kind in ('card_raw_neural_collision_v1','card_raw_neural_surface_v2'):
+        from .cart_card_cost import CardCostObjective
+        return CardCostObjective(hand,collision)
+    if kind!='multiscale_exp_card_v1':raise ValueError('Unknown CART policy objective')
+    return CartObjective(hand,policy_settings(),collision)
 
 
 class RolloutTrajectory:
@@ -52,6 +71,8 @@ class RolloutTrajectory:
         states=torch.cat(self.predictions).detach();frames=objective.hand.frames(states)
         rows=[row for step in self.pending for row in step[1]]
         collision.collect_queries(states,rows,frames,sample_budget=512*len(self.pending))
+        if hasattr(objective,'collect_geometry_queries'):
+            objective.collect_geometry_queries(states,rows,frames)
 
     def loss(self,objective,*,audit=False,batch_losses=True,collect_metrics=True):
         collision=objective.collision;old=collision.auditing if collision is not None else False
@@ -209,8 +230,23 @@ def policy_update(model,objective,learner,optimizer,batch,parallel_batch_size,ch
     with frozen(objective.collision.model):
         check();loss,parts,_,_=trajectory.loss(objective,batch_losses=batch_losses,collect_metrics=False)
         if not torch.isfinite(loss):raise ValueError('CART loss 出现 NaN/Inf')
+        raw_cost=loss
+        loss=normalized_policy_cost(raw_cost,getattr(objective,'policy_loss_scale',0.))
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(),10.,error_if_nonfinite=True);optimizer.step()
+        parameters=[p for p in model.parameters() if p.requires_grad]
+        before=[p.detach().clone() for p in parameters]
+        grad_norm=torch.nn.utils.clip_grad_norm_(parameters,10.,error_if_nonfinite=True)
+        clip_multiplier=(10./(grad_norm+1.e-6)).clamp(max=1.)
+        optimizer.step()
+        updates=[p.detach()-old for p,old in zip(parameters,before)]
+        update_square=sum(delta.square().sum() for delta in updates)
+        parts=dict(parts,raw_cost=raw_cost,normalized_cost=loss,
+            gradient_norm_before_clip=grad_norm,gradient_norm_after_clip=grad_norm*clip_multiplier,
+            gradient_clip_multiplier=clip_multiplier,
+            parameter_update_norm=update_square.sqrt(),
+            parameter_update_rms=(update_square/sum(p.numel() for p in parameters)).sqrt(),
+            parameter_update_max=torch.stack([delta.abs().max() for delta in updates]).max(),
+            learning_rate=raw_cost.new_tensor(optimizer.param_groups[0]['lr']))
     sync()
     times['policy_s']=time.perf_counter()-started
     if progress:progress('backward',1,1)
@@ -263,18 +299,25 @@ def motion_summary(samples):
         joint_acceleration_rms_rad_s2=float(np.sqrt(np.mean(np.square(accelerations)))) if accelerations else None)
 
 
-def acceptance(quality,sdf):
+def acceptance(quality,sdf,*,contact_field_required=True,penetration_limit_mm=.5):
     reasons=[]
     if not quality['frames']:reasons.append('没有完整的未来帧验证窗口')
     if not quality['contact_frames']:reasons.append('独立验证缺少活动接触')
-    if quality['feasible_rate']!=1.:reasons.append('真实 mesh 接触／法向／0.5 mm 穿透阈值未全部通过')
+    if quality['feasible_rate']!=1.:reasons.append(f'真实 mesh 接触／法向／{penetration_limit_mm:g} mm 穿透阈值未全部通过')
     if sdf['distance_p95_mm']>.5:reasons.append('SDF 距离 p95 超过 0.5 mm')
-    if sdf.get('contact_samples',0)<20 or sdf.get('contact_position_p95_mm') is None or sdf['contact_position_p95_mm']>.5:
+    if contact_field_required and (sdf.get('contact_samples',0)<20 or sdf.get('contact_position_p95_mm') is None or sdf['contact_position_p95_mm']>.5):
         reasons.append('连续接触场真实 mesh 验证覆盖不足或位置 p95 超过 0.5 mm')
-    if sdf.get('contact_normal_p95_deg') is None or sdf['contact_normal_p95_deg']>30:
+    if contact_field_required and (sdf.get('contact_normal_p95_deg') is None or sdf['contact_normal_p95_deg']>30):
         reasons.append('连续接触场法向 p95 超过 30 度')
     if sdf['penetration_cases']<20 or sdf['penetration_false_negative_rate'] is None or sdf['penetration_false_negative_rate']>.01:
         reasons.append('SDF 穿透验证覆盖不足或漏检率超过 1%')
+    if 'q_samples' in sdf:
+        if sdf.get('q_collision_cases',0)<20 or sdf.get('q_false_negative_rate') is None or sdf['q_false_negative_rate']>.01:
+            reasons.append('q 自碰撞场穿透验证覆盖不足或漏检率超过 1%')
+        if sdf.get('q_gradient_cosine_mean',0)<.8 or sdf.get('q_escape_cost_descent_rate',0)<.9:
+            reasons.append('q 自碰撞场梯度方向或真实 mesh 退出验证未通过')
+        if sdf.get('q_cap_cases',0)<20 or sdf.get('q_cap_gradient_cosine_mean') is None or sdf['q_cap_gradient_cosine_mean']<.8 or sdf.get('q_combined_escape_cost_descent_rate',0)<.9:
+            reasons.append('q 自碰撞场 5 mm 超限代价梯度或退出验证未通过')
     return reasons
 
 
@@ -313,7 +356,8 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
           smoke=False,architecture='attention',resume=False,warmup_steps=None,device=None,micro_batch_size=0,initialize_from=None,
           initial_noise_rad=DEFAULT_INITIAL_NOISE_RAD,attention_precision='auto',validation_interval=10,validation_window_budget=32,
           initialize_geometry_from=None,wandb_project=None,wandb_entity=None,wandb_base_url=None,wandb_mode='online',window_stride=0,
-          initialize_sdf_from=None):
+          initialize_sdf_from=None,policy_objective='multiscale_exp_card_v1',policy_loss_scale=0.,initialize_contact_from=None,optimizer_kind='adamw',
+          initialize_q_collision_from=None,transfer_policy_optimizer=True):
     if architecture not in ARCHITECTURES:raise ValueError('architecture must be attention or fsq')
     from .geort_service import safe_id
     run_id=safe_id(run_id)
@@ -321,6 +365,12 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
     if initialize_geometry_from:initialize_geometry_from=safe_id(initialize_geometry_from)
     if sum(map(bool,(resume,initialize_from,initialize_geometry_from)))>1:raise ValueError('恢复、策略初始化与仅几何初始化不能同时指定')
     if initialize_sdf_from and (resume or initialize_from):raise ValueError('Neural SDF 导入用于新策略；恢复时从 checkpoint 自动还原')
+    scaling=policy_cost_scaling_spec(policy_loss_scale)
+    if optimizer_kind not in ('adamw','muon_sgd'):raise ValueError('Unknown optimizer')
+    if policy_loss_scale and policy_objective not in ('card_raw_neural_collision_v1','card_raw_neural_surface_v2'):
+        raise ValueError('CARD cost normalization requires a CARD objective')
+    if initialize_contact_from and (resume or initialize_from or initialize_geometry_from):
+        raise ValueError('Independent contact initialization requires a fresh policy/geometry optimizer')
     root=Path(root);folder=root/'models'/run_id
     folder.mkdir(parents=True,exist_ok=resume)
     lockpath=root.parent/'geort/training.lock';lockpath.parent.mkdir(parents=True,exist_ok=True)
@@ -367,7 +417,14 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         train_windows=windows(sessions,length,window_stride);validation_windows=windows(validation,length)
         if not train_windows or not validation_windows:raise ValueError('训练与验证各需至少连续 length+10 帧真实观测，不跨断流边界')
         device=device or ('cuda:0' if torch.cuda.is_available() else 'cpu')
-        hand=CartHand(device);collision=CollisionModel(hand);objective=CartObjective(hand,policy_settings(),collision)
+        hand=CartHand(device);collision=CollisionModel(hand);objective=make_objective(hand,collision,policy_objective)
+        objective.policy_loss_scale=policy_loss_scale
+        card_reports=[]
+        if policy_objective in ('card_raw_neural_collision_v1','card_raw_neural_surface_v2'):
+            from .cart_card_cost import attach_card_targets
+            target_devices=[torch.device(device)] if str(device).startswith('cuda') else []
+            with torch.random.fork_rng(devices=target_devices):
+                card_reports=attach_card_targets(root,sessions+validation,device,check,progress)
         mean,scale=position_statistics(sessions)
         model=CartNetwork(hand.low,hand.high,architecture,position_mean=mean,position_scale=scale).to(device)
         sdf_spec={'kind':'link_sdf_v1'}
@@ -382,6 +439,21 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 origin_folder=folder if resume else root/'models'/(initialize_from or initialize_geometry_from)
                 sdf_spec=json.loads((origin_folder/'config.json').read_text()).get('sdf_backend',sdf_spec)
                 if sdf_spec['kind']!='link_sdf_v1':collision.model=restore_geometry(hand,sdf_spec)
+            if initialize_contact_from:
+                contact_state=torch.load(initialize_contact_from,map_location='cpu',weights_only=True)
+                if not hasattr(collision.model,'load_contact_state'):raise ValueError('Contact initialization requires pretrained articulated SDF')
+                collision.model.load_contact_state(contact_state)
+                if not all(torch.isfinite(p).all() for p in collision.model.parameters()):raise ValueError('Nonfinite initialized geometry')
+        if initialize_q_collision_from:
+            if resume or policy_objective!='card_raw_neural_surface_v2':raise ValueError('Q collision import requires a new neural CARD run')
+            if not hasattr(collision.model,'at_frames'):raise ValueError('Q collision policy requires the articulated (q, wrist point, link) SDF')
+            from .cart_q_collision import attach_field
+            saved_q=torch.load(initialize_q_collision_from,map_location='cpu',weights_only=True)
+            attach_field(collision,saved_q['spec'],saved_q['model'])
+            collision.q_initial_learner=saved_q['learner']
+            sdf_spec=dict(sdf_spec,q_collision=saved_q['spec'])
+        if hasattr(collision.model,'q_collision'):
+            collision.q_collected=[]
         requested_precision=attention_precision
         if attention_precision not in ('auto','float32','bfloat16'):raise ValueError('无效 attention 精度')
         if attention_precision=='auto':
@@ -395,23 +467,30 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             attention_precision,model.checkpoint_observations))
         if resume:parallel_size=json.loads((folder/'config.json').read_text())['parallel_batch_size']
         objective.cache_rows=True
-        optimizer=torch.optim.AdamW(model.parameters(),lr=1.e-4)
-        learner=SDFLearner(collision,capacity=4096 if smoke else 200000,batch_size=64 if smoke else 2048)
+        optimizer=policy_optimizer(model,optimizer_kind)
+        learner=SDFLearner(collision,capacity=4096 if smoke else 200000,batch_size=64 if smoke else 2048,optimizer_kind=optimizer_kind)
         warmup_steps=(4 if smoke else 2000) if warmup_steps is None else warmup_steps
         if isinstance(warmup_steps,bool) or not isinstance(warmup_steps,int) or warmup_steps<0:raise ValueError('无效 SDF 热启动步数')
         config=dict(protocol=PROTOCOL,architecture=ARCHITECTURES[architecture],architecture_name=architecture,
             geometry=implementation_identity(),run_id=run_id,source=source,source_binding_version=next(iter(bindings)),
             robot=hand.robot.spec,output_domain=hand.domain,levels=list(LEVELS),position_mean=mean.tolist(),position_scale=scale.tolist(),
             train_ids=train_ids,validation_ids=validation_ids,epochs=epochs,seed=seed,batch_size=batch_size,sequence_length=length,
-            lookahead=10,optimizer='AdamW',learning_rate=1.e-4,objective=objective.settings.payload(),
+            lookahead=10,optimizer='Muon+SGD' if optimizer_kind=='muon_sgd' else 'AdamW',
+            optimizer_kind=optimizer_kind,learning_rate=5.e-4 if optimizer_kind=='muon_sgd' else 1.e-4,objective=objective.settings.payload(),
             profile='smoke_test' if smoke else 'full',online_search=False,contact_conditioning=architecture=='attention',
             datasets=[dict(id=m['id'],fingerprint=info['fingerprint']) for m,_,info in sessions+validation],
             training='differentiable_bptt_online_mesh_sdf',sdf_warmup_steps=warmup_steps,sdf_updates_per_batch=2,
             selection='minimum_true_mesh_validation_loss',sdf_capacity=learner.capacity,sdf_batch_size=learner.batch_size)
+        config.update(policy_loss_scaling=scaling,gradient_clip_norm=10.,
+            initialize_q_collision_from=dict(name=Path(initialize_q_collision_from).name,sha256=file_hash(initialize_q_collision_from)) if initialize_q_collision_from else None,
+            transfer_policy_optimizer=transfer_policy_optimizer,
+            learning_rate_schedule=dict(kind='warmup_cosine',warmup_updates=5,minimum_multiplier=.1,
+                total_updates=epochs*math_ceil(len(train_windows),parallel_size)) if optimizer_kind=='muon_sgd' else dict(kind='constant'),
+            initialize_contact_from=dict(name=Path(initialize_contact_from).name,sha256=file_hash(initialize_contact_from)) if initialize_contact_from else None)
         config.update(micro_batch_size=micro_batch_size,batch_semantics='parallel_windows_per_optimizer_step',
             policy_output=POLICY_OUTPUT,delta_normalization='2*delta_rad/(upper-lower)',state_transition='clamp(normalize(q)+delta,-1,1)',
             policy_input=POLICY_INPUT,policy_transition=POLICY_TRANSITION,residual_scale=model.residual_scale,
-            objective_version='multiscale_exp_card_v1',reference_initialization='current_frame_cached_ik',
+            objective_version=objective.settings.loss_kind,reference_initialization='current_frame_cached_ik',
             gradient_accumulation=False,parallel_batch_size=parallel_size,
             window_stride=window_stride or max(1,length//2),training_windows=len(train_windows),
             sdf_backend=sdf_spec,
@@ -427,6 +506,12 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             contact_field=CONTACT_FIELD_VERSION,contact_selection='learned_directional_field_soft_pair',
             state_initialization=IK_VERSION,initial_noise_rad=initial_noise_rad,ik_datasets=ik_reports,
             full_session_initialization='current_frame_ik_then_closed_loop')
+        if card_reports:
+            config.update(card_targets=card_reports,contact_selection='CARD_exact_native_pad_CoP',
+                loss_execution='time_batched_CARD_raw_energy',contact_field_used_by_policy=False)
+        if policy_objective=='card_raw_neural_surface_v2':
+            config.update(contact_selection='learned_nearest_pad_field_zero_direction',
+                contact_field_used_by_policy=True,surface_teacher='native_pad_nearest_only_for_supervision_and_audit')
         epoch_start=0;resume_cursor=0;order=None;sums={};batches=0;loss_samples=0;best=float('inf');best_epoch=None
         def state(epoch,next_batch,order):
             return dict(model=model.state_dict(),collision=collision.model.state_dict(),policy_optimizer=optimizer.state_dict(),
@@ -447,7 +532,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         if resume:
             saved=json.loads((folder/'config.json').read_text())
             # Initialization belongs to the run's history, not the resume call.
-            for key in ('initialize_from','initialize_geometry_from'):
+            for key in ('initialize_from','initialize_geometry_from','initialize_contact_from','initialize_q_collision_from','transfer_policy_optimizer'):
                 config[key]=saved.get(key)
             if config!=saved:raise ValueError('恢复训练的配置、数据或实现指纹发生变化')
             checkpoint_path=folder/'resume.pth' if (folder/'resume.pth').exists() else folder/'warmup.pth'
@@ -481,13 +566,20 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 if any(config[k]!=origin[k] for k in required):raise ValueError('初始化 checkpoint 的架构、数据、坐标或碰撞模型配置不匹配')
                 initial=torch.load(source_folder/('resume.pth' if (source_folder/'resume.pth').exists() else 'warmup.pth'),map_location='cpu',weights_only=True)
                 if initialize_from:
-                    model.load_state_dict(initial['model']);optimizer.load_state_dict(initial['policy_optimizer'])
+                    model.load_state_dict(initial['model'])
+                    if transfer_policy_optimizer:optimizer.load_state_dict(initial['policy_optimizer'])
                 if origin.get('contact_field')==CONTACT_FIELD_VERSION:
                     if initialize_sdf_from:
                         collision.model.load_contact_state(initial['collision'])
                         learner.load_state_dict(initial['sdf_learner'],load_optimizer=False)
                     else:
-                        collision.model.load_state_dict(initial['collision']);learner.load_state_dict(initial['sdf_learner'])
+                        if initialize_q_collision_from:
+                            mismatch=collision.model.load_state_dict(initial['collision'],strict=False)
+                            expected={k for k in collision.model.state_dict() if k.startswith('q_collision.')}
+                            if set(mismatch.missing_keys)!=expected or mismatch.unexpected_keys:raise ValueError('Unexpected geometry migration mismatch')
+                            learner.load_state_dict(initial['sdf_learner'],load_optimizer=False)
+                        else:
+                            collision.model.load_state_dict(initial['collision']);learner.load_state_dict(initial['sdf_learner'])
                     first_warmup=min(learner.steps,warmup_steps)
                 elif 'contact_field' not in origin:
                     if initialize_sdf_from:raise ValueError('Neural SDF 比较需要已有连续接触头，或不指定几何 checkpoint 并完成接触热启动')
@@ -505,6 +597,10 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             if order is None:order=rng.permutation(len(train_windows));sums={};batches=0;loss_samples=0
             for start in range(resume_cursor,len(order),parallel_size):
                 check();batch=[train_windows[i] for i in order[start:start+parallel_size]]
+                if optimizer_kind=='muon_sgd':
+                    schedule=config['learning_rate_schedule']
+                    factor=cosine_multiplier(policy_updates,schedule['total_updates'],schedule['warmup_updates'],schedule['minimum_multiplier'])
+                    scale_learning_rates(optimizer,factor);scale_learning_rates(learner.optimizer,factor)
                 def stage_progress(stage,completed,total):
                     progress('batch_compute',epoch=epoch+1,epochs=epochs,batch=batches+1,
                         batches=math_ceil(len(order),parallel_size),parallel_batch_size=len(batch),
@@ -532,13 +628,16 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                         value,_,metrics,_=rollout(model,objective,prepared,audit=True)
                         validation_sum+=float(value)*len(batch);validation_count+=len(batch);quality.extend(metrics)
                         progress('mesh_validation',epoch=epoch+1,epochs=epochs,completed=validation_count,total=len(validation_batch),available_windows=len(validation_windows))
-                validation_loss=validation_sum/validation_count
-                if not np.isfinite(validation_loss):raise ValueError('真实几何验证 loss 非有限数值')
+                validation_raw_cost=validation_sum/validation_count
+                if not np.isfinite(validation_raw_cost):raise ValueError('真实几何验证 loss 非有限数值')
+                validation_loss=normalized_policy_cost(validation_raw_cost,policy_loss_scale)
                 sdf_report=learner.validate(*holdout)
                 if validation_loss<best:
                     best=validation_loss;best_epoch=epoch+1
                     save_checkpoint(folder/'last.pth',dict(model=model.state_dict(),collision=collision.model.state_dict(),epoch=epoch+1,validation_loss=best,sdf_validation=sdf_report))
                 progress('validation',epoch=epoch+1,epochs=epochs,validation_loss=validation_loss,best_validation_loss=best,
+                    validation_raw_cost=validation_raw_cost,
+                    best_validation_raw_cost=best*policy_loss_scale/(1-best) if policy_loss_scale else best,
                     best_epoch=best_epoch,metrics=quality_summary(quality),sdf_validation=sdf_report)
             else:
                 progress('epoch_complete',epoch=epoch+1,epochs=epochs,validation_performed=False,
@@ -549,7 +648,8 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         model.load_state_dict(checkpoint['model']);collision.model.load_state_dict(checkpoint['collision'])
         progress('full_session_validation')
         report,poses,timings=full_session(model,objective,validation,check)
-        sdf_report=learner.validate(*holdout);reasons=acceptance(report,sdf_report)
+        sdf_report=learner.validate(*holdout);reasons=acceptance(report,sdf_report,contact_field_required=policy_objective!='card_raw_neural_collision_v1',
+            penetration_limit_mm=objective.settings.penetration_limit_m*1000)
         atomic_json(folder/'evaluation.json',dict(metrics=report,sdf_validation=sdf_report,rejection_reasons=reasons,
             inference_ms=dict(mean=float(np.mean(timings)),p95=float(np.percentile(timings,95)))))
         atomic_json(folder/'validation_motion.json',poses)
@@ -643,14 +743,19 @@ def evaluate(root,model_id,dataset_ids,check=lambda:None,allow_smoke=False):
     if train_groups&{m.get('session_id',m['id']) for m,_,_ in sessions}:raise ValueError('验证与训练属于同一采集会话')
     if any(json.loads((root/'recordings'/m['id']/'topology.json').read_text())['binding_version']!=predictor.config['source_binding_version'] for m,_,_ in sessions):
         raise ValueError('验证数据触觉材料绑定与模型不匹配')
-    objective=CartObjective(predictor.hand,policy_settings(),predictor.collision)
+    kind=predictor.config.get('objective_version','multiscale_exp_card_v1')
+    objective=make_objective(predictor.hand,predictor.collision,kind)
+    if kind in ('card_raw_neural_collision_v1','card_raw_neural_surface_v2'):
+        from .cart_card_cost import attach_card_targets
+        attach_card_targets(root,sessions,predictor.hand.device,check)
     metrics,poses,times=full_session(predictor.model,objective,sessions,check)
     learner=SDFLearner(predictor.collision)
     with torch.random.fork_rng():
         torch.manual_seed(714);sdf=learner.validate(*predictor.collision.oracle.random_queries(4096))
     result=dict(protocol=PROTOCOL,model=model_id,datasets=dataset_ids,metrics=metrics,sdf_validation=sdf,
         inference_ms=dict(mean=float(np.mean(times)),p95=float(np.percentile(times,95))) if times else None,
-        rejection_reasons=acceptance(metrics,sdf),online_search=False,hard_contact_guarantee=False,
+        rejection_reasons=acceptance(metrics,sdf,contact_field_required=kind!='card_raw_neural_collision_v1',
+            penetration_limit_mm=objective.settings.penetration_limit_m*1000),online_search=False,hard_contact_guarantee=False,
         paired_robot_ground_truth=False,tube_required=False)
     atomic_json(root/'models'/model_id/'evaluation.json',result);atomic_json(root/'models'/model_id/'evaluation_motion.json',poses)
     return result

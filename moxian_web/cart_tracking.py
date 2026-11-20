@@ -38,6 +38,8 @@ class CartTracking:
             payload.update({'validation/sdf_'+key:float(value) for key,value in values['sdf_validation'].items() if value is not None})
             payload.update({'validation/epoch':values['epoch'],'validation/loss':values['validation_loss'],
                 'validation/best_loss':values['best_validation_loss']})
+            payload.update({'validation/raw_cost':values.get('validation_raw_cost',values['validation_loss']),
+                'validation/best_raw_cost':values.get('best_validation_raw_cost',values['best_validation_loss'])})
         if payload:
             payload['wall/elapsed_s']=values.get('elapsed_s',0.)
             self.run.log(payload)

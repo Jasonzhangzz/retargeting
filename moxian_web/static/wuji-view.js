@@ -10,6 +10,50 @@ let renderSize='';
 let dots=[],normals=[],rays=[],errors,anchorDots=[],contactGraph=[];
 let packedGeometryKey,packedGeometryData,packedGeometry;
 const backendOf=w=>w?.solver_profile==='contact_graph'?'slsqp_graph':w?.solver_backend||(w?.algorithm?.startsWith('card_')?'cem':w?.algorithm?.startsWith('moxian_')?'slsqp':null);
+function syncPredictionVisibility(){
+ const showGrasp=document.getElementById('wujiShowGraspType').checked;
+ document.getElementById('wujiRVQ').hidden=!showGrasp;
+ document.getElementById('wujiGraspPreview').hidden=!showGrasp;
+ if(!document.getElementById('wujiRVQOverlay').checked)rvqRobot.forEach(m=>m.visible=false);
+}
+function collisionLinkName(name){
+ if(name==='right_palm_link'||name==='left_palm_link')return 'palm';
+ return String(name).replace(/^(?:right|left)_finger([1-5])_link([1-4])$/,(_,f,k)=>`${['thumb','index','middle','ring','pinky'][Number(f)-1]}_link${k}`);
+}
+function nonAdjacentCollisionPair(names){
+ if(names.length!==2||names[0]===names[1])return false;
+ const parsed=names.map(name=>/^(thumb|index|middle|ring|pinky)_link([1-4])$/.exec(name));
+ if(names.includes('palm')){
+  const finger=parsed[names[0]==='palm'?1:0];
+  return !!finger&&Number(finger[2])>1;
+ }
+ if(parsed.some(link=>!link))return false;
+ return parsed[0][1]!==parsed[1][1]||Math.abs(Number(parsed[0][2])-Number(parsed[1][2]))>1;
+}
+function selfCollisionLinks(report,valid,threshold=.5){
+ const links=new Set();
+ if(valid&&report?.query_valid===true){
+  for(const [pair,depth] of Object.entries(report.pair_depths_mm||{})){
+   const names=pair.split('__').map(collisionLinkName);
+   if(Number.isFinite(depth)&&depth>threshold&&nonAdjacentCollisionPair(names))names.forEach(name=>links.add(name));
+  }
+ }
+ return links;
+}
+function updateSelfCollisionColors(report,valid){
+ const links=selfCollisionLinks(report,valid);let changed=false;
+ for(const mesh of robot){
+  const name=model?.link_names?.[mesh.userData.owner];
+  const color=links.has(collisionLinkName(name))?'#ed4545':'#aeb8b7';
+  if(mesh.userData.collisionColor!==color){mesh.material.color.set(color);mesh.userData.collisionColor=color;changed=true;}
+ }
+ return changed;
+}
+function cardWindowLabel(w){
+ if(!Number.isFinite(w?.buffer_delay_frames))return '';
+ if(w.buffer_delay_frames===0)return ' · 单帧实时 · 无未来帧缓冲';
+ return ` · 前瞻 ${w.buffer_delay_frames} 帧 · 缓冲 ${w.buffer_delay_ms?.toFixed(1)||'—'} ms · 总延迟 ${w.source_age_ms?.toFixed(0)||'—'} ms`;
+}
 const viewKey=(w,h={})=>[w.mapping_version,w.geometry_version||h.geometry_version,w.source_binding_version||h.binding_version,backendOf(w),w.algorithm,w.topology_version].map(x=>x??'').join(':');
 function geometryFrame(w){
  const descriptor=w.geometry_f32;if(!descriptor)return w;
@@ -106,6 +150,7 @@ function points(object,positions,w){
 }
 function lines(object,values){object.geometry.setAttribute('position',new THREE.Float32BufferAttribute(values,3));object.visible=values.length>0;}
 function updateRVQPanel(annotation,holding,sourceError){
+ syncPredictionVisibility();
  const r=annotation,ready=!!r?.ready;
  const title=name=>String(name||'—').replace(/^(\d+)_/,'$1 · ').replaceAll('_',' ');
  const image=document.getElementById('wujiPrimitiveImage'),primitive=ready?model?.rvq?.primitives?.[r.grasp_type]:null;
@@ -152,11 +197,12 @@ function update(state,active){
    (!w.active_solver_session_id||w.active_solver_session_id===w.solver_session_id)&&
    w.mapping_version===model?.mapping.version&&version===wanted&&completeFrame(w);
   const holding=!canPresent&&!!displayedFrame;
-  const warp=w.solver?.backend==='robokit_population_solver_warp_card',timing=w.solver?.timing_ms;
+  const warp=['robokit_population_solver_warp_card','main_robokit_population_solver_window'].includes(w.solver?.backend),timing=w.solver?.timing_ms;
   const slsqp=!!backendOf(w)?.startsWith('slsqp'),graphSlsqp=slsqp;
   const selector=document.getElementById('wujiSolver');if(selector&&expected)selector.value=expected;
   if(canPresent&&window.wujiRequestedSolver===backendOf(w))window.wujiRequestedSolver=null;
   const shown=canPresent?w:holding?displayedFrame:null,shownBackend=backendOf(shown);
+  const collisionChanged=updateSelfCollisionColors(shown?.collision?.self_mesh,canPresent&&!holding);
   updateRVQPanel(shown?.rvq,holding,w.error);
   const shownLabel=shownBackend==='cart'?'CART · 接触网络':shownBackend==='geort'?(shown.algorithm==='geort_contact_v1'?'GeoRT · 接触约束网络':'GeoRT · 官方网络'):shownBackend==='slsqp_graph'?'SLSQP · 离散接触图 + Laplacian':shownBackend==='wuji-retargeting'?'wuji-retargeting':shownBackend==='slsqp'?'SLSQP · 统一图':shownBackend==='cem'?'CEM · CARD':'未知后端';
   document.querySelector('.wuji-right-label').textContent='WUJI2.2 · '+(shown?shownLabel:`等待 ${(expected||'solver').toUpperCase()} 首帧`);
@@ -168,6 +214,8 @@ function update(state,active){
   const solverLabel=slsqp?(backendOf(w)==='slsqp_graph'?'Moxian → SLSQP · 离散接触图 + Laplacian':'Moxian → SLSQP'):`${warp?'Robokit → Warp CARD CEM':robokit?'Robokit → CEM':'CARD CEM'} 1024 × 16`;
   document.getElementById('wujiStatus').textContent=(w.error||(!state?.connected?'设备离线':failedCandidate?solverLabel+' · 显示本帧候选 · 约束超限'+(w.status==='solving'?' · 下一帧计算中':''):w.ready?`${solverLabel} · ${w.contact_anchors?.length||0} 个锚点 · ${w.contact_edges?.length||0} 条跨 link 边${phase} · 整帧 ${q.processing_ms?.toFixed(1)||'—'} ms · 源延迟 ${w.source_age_ms?.toFixed(0)||'—'} ms${w.status==='solving'?' · 下一帧计算中':''}`:'Wuji2 '+({mapping:'建立表面映射中',initializing:'初始化求解器',solving:w.input_live?'求解中':'输入暂停',infeasible:'显示本帧候选 · 约束超限',starting:'启动中'}[w.status]||'等待有效 Moxian mesh')))+(holding?' · 保留最后画面，接触状态未知':'');
   if(expected&&backendOf(w)!==expected)document.getElementById('wujiStatus').textContent=`切换至 ${expected.toUpperCase()}，等待该后端的新结果`;
+  if(w.status==='buffering')document.getElementById('wujiStatus').textContent=w.message||`CARD 等待真实未来帧 · ${w.buffering_frames||0}/${w.required_frames||6}`;
+  if(shownBackend==='cem')document.getElementById('wujiStatus').textContent+=cardWindowLabel(shown);
   if(slsqp)document.getElementById('wujiStatus').textContent+=` · 输出 ${q.output_hz?.toFixed(1)||'—'} Hz · 输入排队 ${q.input_queue_ms?.toFixed(1)||'—'} ms · 初值 ${w.solver?.initial_guess==='previous_raw_solution'?'上一原始解':w.solver?.initial_guess||'—'}`+(w.solver?.reset_reason?` · 重置 ${w.solver.reset_reason}`:'');
   if(slsqp&&w.solver?.execution_mode==='penetration_restoration')document.getElementById('wujiStatus').textContent+=w.solver.escape_continuation_active?' · 穿透恢复：沿已验收姿态分步退出':' · 穿透恢复：优先减小负间距';
   if(w.taxel_projection?.normal_rejected_sids?.length)document.getElementById('wujiStatus').textContent+=` · ${w.taxel_projection.normal_rejected_sids.length} 个SID法向不匹配，不参与接触图`;
@@ -201,7 +249,7 @@ function update(state,active){
   const frameKey=[backendOf(w),w.algorithm,w.solver_session_id,w.mapping_version,w.timestamp_ms].join(':');
   const contactReady=!!w.contact_ready&&!holding;
   const signature=[frameKey,version,contactReady,window.cartHullVisible,...['wujiSid','wujiNormals','wujiRays','wujiErrors','wujiRVQOverlay'].map(id=>document.getElementById(id).type==='checkbox'?document.getElementById(id).checked:document.getElementById(id).value)].join(':');
-  if(signature===drawSignature){if(activated)render();return;}drawSignature=signature;
+  if(signature===drawSignature){if(activated||collisionChanged)render();return;}drawSignature=signature;
   mano.visible=true;robot.forEach(m=>m.visible=true);
   const curved=surface.update(w.source_vertices_m),attr=mano.geometry.attributes.position;
   for(let i=0;i<curved.length;i+=3)attr.setXYZ(i/3,curved[i+1],curved[i],-curved[i+2]);attr.needsUpdate=true;mano.geometry.computeVertexNormals();
@@ -260,7 +308,9 @@ window.setWujiView=mode=>{
  if(mode==='top')camera.position.addScaledVector(up,.18);else if(mode!=='front')camera.position.addScaledVector(side,.1);
  controls.update();render();
 };
-for(const id of ['wujiSid','wujiNormals','wujiRays','wujiErrors','wujiRVQOverlay'])document.getElementById(id).addEventListener('input',()=>update(current,visible));
+for(const id of ['wujiRVQOverlay','wujiShowGraspType'])document.getElementById(id).checked=false;
+syncPredictionVisibility();
+for(const id of ['wujiSid','wujiNormals','wujiRays','wujiErrors','wujiRVQOverlay','wujiShowGraspType'])document.getElementById(id).addEventListener('input',()=>{syncPredictionVisibility();update(current,visible);render();});
 window.addEventListener('resize',render);
 if(window.currentMoxianState)update(window.currentMoxianState,document.getElementById('poseMode').value==='wuji2');
-window.debugWujiView=()=>({rvq:displayedFrame?.rvq,rvqOverlay:rvqRobot.some(m=>m.visible),visible,version,loading,hasFrame:!!displayedFrame,frameKey:displayedFrameKey,solver_backend:backendOf(displayedFrame),algorithm:displayedFrame?.algorithm,requested_solver:window.wujiRequestedSolver,mano:!!mano?.visible,robot:robot.every(m=>m.visible),canvas:[canvas.width,canvas.height],error:window.wujiRenderError});
+window.debugWujiView=()=>({rvq:displayedFrame?.rvq,rvqOverlay:rvqRobot.some(m=>m.visible),graspTypeVisible:!document.getElementById('wujiGraspPreview').hidden,collisionLinks:robot.filter(m=>m.userData.collisionColor==='#ed4545').map(m=>model?.link_names?.[m.userData.owner]),visible,version,loading,hasFrame:!!displayedFrame,frameKey:displayedFrameKey,solver_backend:backendOf(displayedFrame),algorithm:displayedFrame?.algorithm,requested_solver:window.wujiRequestedSolver,mano:!!mano?.visible,robot:robot.every(m=>m.visible),canvas:[canvas.width,canvas.height],error:window.wujiRenderError});

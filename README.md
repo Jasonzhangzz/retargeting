@@ -121,7 +121,7 @@ sudo usermod -aG dialout "$USER"
 bash scripts/start_moxian_web.sh --port 8890
 ```
 
-打开 **<http://127.0.0.1:8890>**。服务会尝试连接手套；如未连接，点击页面上的“连接手套”。确认设备在线、帧数持续增加，且五指 EMF 数据有效。
+默认监听 `0.0.0.0:8890`。本机或同一局域网的电脑打开 **`http://运行服务的电脑IP:8890`**（例如 `http://10.x.x.x:8890`）；本机也可访问 <http://127.0.0.1:8890>。服务会尝试连接手套；如未连接，点击页面上的“连接手套”。确认设备在线、帧数持续增加，且五指 EMF 数据有效。
 
 指定串口的启动示例：
 
@@ -129,13 +129,13 @@ bash scripts/start_moxian_web.sh --port 8890
 bash scripts/start_moxian_web.sh --device /dev/ttyACM0 --port 8890
 ```
 
-需要从同一局域网的另一台电脑打开时：
+需要只允许本机访问时：
 
 ```bash
-bash scripts/start_moxian_web.sh --host 0.0.0.0 --port 8890
+bash scripts/start_moxian_web.sh --host 127.0.0.1 --port 8890
 ```
 
-此时浏览器访问 `http://运行服务的电脑IP:8890`。终端保持运行；按 `Ctrl+C` 停止服务。
+终端保持运行；按 `Ctrl+C` 停止服务。
 
 ## 5. 在网页中进入标定
 
@@ -208,3 +208,5 @@ bash scripts/start_moxian_web.sh --host 0.0.0.0 --port 8890
 目录与来源：[目录说明](docs/repository_layout.md) · [baseline 代码](retarget/baseline/README.md) · [第三方来源与许可](THIRD_PARTY.md)。
 
 Wuji2 手型重建与分类：[RVQ 双输出头联合训练、编码与解码](docs/wuji2_rvq.md)。 在“Moxian／Wuji2 对照”中可查看实时手势类别与蓝色线框重建手型。
+
+Wuji2 随机姿态、原生网格碰撞采样与直接关节角条件化 MLP：[Configuration Neural SDF](docs/wuji2_configuration_sdf.md)。

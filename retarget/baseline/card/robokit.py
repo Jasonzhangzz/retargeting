@@ -1,6 +1,6 @@
 """CARD energies as a Robokit cost-only task, with captured elite Gaussian CEM.
 
-The search uses Robokit's fitted capsules and the paper's two hard tests.
+The search uses Robokit's fitted capsules and the original collision soft costs.
 Native mesh depths are reported only; they never change the selected solution.
 """
 from dataclasses import dataclass
@@ -178,7 +178,7 @@ def card_cost(x: wp.array2d(dtype=float), poses: wp.array2d(dtype=wp_vec7), data
     for k in range(12):total+=parts[i,k]
     raw[i]=total
     depths[i,0]=max_depth;depths[i,1]=palm_gap
-    if not wp.isfinite(total) or max_depth>w[13] or palm_gap<w[10]:total=wp.inf
+    if not wp.isfinite(total):total=wp.inf
     costs[i]+=total
 
 
@@ -487,7 +487,7 @@ class RobokitCardSolver:
             coarse_verified_candidates=0,coarse_verification_rejected=0,dense_verified_candidates=0,dense_verification_rejected=0,
             hard_rejected=int((~np.isfinite(costs[ids])).sum()),seed=s.seed,final_sigma_ratio=s.gamma,
             last_sample_sigma_ratio=s.gamma**((s.iterations-1)/s.iterations),cuda_graph=True,
-            collision_search='robokit_native_mesh_fitted_capsules',collision_output='paper_palm_and_object_hard_tests',
+            collision_search='robokit_native_mesh_fitted_capsules',collision_output='soft_collision_costs_only',
             validation_limit=None,output_selection_scope='all_scored_candidates',infeasibility_proven=False,
             initial_cost=seed_costs[0] if np.isfinite(seed_costs[0]) else None,initial_feasible=bool(np.isfinite(seed_costs[0])),
             initial_incumbents=0,empty_elite_restarts=0,empty_elite_iterations=int(self.solver.samplers[0].empty_iterations.numpy()[0]) if self.solver.samplers else 0,feasibility_recovery_iterations=0,
@@ -532,8 +532,8 @@ class RobokitCardSolver:
         t,r,j=initial;p,rr=o.frames(t[None],r[None],j[None]);mesh_depth,mesh_valid=o.mesh_collision.query(p,rr,dense=True)
         maximum=mesh_depth.amax((-1,-2));hard_mesh=(maximum>o.settings.self_penetration_mm)|~mesh_valid
         depths=wp.to_torch(self.task.buffers[1][2]);object_depth=depths[:,0]
-        hard_object=object_depth>o.settings.hard_penetration_mm
-        hard_palm=depths[:,1]<o.settings.margin_mm
+        hard_object=torch.zeros_like(hard_mesh)
+        hard_palm=torch.zeros_like(hard_mesh)
         return dict(parts=parts,groups=groups,points=points,normals=ns,local_points=locals_,material_points=material,force_support=support,
             hard=hard_palm|hard_object,hard_mesh=hard_mesh,hard_object=hard_object,hard_palm=hard_palm,hard_pair=torch.zeros_like(hard_mesh),
             mesh_depth=mesh_depth,mesh_valid=mesh_valid,pair_gaps={},pair_points={},max_penetration_mm=torch.maximum(maximum,object_depth),

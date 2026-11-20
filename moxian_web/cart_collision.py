@@ -168,6 +168,7 @@ class CollisionModel:
     def __init__(self,hand,model=None):
         self.hand=hand;self.model=model if model is not None else LinkSDF().to(hand.device)
         self.oracle=MeshOracle(hand);self.collected=[];self.contact_collected=[];self.collecting=False;self.auditing=False
+        self.q_collected=[]
 
     def contact(self,local,direction,owner,palmar=False):
         """No native queries, detached witnesses or data-dependent surface IDs."""
@@ -243,6 +244,9 @@ class CollisionModel:
 
     def collect_queries(self,q,rows,frames,sample_budget=512):
         """Collect the same moving surfaces/taxels without evaluating any loss."""
+        if hasattr(self.model,'q_collision'):
+            ids=torch.randperm(len(q),device=q.device)[:128]
+            self.q_collected.append(q[ids].detach())
         for points,links in self.oracle.sampled_queries(frames,rows,sample_budget):
             self.collect_local(points,links,max_samples=sample_budget)
         from .cart_contacts import link_owner
@@ -379,9 +383,21 @@ class CollisionModel:
 
 
 class SDFLearner:
-    def __init__(self,collision,capacity=200000,batch_size=2048):
+    def __init__(self,collision,capacity=200000,batch_size=2048,optimizer_kind='adamw'):
         self.collision=collision;self.model=collision.model;self.oracle=collision.oracle
-        if hasattr(self.model,'pretrained'):
+        self.q_learner=None
+        if hasattr(self.model,'q_collision'):
+            from .cart_q_collision import QCollisionLearner
+            self.q_learner=QCollisionLearner(collision)
+            if hasattr(collision,'q_initial_learner'):
+                self.q_learner.load_state_dict(collision.q_initial_learner)
+        if optimizer_kind=='muon_sgd':
+            from .cart_optim import MuonSGD
+            self.optimizer=MuonSGD(self.model,lr=1.e-3,
+                pretrained_lr=self.model.pretrained_lr if hasattr(self.model,'pretrained') else None,
+                contact_lr=1.e-3)
+        elif optimizer_kind!='adamw':raise ValueError('Unknown geometry optimizer')
+        elif hasattr(self.model,'pretrained'):
             self.optimizer=torch.optim.AdamW([
                 dict(params=self.model.pretrained.parameters(),lr=self.model.pretrained_lr),
                 dict(params=[*self.model.links.parameters(),*self.model.contact_field.parameters()],lr=1.e-3)])
@@ -420,6 +436,7 @@ class SDFLearner:
         self.cursor=(self.cursor+count)%self.capacity;self.size=min(self.capacity,self.size+count)
 
     def collect(self):
+        if self.q_learner is not None:self.q_learner.collect()
         collected=self.collision.collected;self.collision.collected=[]
         if collected:
             x=torch.cat([p for p,_ in collected]);links=torch.cat([l for _,l in collected])
@@ -434,6 +451,11 @@ class SDFLearner:
             x,d,l,p=[v[ids] for v in values]
             self.add_contacts(torch.cat((x,x+torch.randn_like(x)*.001)),d.repeat(2,1),l.repeat(2),p.repeat(2))
         self.add_contacts(*self.teacher.random_queries(self.oracle,self.batch_size))
+        if getattr(self.collision,'card_nearest_surface',False):
+            x,_,l,p=self.teacher.random_queries(self.oracle,self.batch_size)
+            # Include far queries: initial CARD contact gaps can exceed 50 mm.
+            x=x+torch.randn_like(x)*.025
+            self.add_contacts(x,torch.zeros_like(x),l,p)
 
     def update(self):
         if not self.size:raise ValueError('SDF replay is empty')
@@ -456,18 +478,24 @@ class SDFLearner:
         contact_normal=(1-F.cosine_similarity(normal,c['normals'])).mean()
         loss=fit+.1*sign+.1*direction+.1*eikonal+contact_fit+.1*contact_normal
         if not torch.isfinite(loss):raise ValueError('SDF loss 出现 NaN/Inf')
-        self.optimizer.zero_grad(set_to_none=True);loss.backward();torch.nn.utils.clip_grad_norm_(self.model.parameters(),10.,error_if_nonfinite=True)
+        self.optimizer.zero_grad(set_to_none=True);loss.backward()
+        grad_norm=torch.nn.utils.clip_grad_norm_(self.model.parameters(),10.,error_if_nonfinite=True)
         self.optimizer.step();self.steps+=1
-        return {k:float(v.detach()) for k,v in dict(total=loss,distance=fit,sign=sign,normal=direction,eikonal=eikonal,
-            contact_position=contact_fit,contact_normal=contact_normal).items()}
+        result={k:float(v.detach()) for k,v in dict(total=loss,distance=fit,sign=sign,normal=direction,eikonal=eikonal,
+            contact_position=contact_fit,contact_normal=contact_normal,gradient_norm_before_clip=grad_norm,
+            gradient_clip_multiplier=(10./(grad_norm+1.e-6)).clamp(max=1.)).items()}
+        if self.q_learner is not None:result.update(self.q_learner.update())
+        return result
 
     def state_dict(self):
-        return dict(points=self.points[:self.size].clone(),links=self.links[:self.size].clone(),
+        result=dict(points=self.points[:self.size].clone(),links=self.links[:self.size].clone(),
             distances=self.distances[:self.size].clone(),normals=self.normals[:self.size].clone(),
             cursor=self.cursor,size=self.size,steps=self.steps,capacity=self.capacity,batch_size=self.batch_size,
             contact_replay={k:v[:self.contact_size].clone() for k,v in self.contact_replay.items()},
             contact_size=self.contact_size,contact_cursor=self.contact_cursor,
             optimizer=self.optimizer.state_dict())
+        if self.q_learner is not None:result['q_collision']=self.q_learner.state_dict()
+        return result
 
     def load_state_dict(self,state,*,load_optimizer=True):
         if state['capacity']!=self.capacity or state['batch_size']!=self.batch_size:raise ValueError('SDF replay configuration changed')
@@ -476,6 +504,8 @@ class SDFLearner:
         self.contact_size=state['contact_size'];self.contact_cursor=state['contact_cursor']
         for key,value in state['contact_replay'].items():self.contact_replay[key][:self.contact_size].copy_(value)
         if load_optimizer:self.optimizer.load_state_dict(state['optimizer'])
+        if self.q_learner is not None and 'q_collision' in state:
+            self.q_learner.load_state_dict(state['q_collision'],load_optimizer=load_optimizer)
 
     @torch.no_grad()
     def validate(self,points,links):
@@ -486,11 +516,26 @@ class SDFLearner:
         with torch.random.fork_rng(devices=[torch.device(self.oracle.device)] if str(self.oracle.device).startswith('cuda') else []):
             torch.manual_seed(9714)
             x,d,l,p=self.teacher.random_queries(self.oracle,len(points))
+        if getattr(self.collision,'card_nearest_surface',False):
+            # CARD queries semantic pads only; full-mesh escape modes are not
+            # part of this policy's nearest-point precision denominator.
+            with torch.random.fork_rng(devices=[torch.device(self.oracle.device)] if str(self.oracle.device).startswith('cuda') else []):
+                torch.manual_seed(9715)
+                ids=torch.randint(len(self.teacher.points),(len(points),),device=self.oracle.device)
+                x=self.teacher.points[ids]+torch.randn_like(self.teacher.points[ids])*.006
+                l=self.teacher.owners[ids]
+            d=torch.zeros_like(x);p=torch.ones_like(l,dtype=torch.bool)
         hit,normal,valid=self.teacher.label(x,d,l,p);pred_hit,pred_normal=self.model.contact(x,d,l,p)
         contact_error=(pred_hit[valid]-hit[valid]).norm(dim=-1)
         normal_error=torch.rad2deg(torch.acos(F.cosine_similarity(pred_normal[valid],normal[valid]).clamp(-1,1)))
-        return dict(distance_mean_mm=float(error.mean())*1000,distance_p95_mm=float(torch.quantile(error,.95))*1000,
+        report=dict(distance_mean_mm=float(error.mean())*1000,distance_p95_mm=float(torch.quantile(error,.95))*1000,
             penetration_false_negative_rate=float((pred[inside]>=0).float().mean()) if inside.any() else None,
             penetration_cases=int(inside.sum()),samples=len(points),contact_samples=int(valid.sum()),
             contact_position_p95_mm=float(torch.quantile(contact_error,.95))*1000 if valid.any() else None,
             contact_normal_p95_deg=float(torch.quantile(normal_error,.95)) if valid.any() else None)
+        if self.q_learner is not None:
+            with torch.random.fork_rng(devices=[torch.device(self.oracle.device)] if str(self.oracle.device).startswith('cuda') else []):
+                torch.manual_seed(9716)
+                h=self.oracle.hand;q=h.low+torch.rand(128,20,device=h.device)*(h.high-h.low)
+                report.update({'q_'+k:v for k,v in self.q_learner.validate(q).items()})
+        return report

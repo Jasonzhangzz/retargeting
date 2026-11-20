@@ -13,6 +13,7 @@ class ContactField(nn.Module):
 
     The escape direction specifies the intended side, including deep inside
     queries. A fixed semantic flag distinguishes palmar pads from full meshes.
+    A zero direction requests the ordinary nearest point, with no side retraction.
     Link embeddings are shared with the signed distance head.
     """
     def __init__(self):
@@ -38,7 +39,13 @@ def _contact_labels(skins: wp.array(dtype=wp.uint64), solids: wp.array(dtype=wp.
     i=wp.tid();link=links[i];skin=solids[link]
     if palmar[i] == 1:skin=skins[link]
     point=points[i];direction=directions[i]
-    if wp.length(direction)<1.e-8:return
+    if wp.length(direction)<1.e-8:
+        nearest=wp.mesh_query_point_no_sign(skin,point,2.)
+        if nearest.result:
+            hits[i]=wp.mesh_eval_position(skin,nearest.face,nearest.u,nearest.v)
+            normals[i]=wp.mesh_eval_face_normal(skin,nearest.face)
+            valid[i]=1
+        return
     direction=wp.normalize(direction)
     nearest=wp.mesh_query_point_no_sign(skin,point,2.)
     signed=wp.mesh_query_point_sign_winding_number(solids[link],point,2.)
@@ -73,7 +80,7 @@ class ContactTeacher:
     def __init__(self,hand):
         self.hand=hand;self.skins=list(hand.full_meshes);self.pad_owners=[];clouds=[];normals=[];owners=[]
         # Only anatomical contact links have palmar semantic surfaces.
-        for owner in [2+4*f+k for f in range(5) for k in range(3)]:
+        for owner in [0]+[2+4*f+k for f in range(5) for k in range(3)]:
             surface=hand.surface.contact_surface(owner);tri=np.asarray(surface['triangles'],np.float32)
             if not len(tri):continue
             if owner not in hand.pad_meshes:

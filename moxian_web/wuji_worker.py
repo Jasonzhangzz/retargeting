@@ -16,6 +16,7 @@ from moxian_web.wuji_backends import create_retarget, SOLVERS, SLSQP_PROFILES, D
 from retarget.baseline.card.geometry import TrackedMesh
 from moxian_web.wuji_transport import pack_result_geometry, decode_source_frame
 from moxian_web.wuji_rvq import WujiRVQ
+from moxian_web.wuji_window import SourceFrameWindow,FUTURE,HORIZON
 
 
 def main():
@@ -32,7 +33,7 @@ def main():
         if m.get('type')=='frame':m=pack_result_geometry(m)
         with emit_lock:stream.write(json.dumps(m,allow_nan=False,separators=(',',':'))+'\n');stream.flush()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set())
-    frames=queue.Queue(maxsize=1);controls=queue.Queue(maxsize=32)
+    frames=queue.Queue(maxsize=1);controls=queue.Queue(maxsize=32);recent=SourceFrameWindow()
     def reader():
         heartbeat=0.;previous_received=None;previous_stamp=None;epoch=0
         try:
@@ -42,8 +43,9 @@ def main():
                     now=time.monotonic();stamp=m['frame'].get('timestamp_ms')
                     if previous_received is not None and (now-previous_received>.250 or stamp<=previous_stamp):epoch+=1
                     previous_received=now;previous_stamp=stamp
-                    m['frame'].setdefault('input_stream_epoch',epoch)
+                    m['frame']['input_stream_epoch']=str(m['frame'].get('input_stream_epoch',0))+':'+str(epoch)
                     m['frame']['input_received_wall_ms']=time.time()*1000
+                    recent.append(m['frame'])
                     try:frames.get_nowait()
                     except queue.Empty:pass
                     frames.put_nowait(m['frame'])
@@ -61,9 +63,10 @@ def main():
         if m:
             if m['type']=='topology':
                 topology=m['model'];new=(topology['geometry_version'],topology['binding_version'],topology.get('model_hash'))
-                if new!=version:solver=None;version=new
+                if new!=version:solver=None;version=new;recent.clear()
             else:
                 action=m.get('action');error=None
+                if action not in ('replay_pause',):recent.clear()
                 if action=='model_set':
                     model_path=(m.get('data') or {})['model_path'];backend=(m.get('data') or {}).get('solver','geort');solver=None
                 elif action=='cart_action_set':
@@ -80,6 +83,7 @@ def main():
                     if replay is None:error='尚未加载录制回放'
                     elif action=='replay_pause':replay.pause(bool((m.get('data') or {}).get('paused',True)))
                     else:replay.seek((m.get('data') or {}).get('index',0))
+                    if solver:solver.reset()
                 elif action=='object_set':
                     data=m.get('data') or {}
                     try:object_sdf=TrackedMesh(data['vertices_m'],data['faces'],device,data.get('transform'));solver=None
@@ -101,7 +105,7 @@ def main():
             try:
                 emit({'type':'state','status':'mapping','ready':False,'display_available':False,'error':None,
                       'requested_solver_backend':backend,'active_solver_backend':backend,'active_solver_session_id':None})
-                extra={'realtime':True} if backend in SLSQP_PROFILES else {'model_path':model_path} if backend in ('geort','cart') else {}
+                extra={'realtime':True} if backend in SLSQP_PROFILES or backend=='cem' else {'model_path':model_path} if backend in ('geort','cart') else {}
                 solver_device='cpu' if backend=='wuji-retargeting' else device
                 solver=create_retarget(backend,topology,args.home/'mappings',solver_device,rebuild=rebuild,object_sdf=object_sdf,**extra);rebuild=False
                 model={**solver.topology(),'solver_backend':backend,'rvq':rvq.metadata()}
@@ -119,11 +123,28 @@ def main():
                 emit({'type':'state','playback':replay.snapshot()});stop.wait(.03);continue
         else:
             try:frame=frames.get(timeout=.03)
-            except queue.Empty:continue
+            except queue.Empty:
+                window=recent.snapshot() if backend=='cem' else []
+                if window and time.time()*1000-window[-1]['input_received_wall_ms']>250:
+                    recent.clear();solver.reset()
+                    emit({'type':'state','status':'buffering','ready':False,'display_available':False,
+                          'solution_feasible':False,'message':f'CARD 输入断流，等待连续当前帧和未来{FUTURE}帧',
+                          'buffering_frames':0,'required_frames':HORIZON})
+                continue
         if (frame.get('geometry_version'),frame.get('binding_version'),frame.get('model_hash'))!=version:continue
         try:
             emit({'type':'state','status':'solving','processing_source_timestamp_ms':frame['timestamp_ms']})
             frame=decode_source_frame(frame)
+            if backend=='cem':
+                if replay:
+                    frame=dict(frame,card_future_frames=[decode_source_frame(f) for f in replay.future_frames(frame,FUTURE)])
+                else:
+                    window=[decode_source_frame(f) for f in recent.snapshot()]
+                    if len(window)==HORIZON:
+                        frame=dict(window[0],card_future_frames=window[1:])
+                        if (solver.last_seen_timestamp is not None and frame['timestamp_ms']<=solver.last_seen_timestamp
+                                and frame.get('input_stream_epoch')==solver.previous_input_stream_epoch):continue
+                    else:frame=dict(frame,card_future_frames=[])
             if replay and backend=='cart':frame['cart_future_frames']=replay.future_frames(frame)
             processing_started=time.time()*1000
             result=solver.step(frame)
@@ -137,6 +158,9 @@ def main():
             result['quality'].update(input_queue_ms=processing_started-frame['input_received_wall_ms'],
                 input_source_age_ms=processing_started-frame['timestamp_ms'])
             published=time.time()*1000
+            if backend=='cem':
+                result['inference_delay_ms']=published-result['live_source_timestamp_ms']
+                result['total_source_delay_ms']=published-result['source_timestamp_ms']
             result['quality']['output_hz']=1000/(published-last_output_wall_ms) if last_output_wall_ms and published>last_output_wall_ms else None
             last_output_wall_ms=published
             emit({'type':'frame',**result,'solver_backend':backend,

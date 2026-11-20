@@ -33,7 +33,7 @@ class WujiRVQ:
     def __init__(self,checkpoint=None):
         self.path=Path(checkpoint or os.environ.get('MOXIAN_RVQ_MODEL',str(DEFAULT_CHECKPOINT))).expanduser()
         if self.path.is_dir():self.path=self.path/'joint.pt'
-        self.enabled=os.environ.get('MOXIAN_RVQ_ENABLED','1')!='0'
+        self.enabled=os.environ.get('MOXIAN_RVQ_ENABLED','0')!='0'
         self.model=None;self.error=None;self.signature=None;self.fk=None;self.hash=None
         self.reference_kinematics=None
         self.device=os.environ.get('MOXIAN_RVQ_DEVICE','cpu')

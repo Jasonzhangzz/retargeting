@@ -55,10 +55,17 @@ def main():
             p.add_argument('--initialize-from',help='Initialize a new run from a compatible IK-input policy checkpoint; not exact resume')
             p.add_argument('--initialize-geometry-from',help='Reuse geometry and its optimizer/replay; initialize a fresh delta policy')
             p.add_argument('--initialize-sdf-from',type=Path,help='Load a q-conditioned Neural SDF checkpoint; may combine with contact/replay initialization')
+            p.add_argument('--initialize-contact-from',type=Path,help='Load only independently pretrained contact-head weights; keep policy and optimizer fresh')
+            p.add_argument('--initialize-q-collision-from',type=Path,help='Import a mesh/Jacobian-supervised q-only self collision field')
+            p.add_argument('--fresh-policy-optimizer',action='store_true',help='Transfer policy weights with a fresh optimizer in a new run')
+            p.add_argument('--policy-loss-scale',type=float,default=0.,help='CARD C/(C+scale) on the full batch mean; 0 keeps raw cost')
+            p.add_argument('--optimizer',choices=('adamw','muon_sgd'),default='adamw',help='Policy and geometry optimizers; Muon matrices plus momentum SGD for vectors/embeddings')
             p.add_argument('--wandb-project');p.add_argument('--wandb-entity')
             p.add_argument('--wandb-base-url',help='Self-hosted W&B origin, without /home')
             p.add_argument('--wandb-mode',choices=('online','offline'),default='online')
             p.add_argument('--initial-noise-rad',type=float,default=.1,help='Uniform IK reset noise in [-amplitude, amplitude]; 0 disables')
+            p.add_argument('--policy-objective',choices=('multiscale_exp_card_v1','card_raw_neural_collision_v1','card_raw_neural_surface_v2'),
+                default='multiscale_exp_card_v1',help='Policy energy; CARD uses exact native pad contacts and Neural SDF collision')
         if name=='evaluate':p.add_argument('--model',required=True)
     cap=sub.add_parser('capture');cap.add_argument('--dataset',required=True);cap.add_argument('--follow',action='store_true');cap.add_argument('--device')
     imp=sub.add_parser('import-emf');imp.add_argument('--dataset',required=True);imp.add_argument('--raw',type=Path,required=True)
@@ -117,7 +124,9 @@ def run(args):
                 validation_interval=args.validate_every,validation_window_budget=args.validation_windows,
                 initialize_geometry_from=args.initialize_geometry_from,wandb_project=args.wandb_project,wandb_entity=args.wandb_entity,
                 wandb_base_url=args.wandb_base_url,wandb_mode=args.wandb_mode,window_stride=args.window_stride,
-                initialize_sdf_from=args.initialize_sdf_from)))
+                initialize_sdf_from=args.initialize_sdf_from,policy_objective=args.policy_objective,
+                policy_loss_scale=args.policy_loss_scale,initialize_contact_from=args.initialize_contact_from,optimizer_kind=args.optimizer,
+                initialize_q_collision_from=args.initialize_q_collision_from,transfer_policy_optimizer=not args.fresh_policy_optimizer)))
         else:
             from .cart_training import evaluate
             result=evaluate(args.root,safe_id(args.model),args.datasets,check=check)

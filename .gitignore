@@ -25,3 +25,9 @@ MUJOCO_LOG.TXT
 /third_party/robokit/src/*.egg-info/
 
 /moxian_web/vendor/
+
+# Training checkpoints and tracker state are local runtime artifacts.
+*.pt
+*.pth
+*.ckpt
+/wandb/

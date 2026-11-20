@@ -33,15 +33,34 @@
         <div class="pose-toolbar"><span id="coordinateLabel">WRIST LOCAL · 25 JOINTS</span><label><input id="showTipTargets" type="checkbox"> 指尖匹配检查</label><div class="segmented" aria-label="相机视角"><button class="selected" data-camera="orbit">透视</button><button data-camera="top">俯视</button><button data-camera="front">正视</button></div></div>
         <div class="pose-stage"><canvas id="manoCanvas" hidden aria-label="MANO 手部曲面模型"></canvas><canvas id="poseCanvas" aria-label="可旋转的官方骨架或指尖姿态"></canvas><div class="stage-top"><span><i class="dot"></i><b id="poseStatus">等待骨架</b></span><span id="poseSource">OFFICIAL SKELETON IK</span></div><div class="stage-scale"><span id="frameLabel">腕部局部坐标系</span><span>单位 mm</span></div><button id="resetCamera" class="reset-camera" title="重置相机" aria-label="重置相机">↺</button><div id="poseEmpty" class="empty-state"><span>⌁</span><b id="poseEmptyText">等待骨架标定</b></div><div class="stage-help">拖动旋转 <span>·</span> 滚轮缩放 <span>·</span> 仅显示腕部局部手型</div></div>
         <section id="wujiCompare" hidden>
-          <div class="wuji-tools"><label>求解器 <select id="wujiSolver"><option value="slsqp_graph">SLSQP · 离散接触图 + Laplacian</option><option value="wuji-retargeting">wuji-retargeting</option><option value="cem">CEM · CARD</option><option value="geort">GeoRT · 已训练网络</option><option value="cart">CART · 接触驱动网络</option></select></label><label>SID <input id="wujiSid" type="number" min="0" max="459" value="0"></label><label><input id="wujiNormals" type="checkbox"> 法向 · 8 mm</label><label><input id="wujiRays" type="checkbox"> 关节原点射线</label><label><input id="wujiErrors" type="checkbox"> 接触误差连线</label><button id="wujiRestart" class="text-button">重启求解</button><button id="wujiRebuild" class="text-button">重建映射</button></div>
-          <section id="wujiRVQ" class="rvq-panel" aria-label="RVQ 手势识别与重建">
-            <div class="rvq-heading"><h3>RVQ · 手势识别与重建</h3><label><input id="wujiRVQOverlay" type="checkbox" checked> 叠加重建手型</label></div>
+          <div class="wuji-tools"><label>求解器 <select id="wujiSolver"><option value="slsqp_graph">SLSQP · 离散接触图 + Laplacian</option><option value="wuji-retargeting">wuji-retargeting</option><option value="cem">CEM · CARD</option><option value="geort">GeoRT · 已训练网络</option><option value="cart">CART · 接触驱动网络</option></select></label><label><input id="wujiRVQOverlay" type="checkbox" autocomplete="off"> 蓝色重建预测</label><label><input id="wujiShowGraspType" type="checkbox" autocomplete="off" aria-controls="wujiRVQ wujiGraspPreview"> grasp type 预测</label><label>SID <input id="wujiSid" type="number" min="0" max="459" value="0"></label><label><input id="wujiNormals" type="checkbox"> 法向 · 8 mm</label><label><input id="wujiRays" type="checkbox"> 关节原点射线</label><label><input id="wujiErrors" type="checkbox"> 接触误差连线</label><button id="wujiRestart" class="text-button">重启求解</button><button id="wujiRebuild" class="text-button">重建映射</button></div>
+          <section id="wujiRVQ" class="rvq-panel" aria-label="RVQ 手势识别与重建" hidden>
+            <div class="rvq-heading"><h3>RVQ · 手势识别与重建</h3></div>
             <p id="wujiRVQStatus" role="status">等待 Wuji2 重定向结果</p>
             <div class="rvq-fields"><div><span>预测手势</span><strong id="wujiRVQLabel">—</strong></div><div><span>模型概率</span><strong id="wujiRVQProbability">—</strong></div><div><span>重建关节均差</span><strong id="wujiRVQError">—</strong></div></div>
             <p id="wujiRVQTop3" class="footnote">Top-3：—</p>
             <details class="rvq-codes"><summary>离散编码</summary><p id="wujiRVQTokens">—</p></details>
             <p class="footnote">输入为重定向后的 Wuji2 手型。灰色为重定向结果，蓝色线框为 RVQ 重建；关节均差相对同帧重定向输入计算。</p>
           </section>
+          <details id="wujiCollisionPanel" class="workspace-coverage" open>
+            <summary>Wuji2 · 真实网格与 Neural SDF 碰撞对照</summary>
+            <div class="guide-actions"><button id="wujiCollisionToggle" class="button">停止碰撞对照</button></div>
+            <div class="collision-visual-toolbar">
+              <button id="wujiCollisionExample" class="button">测试姿态</button><select id="wujiCollisionExampleSelect" aria-label="独立测试姿态" hidden></select><button id="wujiCollisionLive" class="text-button" hidden>返回实时</button>
+              <label>左侧参考 <select id="wujiCollisionReference"><option value="matched">同点网格</option><option value="dense">密集网格</option></select></label>
+              <label>link 对 <select id="wujiCollisionPair"><option value="">全手</option></select></label>
+              <label><input id="wujiCollisionPoints" type="checkbox" checked> 碰撞点</label><label><input id="wujiCollisionWireframe" type="checkbox"> 线框</label><button id="wujiCollisionResetView" class="text-button">重置视角</button>
+            </div>
+            <div class="collision-visual-wrap"><canvas id="wujiCollisionCanvas" aria-label="同一 Wuji2 姿态下，真实网格与 MLP 碰撞结果的同步三维对照"></canvas><span id="wujiCollisionLeftLabel" class="collision-view-label left">真实网格 · 等待姿态</span><span id="wujiCollisionRightLabel" class="collision-view-label right">Neural SDF · 等待姿态</span><div id="wujiCollisionTooltip" class="collision-tooltip" hidden></div></div>
+            <div class="collision-color-legend"><span><i class="clear"></i>未检出碰撞</span><span><i class="both"></i>检出碰撞</span><span><i class="mesh-only"></i><b id="wujiCollisionMeshOnlyLabel">仅网格检出 · MLP 漏检</b></span><span><i class="neural-only"></i><b id="wujiCollisionNeuralOnlyLabel">仅 MLP 检出 · 误报</b></span></div>
+            <p id="wujiCollisionVisualStatus" class="footnote">两侧显示相同原生几何，分别按网格检测和 MLP 预测着色；不是 MLP 零水平集重建。</p>
+            <p id="wujiCollisionStatus" role="status">等待当前 Wuji2 姿态</p>
+            <div style="overflow:auto"><table class="coverage-table"><thead><tr><th>方法</th><th>碰撞判定</th><th>最大穿透</th><th>碰撞 link 对</th><th>检测耗时</th></tr></thead><tbody id="wujiCollisionMethods"></tbody></table></div>
+            <p id="wujiCollisionDifference" role="status"></p>
+            <p id="wujiCollisionDomain" class="footnote"></p>
+            <div style="overflow:auto"><table class="coverage-table"><thead><tr><th>link 对</th><th>密集网格 mm</th><th>同点网格 mm</th><th>MLP mm</th><th>密集／MLP 判定</th></tr></thead><tbody id="wujiCollisionPairs"></tbody></table></div>
+            <p class="footnote">所有结果使用同一帧重定向 Wuji2 关节角，穿透 &gt;0.5 mm 判为碰撞。密集网格检查原生顶点及面心；同点网格与 MLP 查询相同的固定曲面样本，并沿用相同机械连接排除。约每秒 4 帧抽样，回放暂停保留该帧；当前没有有效姿态时显示等待，不使用旧帧代替。MLP 为关节角条件化近似距离场，密集网格也属于离散表面检查。</p>
+          </details>
           <details id="geortPanel" class="ik-guide" open>
             <summary>GeoRT · 动作录制与网络训练</summary>
             <p class="footnote">完成六动作手型标定后，自由伸展、弯曲各指并自然对指，覆盖日常使用的活动范围。可录制多段，再选择训练数据。建议另录一段独立动作进行评估。</p>
@@ -83,14 +102,14 @@
             <p id="geortError" role="alert" style="color:#b44738">录制控件加载中…</p><pre id="geortEvaluation" style="white-space:pre-wrap"></pre>
           </details>
           <div class="wuji-canvas-wrap"><canvas id="wujiCanvas" aria-label="同步视角的 Moxian glove 与 Wuji2 触觉对照"></canvas><span class="wuji-left-label">Moxian · 源手套模型</span><span class="wuji-right-label">WUJI2.2 · 虚拟触觉映射</span>
-            <aside id="wujiGraspPreview" class="grasp-preview" aria-label="预测 grasp type 与 primitive 示意图">
+            <aside id="wujiGraspPreview" class="grasp-preview" aria-label="预测 grasp type 与 primitive 示意图" hidden>
               <div class="grasp-preview-heading"><span>预测 GRASP TYPE</span><b id="wujiGraspConfidence">—</b></div>
               <strong id="wujiGraspType">等待预测</strong>
               <img id="wujiPrimitiveImage" width="384" height="276" alt="" hidden>
               <p id="wujiPrimitiveStatus">等待手套姿态</p>
             </aside>
           </div>
-          <p id="wujiStatus" role="status">等待 Moxian 输入</p><p id="wujiFrameIdentity" role="status">画面后端：等待首帧</p><p id="wujiError"></p><p id="wujiSidInfo" class="footnote"></p><p id="wujiSourceQuality" class="footnote"></p><p class="footnote">共同虚拟世界 · 相同单位与比例 · 紫色：阵列；黄色：手套二值接触标签。离散图 SLSQP 使用骨架与接触点统一图，跨语义 link 接触边高权重；橙线显示接触边及材料点到骨架的连接。wuji-retargeting 使用当前已标定 Moxian 骨架和原版两阶段机器人重定向。各后端按自身时序策略输出，动力学关闭，力权重仅为相对触觉强度。</p>
+          <p id="wujiStatus" role="status">等待 Moxian 输入</p><p id="wujiFrameIdentity" role="status">画面后端：等待首帧</p><p id="wujiError"></p><p id="wujiSidInfo" class="footnote"></p><p id="wujiSourceQuality" class="footnote"></p><p class="footnote">共同虚拟世界 · 相同单位与比例 · 紫色：阵列；黄色：手套二值接触标签。红色 link：原生 mesh 自碰撞穿透大于 0.5 mm 的双方；触觉接触及物体穿透不触发红色。离散图 SLSQP 使用骨架与接触点统一图，跨语义 link 接触边高权重；橙线显示接触边及材料点到骨架的连接。wuji-retargeting 使用当前已标定 Moxian 骨架和原版两阶段机器人重定向。各后端按自身时序策略输出，动力学关闭，力权重仅为相对触觉强度。</p>
         </section>
         <details id="cartPanel" class="ik-guide" open>
           <summary>CART · 任意动作与接触监督</summary>
@@ -200,10 +219,12 @@
   </main><div id="toast" class="toast" role="status" hidden></div>
 <script type="importmap">{"imports":{"three":"/vendor/three.module.min.js"}}</script>
 <script type="module" src="/mano-view.js"></script>
-<script type="module" src="/wuji-view.js?v=geort-contact-v2"></script>
+<script type="module" src="/wuji-view.js?v=card-future3-rtc-prefix-v3"></script>
 <script src="/geort-coverage.js?v=clickable-reference-v6"></script>
 <script type="module" src="/geort-workspace-pose.js?v=1"></script>
 <script src="/geort.js?v=pair-balanced-contact-v2-flat"></script>
+<script src="/wuji-collision.js?v=configuration-sdf-visual-v2"></script>
+<script type="module" src="/wuji-collision-view.js?v=2"></script>
 <script src="/cart.js?v=diff-time-batched-v7"></script>
 <script type="module" src="/cart-preview.js?v=diff-capture-v5"></script>
 <script type="module" src="/cart-ik-view.js?v=ik-reference-v1"></script>

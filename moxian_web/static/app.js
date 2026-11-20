@@ -107,7 +107,7 @@ function updateUI() {
     }
   }
   updateModes(live);
-  window.currentMoxianState=state;window.updateGeortUI?.(state);window.updateCartUI?.(state);window.updateCheckpointComparison?.(state);window.updateContactPrediction?.(state);updateHandUI(live);if(poseMode!=='mano')window.updateManoView?.(state,false);if(poseMode!=='wuji2')window.updateWujiView?.(state,false);
+  window.currentMoxianState=state;window.updateGeortUI?.(state);window.updateWujiCollisionUI?.(state);window.updateCartUI?.(state);window.updateCheckpointComparison?.(state);window.updateContactPrediction?.(state);updateHandUI(live);if(poseMode!=='mano')window.updateManoView?.(state,false);if(poseMode!=='wuji2')window.updateWujiView?.(state,false);
   if(replaying){$('liveText').textContent='录制回放 · 本地文件';$('deviceStatus').textContent='录制回放';$('footerState').textContent='REPLAY · 不操作设备';}
 }
 

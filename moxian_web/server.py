@@ -121,6 +121,9 @@ class Runtime:
         from .geort_diagnostics_service import DiagnosticService
         self.geort.diagnostics=DiagnosticService(self.geort_diagnostic_input,self.geort.root)
         self.geort_diagnostic_context=None
+        from .wuji_sdf_service import CollisionComparisonService
+        self.wuji_collision = CollisionComparisonService(self.wuji_collision_input, OUTPUT / 'wuji2_collision')
+        self.wuji_collision.configure(True)
         self.thread = threading.Thread(target=self.run, name="moxian-sdk", daemon=True)
         self.thread.start()
 
@@ -174,6 +177,12 @@ class Runtime:
             from .web_state import inactive_wuji
             wuji=inactive_wuji(wuji)
         result["wuji2"] = wuji
+        result['wuji_collision'] = self.wuji_collision.snapshot(wuji)
+        if result['wuji_collision'].get('status') == 'waiting_input':
+            if wuji.get('error'):
+                result['wuji_collision']['error'] = '等待有效 Wuji2 姿态：' + str(wuji['error'])
+            elif result['skeleton'].get('status') == 'needs_calibration':
+                result['wuji_collision']['error'] = '请先完成源骨架初始化；当前没有可供碰撞对照的 Wuji2 姿态'
         result['geort'] = self.geort.snapshot()
         result['cart'] = self.cart.snapshot(result['connected'],include_mesh=view=='mano')
         if (self.geort.replay_active and self.geort.replay_topology) or (self.cart.replay_active and self.cart.replay_topology):
@@ -190,6 +199,7 @@ class Runtime:
         # worker must never stall delivery of synchronized EMF/ADC packets.
         software={'record_start','record_stop','mano_restart','mano_capture_start','mano_capture_confirm','mano_capture_resume','mano_capture_retry','mano_capture_cancel','mano_checkpoint_preview','mano_checkpoint_end','mano_fit','mano_fit_cancel'}
         software.update(('wuji2_solver_set','wuji2_object_set','wuji2_object_clear','wuji2_mapping_rebuild'))
+        software.add('wuji2_collision_set')
         if name in software or name.startswith(('geort_','cart_')):
             with self.software_control_lock:return self.apply_command(name,data)
         reply = queue.Queue(maxsize=1)
@@ -242,6 +252,8 @@ class Runtime:
 
     def apply_command(self, name, data=None):
         data = data or {}
+        if name == 'wuji2_collision_set':
+            return self.wuji_collision.configure(data.get('enabled'))
         if name.startswith('cart_'):return self.cart_command(name,data)
         if name.startswith('geort_'):
             return self.geort_command(name,data)
@@ -406,6 +418,13 @@ class Runtime:
         self.geort.observe(frame,topology,joints,serial)
         self.cart.observe(frame,topology,joints,serial)
         return dict(ready=False,status='cart_diff_v5')
+
+    def wuji_collision_input(self):
+        from .wuji_sdf_service import comparison_packet
+        with self.lock:
+            connected = bool(self.sdk and self.last_frame and time.monotonic() - self.last_frame < 1.)
+        replay = self.geort.replay_active or self.cart.replay_active
+        return comparison_packet(self.wuji.snapshot(connected or replay, copy_state=False, mesh_transport=True))
 
     def geort_diagnostic_input(self):
         """A sampled paired result, never a fresh Glove mixed with an old robot."""
@@ -720,6 +739,7 @@ class Runtime:
             self.stop_recording(wait=True)
             self.disconnect()
             self.contact_prediction.stop()
+            self.wuji_collision.close()
             self.geort.close()
             self.cart.close()
             self.wuji.stop()
@@ -753,6 +773,13 @@ def handler(runtime):
             if route == "/api/state":
                 query=parse_qs(urlparse(self.path).query);view=query.get('view',[None])[0]
                 return self.respond(200, runtime.snapshot(view=view,packed_wuji=query.get('geometry',[None])[0]=='packed'),fast=True)
+            if route in ('/api/wuji_collision/model', '/api/wuji_collision/examples', '/api/wuji_collision/example'):
+                try:
+                    kind = route.rsplit('/', 1)[-1]
+                    index = int(parse_qs(urlparse(self.path).query).get('index', ['0'])[0]) if kind == 'example' else None
+                    return self.respond(200, runtime.wuji_collision.visual_asset(kind, index))
+                except (ValueError, OSError) as exc:
+                    return self.respond(400, {'error':str(exc)})
             if route in ('/api/geort/recordings','/api/geort/models'):
                 return self.respond(200,{'items':runtime.geort.catalog(route.rsplit('/',1)[-1])})
             if route=='/api/geort/coverage':
@@ -879,6 +906,9 @@ def handler(runtime):
             if route == '/contact-prediction.css':file=STATIC/'contact-prediction.css'
             if route == '/calibration-contact-targets.json':file=STATIC/'calibration-contact-targets.json'
             if route == '/cart-ik-view.js':file=STATIC/'cart-ik-view.js'
+            if route == '/wuji-collision.js':file=STATIC/'wuji-collision.js'
+            if route == '/wuji-collision-view.js':file=STATIC/'wuji-collision-view.js'
+            if route == '/wuji-collision-colors.js':file=STATIC/'wuji-collision-colors.js'
             if file.is_file():
                 return self.respond(200, file.read_bytes(), mimetypes.guess_type(file)[0] or "text/plain")
             self.respond(404, {"error": "Not found"})
@@ -902,7 +932,7 @@ def handler(runtime):
 
 def main():
     parser = argparse.ArgumentParser(description="墨现手套 SDK + WebUI")
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default="0.0.0.0", help="监听地址；默认允许局域网访问")
     parser.add_argument("--port", type=int, default=8890)
     parser.add_argument("--device", default=None)
     args = parser.parse_args()

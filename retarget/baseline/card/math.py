@@ -3,7 +3,7 @@ from dataclasses import dataclass,asdict
 import math
 import torch
 
-ALGORITHM='card_wuji2_v10_paper_objective_solver'
+ALGORITHM='card_wuji2_v11_soft_collision_costs'
 
 @dataclass(frozen=True)
 class CardSettings:
@@ -32,7 +32,6 @@ class CardSettings:
     def __post_init__(self):
         if self.cem_backend not in ('robokit','torch'):raise ValueError('Unknown CARD CEM backend')
         if self.population<2 or self.iterations<1 or not 0<self.elite_fraction<=1:raise ValueError('Invalid CEM budget')
-        if self.motion_sample_fraction!=0:raise ValueError('Source-motion sampling was removed; motion_sample_fraction must be zero')
         if self.temperature<=0 or not 0<self.gamma<=1:raise ValueError('Invalid annealing')
         if (not math.isfinite(self.wmotion_joint) or self.wmotion_joint<0 or not 0<=self.contact_style_weight<=1
                 or not 0<=self.motion_sample_fraction<1):
@@ -44,10 +43,10 @@ class CardSettings:
 
     @property
     def objective_profile(self):
-        return ('paper' if not self.experimental_self_contact and self.contact_direction_model=='card_alignment'
+        return ('paper_energy_soft_collision_costs' if not self.experimental_self_contact and self.contact_direction_model=='card_alignment'
                 and self.wmotion_joint==0 and self.motion_sample_fraction==0 and self.contact_style_weight==1 else 'experimental')
 
-    def payload(self):return {**asdict(self),'elite_count':max(1,int(self.population*self.elite_fraction)),'length_cost_units':'mm','algorithm':ALGORITHM,'objective_profile':self.objective_profile}
+    def payload(self):return {**asdict(self),'elite_count':max(1,int(self.population*self.elite_fraction)),'length_cost_units':'mm','algorithm':ALGORITHM,'objective_profile':self.objective_profile,'collision_hard_gates':False}
 
 
 def exp_so3(v):
