@@ -3,7 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import numpy as np
-from .cart_protocol import PROTOCOL, LEGACY_PROTOCOL, SUPPORTED_RECORDINGS
+from .cart_protocol import PROTOCOL, SUPPORTED_RECORDINGS
 from retarget.baseline.geort.adapter import SourceAdapter, digest
 from retarget.baseline.geort.training import atomic_json
 

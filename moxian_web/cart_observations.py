@@ -1,7 +1,7 @@
 """Synchronized measured EMF and material taxels; shared train/runtime packing."""
 import numpy as np
 import torch
-from .cart_protocol import LOOKAHEAD, FINGERS
+from .cart_protocol import FINGERS
 
 
 def capture_emf(frame, model):
@@ -49,22 +49,3 @@ def tactile_input(frame, positions, topology):
     from .cart_capture_schema import binary_taxels
     state,valid,_=binary_taxels(frame,topology)
     return np.asarray(positions,np.float32),state.astype(np.float32),valid
-
-
-def pack_future(current_stamp, rows, device='cpu'):
-    """Exactly t+1..t+10, in physical units; normalization lives in the model."""
-    if len(rows)!=LOOKAHEAD: raise ValueError('CART requires exactly ten actual future frames')
-    stamps=np.asarray([r['timestamp_ms'] for r in rows],np.float64)
-    if not np.isfinite(stamps).all() or not np.isfinite(current_stamp) or np.any(np.diff(np.r_[current_stamp,stamps])<=0) or np.any(np.diff(np.r_[current_stamp,stamps])>250):
-        raise ValueError('CART future window crosses a sensor boundary')
-    if any('ik_valid' not in r or r.get('ik_valid') and 'ik_q_rad' not in r for r in rows):
-        raise ValueError('未来窗口缺少已对齐的 Wuji2 IK 轨迹')
-    values = dict(future_ik=[r.get('ik_q_rad',[0.]*20) for r in rows],ik_valid=[r['ik_valid'] for r in rows],
-        future_dt=(stamps-current_stamp)/1000,tactile_positions=[r['tactile_positions_m'] for r in rows],
-        tactile_state=[r['tactile_state'] for r in rows],tactile_valid=[r['tactile_valid'] for r in rows])
-    return {k:torch.as_tensor(np.asarray(v),device=device,dtype=torch.bool if k.endswith('valid') else torch.float32) for k,v in values.items()}
-
-
-def batch_future(windows, offsets, device):
-    packed=[pack_future(w['rows'][i]['timestamp_ms'],w['rows'][i+1:i+11],device) for w,i in zip(windows,offsets)]
-    return {k:torch.stack([v[k] for v in packed]) for k in packed[0]}

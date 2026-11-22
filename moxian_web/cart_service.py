@@ -4,7 +4,7 @@ import numpy as np
 from pathlib import Path
 from retarget.baseline.geort.adapter import ROOT
 from .geort_service import GeoRTService,safe_id,write_json
-from .cart_protocol import PROTOCOL,LEGACY_PROTOCOL,SUPPORTED_RECORDINGS
+from .cart_protocol import PROTOCOL,SUPPORTED_RECORDINGS
 
 class CartService:
     def __init__(self,root=None):

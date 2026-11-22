@@ -10,10 +10,10 @@ import numpy as np
 import torch
 from .cart_data import load_sessions,preprocess,manifest,preprocessing_current,implementation_identity as geometry_identity,file_hash
 from .cart_network import CartNetwork,LEVELS
-from .cart_observations import batch_future,pack_future
+from .cart_emf_observations import batch_future,pack_future
 from .cart_collision import CollisionModel,SDFLearner,frozen
 from .cart_objective import CartHand,CartObjective,policy_settings
-from .cart_protocol import PROTOCOL,ARCHITECTURES,POLICY_OUTPUT,POLICY_INPUT,POLICY_TRANSITION
+from .cart_protocol import PROTOCOL,ARCHITECTURES,FINGERS,POLICY_OUTPUT,POLICY_INPUT,POLICY_TRANSITION
 from .cart_fast import DEFAULT_BATCH_SIZE,PreparedBatch,ObservationStore,prepare_windows,group_normalizers,choose_parallel_batch
 from .cart_contact_field import CONTACT_FIELD_VERSION
 from .cart_initialization import prepare_ik,attach_ik,perturb_initial_states,IK_VERSION,DEFAULT_INITIAL_NOISE_RAD
@@ -34,6 +34,7 @@ def implementation_identity():
         contact_field=file_hash(Path(__file__).with_name('cart_contact_field.py')),
         kinematics=file_hash(Path(__file__).with_name('cart_kinematics.py')),
         pretrained_sdf=file_hash(Path(__file__).with_name('cart_pretrained_sdf.py')),
+        emf_policy_inputs=file_hash(Path(__file__).with_name('cart_emf_observations.py')),
         q_collision=file_hash(Path(__file__).with_name('cart_q_collision.py')),
         policy_reward=file_hash(Path(__file__).with_name('cart_reward.py')),
         initialization=file_hash(Path(__file__).with_name('cart_initialization.py')),
@@ -472,6 +473,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         warmup_steps=(4 if smoke else 2000) if warmup_steps is None else warmup_steps
         if isinstance(warmup_steps,bool) or not isinstance(warmup_steps,int) or warmup_steps<0:raise ValueError('无效 SDF 热启动步数')
         config=dict(protocol=PROTOCOL,architecture=ARCHITECTURES[architecture],architecture_name=architecture,
+            decoder=dict(layout='independent_finger_mlps_v1',fingers=list(FINGERS),joints_per_finger=4,hidden=[256,256]),
             geometry=implementation_identity(),run_id=run_id,source=source,source_binding_version=next(iter(bindings)),
             robot=hand.robot.spec,output_domain=hand.domain,levels=list(LEVELS),position_mean=mean.tolist(),position_scale=scale.tolist(),
             train_ids=train_ids,validation_ids=validation_ids,epochs=epochs,seed=seed,batch_size=batch_size,sequence_length=length,
@@ -489,8 +491,8 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             initialize_contact_from=dict(name=Path(initialize_contact_from).name,sha256=file_hash(initialize_contact_from)) if initialize_contact_from else None)
         config.update(micro_batch_size=micro_batch_size,batch_semantics='parallel_windows_per_optimizer_step',
             policy_output=POLICY_OUTPUT,delta_normalization='2*delta_rad/(upper-lower)',state_transition='clamp(normalize(q)+delta,-1,1)',
-            policy_input=POLICY_INPUT,policy_transition=POLICY_TRANSITION,residual_scale=model.residual_scale,
-            objective_version=objective.settings.loss_kind,reference_initialization='current_frame_cached_ik',
+            policy_input=POLICY_INPUT,policy_transition=POLICY_TRANSITION,policy_reference='none',
+            objective_version=objective.settings.loss_kind,reference_initialization='current_frame_cached_ik_seed_only',
             gradient_accumulation=False,parallel_batch_size=parallel_size,
             window_stride=window_stride or max(1,length//2),training_windows=len(train_windows),
             sdf_backend=sdf_spec,
@@ -560,7 +562,8 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 source_folder=root/'models'/(initialize_from or initialize_geometry_from)
                 origin=json.loads((source_folder/'config.json').read_text())
                 required=('robot','output_domain','source','source_binding_version','sdf_capacity','sdf_batch_size')
-                if initialize_from:required+=('protocol','architecture','policy_input','policy_transition','policy_output','levels','position_mean','position_scale','train_ids','validation_ids','datasets')
+                if initialize_from:
+                    required+=('protocol','policy_input','policy_transition','policy_output','levels','position_mean','position_scale','train_ids','validation_ids','datasets','architecture','decoder')
                 if initialize_from and origin.get('policy_output')!=POLICY_OUTPUT:
                     raise ValueError('绝对 q 权重不能用作 delta q 策略；可用 initialize_geometry_from 仅迁移几何模型')
                 if any(config[k]!=origin[k] for k in required):raise ValueError('初始化 checkpoint 的架构、数据、坐标或碰撞模型配置不匹配')
@@ -702,10 +705,10 @@ class Predictor:
         self.collision.model.load_state_dict(checkpoint['collision']);self.collision.model.eval()
         for p in self.collision.model.parameters():p.requires_grad_(False)
 
-    def predict(self,current_q,future_ik,ik_valid,future_dt,tactile_positions=None,tactile_state=None,tactile_valid=None,*,normalized=True,output='delta'):
+    def predict(self,current_q,future_emf,emf_valid,future_dt,tactile_positions=None,tactile_state=None,tactile_valid=None,*,normalized=True,output='delta'):
         if output not in ('delta','next'):raise ValueError('output must be delta or next')
         q=np.asarray(current_q,np.float32);single=q.shape==(20,)
-        values=dict(current_q=q,future_ik=future_ik,ik_valid=ik_valid,future_dt=future_dt,
+        values=dict(current_q=q,future_emf=future_emf,emf_valid=emf_valid,future_dt=future_dt,
             tactile_positions=tactile_positions,tactile_state=tactile_state,tactile_valid=tactile_valid)
         args={}
         for k,value in values.items():

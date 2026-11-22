@@ -40,5 +40,3 @@ New-run options: `--initialize-q-collision-from CHECKPOINT`, optionally
 `--initialize-from RUN --fresh-policy-optimizer`. A new branch can retain the
 latest policy/SDF/contact weights while discarding policy momentum and the old
 training cursor. `scripts/train_cart_q_collision.py` pretrains the new field.
-`tests/test_cart_q_collision.py` checks native-teacher finite differences,
-search-free policy inference, BPTT gradients, and optimizer/replay restoration.

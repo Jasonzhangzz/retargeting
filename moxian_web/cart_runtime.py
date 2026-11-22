@@ -44,7 +44,7 @@ class CartRetarget(GeoRTRetarget):
 
     def reset(self):
         self.buffer.reset();self.last_q=neutral(self.cart_predictor.hand).cpu().numpy()
-        self.ik_session=RetargetSession.for_hand('WujiHand2','right');self.ik_rows={};self.state_initialized=False
+        self.ik_session=RetargetSession.for_hand('WujiHand2','right');self.state_initialized=False
         self.session_id=uuid.uuid4().hex
 
     def step(self,frame):
@@ -59,22 +59,6 @@ class CartRetarget(GeoRTRetarget):
             v,j=np.asarray(item['vertices_m']),np.asarray(item['joints_m'])
             row,_,_=self.geometry.frame(None,item['timestamp_ms'],item,raw=(v,j))
             row['timestamp_ms']=item.get('recorded_timestamp_ms',item['timestamp_ms']);row['stream_epoch']=epoch
-            key=row['timestamp_ms']
-            if 'cart_ik_valid' in item:
-                row['ik_valid']=bool(item['cart_ik_valid'])
-                if row['ik_valid']:row['ik_q_rad']=item['cart_ik_q_rad']
-            elif key in self.ik_rows:
-                row.update(self.ik_rows[key])
-            else:
-                try:
-                    q=self.ik_session.step(np.asarray(row['joints_m']))
-                    hand=self.cart_predictor.hand
-                    q=np.clip(q,hand.low.cpu().numpy(),hand.high.cpu().numpy())
-                    row.update(ik_valid=True,ik_q_rad=q.tolist())
-                except (ValueError,RuntimeError):
-                    self.ik_session.reset();row['ik_valid']=False
-                self.ik_rows[key]={k:row[k] for k in ('ik_valid','ik_q_rad') if k in row}
-                while len(self.ik_rows)>512:del self.ik_rows[next(iter(self.ik_rows))]
             return (row['timestamp_ms'],(dict(item),row))
         if 'cart_future_frames' in frame:
             # Offline replay reads saved true future data immediately, including
@@ -93,9 +77,18 @@ class CartRetarget(GeoRTRetarget):
         previous=window[0][1][1];future=[entry[1][1] for entry in window[1:]]
         target_frame=window[1][1][0];row=future[0]
         if not self.state_initialized:
-            if not previous.get('ik_valid'):
+            # Seed the current state once; never solve IK for future frames.
+            source_frame=window[0][1][0]
+            try:
+                if source_frame.get('cart_ik_valid'):
+                    initial=np.asarray(source_frame['cart_ik_q_rad'],np.float32)
+                else:initial=self.ik_session.step(np.asarray(previous['joints_m']))
+                hand=self.cart_predictor.hand
+                self.last_q=np.clip(initial,hand.low.cpu().numpy(),hand.high.cpu().numpy())
+            except (ValueError,RuntimeError):
+                self.ik_session.reset()
                 return dict(ready=False,display_available=False,status='waiting_ik',algorithm=PROTOCOL)
-            self.last_q=np.asarray(previous['ik_q_rad'],np.float32);self.state_initialized=True
+            self.state_initialized=True
         old_q=self.last_q.copy()
         self.last_q=self.cart_predictor.predict_rows(old_q,window[0][0],future)
         network_ms=(time.perf_counter()-began)*1000

@@ -9,6 +9,7 @@
 | `scripts/` | 当前安装、启动、标定和离线求解入口 |
 | `data/contact/`、`data/grasp/` | 本地提供的机器人网格、MJCF、模板和许可，不纳入 Git |
 | `data/datasets/` | 本地数据集与查看器资源，不纳入 Git |
+| `data/checkpoints/` | 下载的最佳候选权重、原始配置及验收状态，不纳入 Git |
 | `visualization/` | 当前抓握数据与 primitive 增强查看器；资源从本地 `data/` 读取 |
 | `docs/` | 当前功能和数据接口说明 |
 | `third_party/`、`licenses/` | 运行依赖的固定版本源码、许可及来源记录 |

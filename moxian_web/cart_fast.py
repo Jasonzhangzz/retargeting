@@ -16,19 +16,20 @@ DEFAULT_BATCH_SIZE = 0  # actual simultaneous windows, selected from free memory
 class ObservationStore:
     def __init__(self, rows, device):
         self.device=device
-        if any('ik_valid' not in r or r.get('ik_valid') and 'ik_q_rad' not in r for r in rows):
-            raise ValueError('常驻观测缺少离线 Wuji2 IK 轨迹')
+        if any('emf_pose' not in r or 'emf_valid' not in r for r in rows):
+            raise ValueError('常驻观测缺少原始 EMF 完整位姿')
         names=dict(tactile_positions='tactile_positions_m',
                    tactile_state='tactile_state',tactile_valid='tactile_valid')
         self.values={k:torch.as_tensor(np.asarray([r[v] for r in rows]),device=device,
             dtype=torch.bool if k.endswith('valid') else torch.float32) for k,v in names.items()}
-        self.values.update(future_ik=torch.as_tensor(np.asarray([r.get('ik_q_rad',[0.]*20) for r in rows]),device=device,dtype=torch.float32),
-            ik_valid=torch.as_tensor([r['ik_valid'] for r in rows],device=device,dtype=torch.bool))
+        self.values.update(future_emf=torch.as_tensor(np.asarray([r['emf_pose'] for r in rows]),device=device,dtype=torch.float32),
+            emf_valid=torch.as_tensor([r['emf_valid'] for r in rows],device=device,dtype=torch.bool))
         self.stamps=torch.as_tensor([r['timestamp_ms'] for r in rows],device=device,dtype=torch.float64)
         self.cpu_stamps=np.asarray([r['timestamp_ms'] for r in rows],np.float64)
         self.initial_states=torch.as_tensor(np.asarray([r.get('ik_q_rad',[0.]*20) for r in rows]),device=device,dtype=torch.float32) if any('ik_q_rad' in r for r in rows) else None
-        v=self.values;ev=v['ik_valid'];tv=v['tactile_valid']
-        if not torch.isfinite(v['future_ik'][ev]).all() or not torch.isfinite(v['tactile_positions'][tv]).all():
+        v=self.values;ev=v['emf_valid'];tv=v['tactile_valid']
+        if v['future_emf'].shape!=(len(rows),5,9) or ev.shape!=(len(rows),5):raise ValueError('Invalid EMF observation shapes')
+        if not torch.isfinite(v['future_emf'][ev]).all() or not torch.isfinite(v['tactile_positions'][tv]).all():
             raise ValueError('Nonfinite prepared CART observation')
         state=v['tactile_state'][tv]
         if not ((state==0)|(state==1)).all():raise ValueError('Prepared tactile state is not binary')

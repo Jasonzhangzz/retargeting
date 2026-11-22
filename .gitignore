@@ -2,6 +2,11 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.history/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
 .cache/
 .venv/
 .venv-*/
@@ -14,6 +19,9 @@ dist/
 *.so
 *.log
 *.tmp
+*.bak
+*.orig
+*.rej
 .DS_Store
 .aws
 MUJOCO_LOG.TXT

@@ -65,7 +65,7 @@ async function updateFrame(frame,hull){
 async function refresh(){
  if(pending)return;
  const c=current?.cart;
- if(c?.protocol&&c.protocol!=='cart_diff_ik_v6')return hide('CART 服务版本不匹配，请重启网页服务以加载未来 IK 策略。');
+ if(c?.protocol&&c.protocol!=='cart_diff_ik_v6')return hide('CART 服务版本不匹配，请重启网页服务以加载未来 EMF 策略。');
  if(!c?.ready||window.cartHullVisible===false||!document.getElementById('cartPanel').open){
   if(window.cartPreviewStats)window.cartPreviewStats.visible=false;
   return hide(c?.error|| (c?.recording?.active?'接触预览初始化或等待有效几何；原始动作持续录制。':'点击“预览当前接触目标”或开始录制，显示独立三维预览。'));
