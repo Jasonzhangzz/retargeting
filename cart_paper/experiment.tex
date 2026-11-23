@@ -17,30 +17,31 @@
     \newcommand{\taskmetrics}{\makebox[17pt]{SR} & \makebox[17pt]{CS} & \makebox[17pt]{SM} & \makebox[17pt]{PT}}
     % Replace the four entries of each task in SR, CS, SM, PT order.
     \newcommand{\taskpending}{\textendash & \textendash & \textendash & \textendash}
-    \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}l@{\hspace{4pt}}l@{\hspace{3pt}}*{6}{|cccc}@{}}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{@{}l@{\hspace{4pt}}l@{\hspace{3pt}}*{6}{|cccc}@{}}
         \hline
-        & & \multicolumn{4}{|c|}{\shortstack{Flower\\arrangement}}
-        & \multicolumn{4}{c|}{\shortstack{Plush-toy\\pickup}}
-        & \multicolumn{4}{c|}{\shortstack{Cup\\stacking}}
-        & \multicolumn{4}{c|}{\shortstack{Phone\\pickup}}
-        & \multicolumn{4}{c|}{\shortstack{Pen pickup\\and writing}}
-        & \multicolumn{4}{c@{}}{\shortstack{Pen\\spinning}} \\
-        Mode & Method & \taskmetrics & \taskmetrics & \taskmetrics & \taskmetrics & \taskmetrics & \taskmetrics \\
+        & & \multicolumn{4}{|c|}{\mbox{Flower arrangement}}
+        & \multicolumn{4}{c|}{\mbox{Plush-toy pickup}}
+        & \multicolumn{4}{c|}{\mbox{Cup stacking}}
+        & \multicolumn{4}{c|}{\mbox{Phone pickup}}
+        & \multicolumn{4}{c|}{\mbox{Pen pickup and writing}}
+        & \multicolumn{4}{c@{}}{\mbox{Pen spinning}} \\
+        Mode & \makebox[65pt][l]{Method} & \taskmetrics & \taskmetrics & \taskmetrics & \taskmetrics & \taskmetrics & \taskmetrics \\
         \hline
         Offline & \mbox{wuji-retargeting} & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending \\
-                & GeoRT            & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending \\
-                & CARD             & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending \\
+                & \mbox{GeoRT}    & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending \\
+                & \mbox{CARD}     & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending \\
                 & \mbox{CART (ours)} & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending \\
         \hline
         Online & \mbox{wuji-retargeting} & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending \\
-                & GeoRT            & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending \\
-                & CARD             & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending \\
+                & \mbox{GeoRT}    & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending \\
+                & \mbox{CARD}     & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending \\
                 & \mbox{CART (ours)} & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending & \taskpending \\
         \hline
-    \end{tabular*}
+    \end{tabular}}
 \end{table*}
 
-We compare CART with wuji-retargeting~\cite{wuji2026retargeting}, GeoRT~\cite{yin2025geort}, and CARD~\cite{dai2026card} on the Wuji2 hand. We capture demonstrations with a Moxian glove equipped with five EMF fingertip receivers and a full-palmar piezoelectric array of 460 taxels. Before capture, we tare the unloaded array to estimate its baseline and suppress noise-induced contact detections. We encode each taxel as 1 for contact or 0 for no contact when forming the policy input and scoring contact.
+We compare CART with wuji-retargeting~\cite{wuji2026retargeting}, GeoRT~\cite{yin2025geort}, and CARD~\cite{dai2026card} on the Wuji2 hand. We capture demonstrations with a Moxian glove equipped with five EMF fingertip receivers and a full-palmar piezoelectric array of 460 taxels. The glove transmits synchronized EMF and tactile data at 120~Hz. CART stacks ten consecutive observation frames, from $t+1$ through $t+10$, into a sliding input window. At each update, the policy predicts a joint increment from this window and the current robot configuration $q_t$. Before capture, we tare the unloaded array to estimate its baseline and suppress noise-induced contact detections. We encode each taxel as 1 for contact or 0 for no contact when forming the policy input and scoring contact.
 
 The Wuji2 hand lacks full-palmar tactile sensing. CARD's hardware controller uses tactile force feedback in an admittance loop over joint impedance~\cite{dai2026card}. For the CARD baseline, we replay its retargeted joint trajectories using joint impedance control. In simulation, we allow up to 5~mm of penetration between the human glove mesh and the object to approximate skin compliance.
 
