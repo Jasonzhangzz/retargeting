@@ -195,6 +195,10 @@ class CartService:
                 if deployment.exists():
                     imported=json.loads(deployment.read_text())
                     status.update(imported=True,experimental=imported.get('experimental',False))
+                selection=folder/'checkpoint_selection.json'
+                if selection.exists():
+                    selected=json.loads(selection.read_text())
+                    status.update(best_epoch=selected['epoch'],validation_loss=selected['validation_loss'])
                 items.append(status)
             except (OSError,ValueError):pass
         return items
@@ -216,7 +220,7 @@ class CartService:
             epochs=data.get('epochs',200)
             if isinstance(epochs,bool) or not isinstance(epochs,int) or not 1<=epochs<=2000:raise ValueError('轮数必须为1–2000')
             architecture=data.get('architecture','attention')
-            if architecture not in ('attention','fsq'):raise ValueError('无效 CART 网络结构')
+            if architecture!='attention':raise ValueError('无效 CART 网络结构')
             batch=data.get('batch_size',0);micro=data.get('micro_batch_size',0)
             if isinstance(batch,bool) or not isinstance(batch,int) or not 0<=batch<=65536:raise ValueError('并行窗口数必须为 0–65536；0 表示按显存自动选择')
             if isinstance(micro,bool) or not isinstance(micro,int) or micro<0:raise ValueError('GPU 分块必须为非负整数')
@@ -224,6 +228,10 @@ class CartService:
             if isinstance(noise,bool) or not isinstance(noise,(int,float)) or not np.isfinite(noise) or not 0<=noise<=.5:raise ValueError('IK 初始噪声幅度须为 0–0.5 rad')
             command+=['--epochs',str(epochs),'--architecture',architecture,'--batch-size',str(batch),'--micro-batch-size',str(micro)]
             command+=['--initial-noise-rad',str(noise)]
+            from .cart_protocol import OBJECTIVES,WRIST_OBJECTIVE
+            objective=data.get('policy_objective',WRIST_OBJECTIVE)
+            if objective not in OBJECTIVES:raise ValueError('仅支持 v9 和腕部 pose 版本')
+            command+=['--policy-objective',objective,'--policy-loss-scale','100000000','--optimizer','muon_sgd']
             stride=data.get('window_stride',0)
             if isinstance(stride,bool) or not isinstance(stride,int) or not 0<=stride<=65536:raise ValueError('窗口步长必须为 0–65536；0 表示 length//2')
             command+=['--window-stride',str(stride)]

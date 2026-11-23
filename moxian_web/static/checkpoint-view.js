@@ -1,7 +1,7 @@
 // Training artifacts are explicitly previewed; selection never publishes a model.
 (()=>{
- const $=id=>document.getElementById(id),select=$('manoCheckpoint');
- const methods=[['moxian_wuji','Moxian六动作骨长与EMF外参'],['wuji_native','Wuji 原生六动作标定'],['bone_extrinsics','Moxian 17动作标定（历史）'],['parameters','xMimic 思路版（历史）'],['flashsac','FlashSAC buffer 版（历史）'],['delta','几何＋Delta 联合训练（历史）'],['least_squares','分阶段最小二乘标定（历史）']];
+ const $=id=>document.getElementById(id),select=$('manoCheckpoint'),panel=document.querySelector('.checkpoint-comparison');
+ const methods=[['moxian_wuji','Moxian六动作骨长与EMF外参'],['wuji_native','Wuji 原生六动作标定（诊断）']];
  // Names remain visible even before live state or artifact requests complete.
  select.replaceChildren(...methods.map(([method,label])=>new Option(label,method)));
  let current=null,items=[],pending=false,loading=false,lastLoad=0,device=null,message='';
@@ -20,7 +20,7 @@
   $('manoCheckpointStatus').textContent=pending?'正在切换模型…':message?message:shown?`正在预览：${methods.find(([method])=>method===shown.method)?.[1]||shown.label}。当前标定未替换，返回后恢复原模型。`:!current?.connected?`已读取 ${count} 个训练结果；等待手套连接后预览。`:`当前使用${h.calibrated?'已应用标定':'默认模型'}；可对比 ${count} 个训练结果。`;
  }
  async function refresh(force=false){
-  if(loading||(!force&&Date.now()-lastLoad<10000))return;
+  if(loading||!panel.open||(!force&&Date.now()-lastLoad<10000))return;
   const requestedDevice=device;
   loading=true;lastLoad=Date.now();render();
   try{
@@ -40,6 +40,7 @@
   }catch(error){message=error.message;}
   finally{pending=false;render();}
  }
+ panel.addEventListener('toggle',()=>{if(panel.open)refresh(true);});
  select.onchange=render;
  $('manoCheckpointLoad').onclick=()=>{const backend=current?.hand_model?.surface_backend||'mano';const chosen=items.find(item=>item.method===select.value&&(item.surface_backend||'mano')===backend);if(chosen&&chosen.compatible!==false)change('checkpoint_preview',{id:chosen.id});};
  $('manoCheckpointEnd').onclick=()=>change('checkpoint_end');

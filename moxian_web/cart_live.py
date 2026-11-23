@@ -20,6 +20,43 @@ def policy_row(geometry,frame):
         tactile_state=ts.tolist(),tactile_valid=tv.tolist())
 
 
+def physical_contact_audit(hand,collision,q,row):
+    """Native geometry diagnostics, independent of any historical training loss."""
+    frames=hand.frames(q);p,r,joints=frames[:3];gaps=[];angles=[];points=[]
+    valid=torch.ones(len(q),device=q.device,dtype=torch.bool)
+    for pair in row['contacts']['self_pairs']:
+        from .cart_contacts import link_owner
+        a,b=map(link_owner,pair['regions'])
+        distance,_,pa,pb,na,nb,ok=hand.pair(p,r,a,b,dense=True)
+        gaps.append(distance.clamp_min(0).sqrt())
+        angles.append(torch.rad2deg(torch.acos((-na*nb).sum(-1).clamp(-1,1))))
+        points.append((pa,pb));valid=valid&ok
+    for contact in row['contacts']['object_contacts']:
+        from .cart_contacts import link_owner
+        owner=link_owner(contact['region']);target=hand.tensor(contact['position_m'])
+        normal=hand.tensor(contact['normal']);inverse=r[:,owner].transpose(-1,-2)
+        query=(inverse@(target-p[:,owner])[...,None]).squeeze(-1)
+        escape=(inverse@normal[:,None]).squeeze(-1)
+        local,ln,ok=hand.nearest(query,owner,palmar=True,escape=escape)
+        hit=(r[:,owner]@local[...,None]).squeeze(-1)+p[:,owner]
+        outward=(r[:,owner]@ln[...,None]).squeeze(-1)
+        gaps.append((hit-target).norm(dim=-1))
+        angles.append(torch.rad2deg(torch.acos((outward*normal).sum(-1).clamp(-1,1))))
+        points.append((hit,target.expand_as(hit)));valid=valid&ok
+    depth,mesh_valid=collision.audit(q,[row],frames);valid=valid&mesh_valid
+    gap=torch.stack(gaps).amax(0) if gaps else q.new_zeros(len(q))
+    angle=torch.stack(angles).amax(0) if angles else q.new_zeros(len(q))
+    # Anatomical bone directions; this is a diagnostic, not a policy objective.
+    edges=[(0,1+4*f) for f in range(5)]+[(1+4*f+k,2+4*f+k) for f in range(5) for k in range(3)]
+    edges=torch.tensor(edges,device=q.device);source=hand.tensor(row['joints_m'])
+    desired=torch.nn.functional.normalize(source[edges[:,1]]-source[edges[:,0]],dim=-1)
+    actual=torch.nn.functional.normalize(joints[:,edges[:,1]]-joints[:,edges[:,0]],dim=-1)
+    direction=torch.rad2deg(torch.acos((actual*desired).sum(-1).clamp(-1,1))).mean(-1)
+    return dict(contact_count=len(gaps),max_gap_m=gap,max_normal_deg=angle,
+        max_penetration_m=depth,bone_direction_deg=direction,points=points,
+        feasible=valid&(gap<=.0005)&(angle<=30)&(depth<=.005))
+
+
 class LiveAudit:
     def __init__(self,owner):
         self.owner=owner;self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='cart-audit')
@@ -51,12 +88,8 @@ class LiveAudit:
             root=np.asarray(frame['joints_m'])[geometry.adapter.indices[0]]
             contacts=transform_contacts(observed,geometry.adapter.transform,root)
             sample=dict(row,contacts=contacts)
-            collision=owner.cart_predictor.collision;collision.auditing=True
-            try:
-                _,_,quality=owner.objective.batch(owner.cart_predictor.hand.tensor(q)[None],[sample],
-                    owner.cart_predictor.hand.tensor(old_q)[None],audit=True)
-            finally:collision.auditing=False
-            quality=quality[0]
+            quality=physical_contact_audit(owner.cart_predictor.hand,owner.cart_predictor.collision,
+                owner.cart_predictor.hand.tensor(q)[None],sample)
             metrics=dict(required=quality['contact_count'],max_gap_mm=float(quality['max_gap_m'][0])*1000,
                 max_normal_deg=float(quality['max_normal_deg'][0]),bone_direction_deg=float(quality['bone_direction_deg'][0]),
                 max_penetration_mm=float(quality['max_penetration_m'][0])*1000)

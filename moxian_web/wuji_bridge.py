@@ -74,7 +74,7 @@ class WujiBridge(SkeletonBridge):
 
     def dispatch(self,hand):
         now=time.monotonic()
-        if now-self.last_dispatch<(1/120 if self.backend.startswith('slsqp') or self.backend in ('geort','cart','wuji-retargeting') else 1/30):return
+        if now-self.last_dispatch<1/120:return
         self.last_dispatch=now
         state=hand.snapshot(copy_state=False,include_audit=False,mesh_transport=True)
         if not state.get('ready'):return

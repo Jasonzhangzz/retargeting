@@ -5,17 +5,13 @@ point on a specified semantic pad. Exact triangle queries are restricted to
 supervision generation and independent audit. This approximates the geometry
 operator; it does not claim exact equality with the native CARD scalar.
 """
-from dataclasses import replace
 import torch
 from torch.nn import functional as F
-from .cart_card_cost import CardCostObjective,selected_surface
+from .cart_card_cost import CardSurfaceGeometry,selected_surface
 
-VERSION='card_raw_neural_surface_v2'
-
-class NeuralCardCostObjective(CardCostObjective):
+class NeuralCardCostObjective(CardSurfaceGeometry):
     def __init__(self,hand,collision):
         super().__init__(hand,collision)
-        self.settings=replace(self.settings,loss_kind=VERSION)
         collision.card_nearest_surface=True
         self.priors=[]
         for region,owner in enumerate(self.region_owners):
@@ -30,10 +26,8 @@ class NeuralCardCostObjective(CardCostObjective):
         return self.collision.contact(query,torch.zeros_like(query),self.region_owners[region],palmar=True)
 
     def collision_cost(self,q,rows,frames):
-        if hasattr(self.collision.model,'q_collision'):
-            from .cart_q_collision import collision_cost
-            return collision_cost(self,q,rows,frames)
-        return super().collision_cost(q,rows,frames)
+        from .cart_q_collision import collision_cost
+        return collision_cost(self,q,rows,frames)
 
     def projection_queries(self,frames,targets):
         p,r=frames[:2]
@@ -87,7 +81,7 @@ class NeuralCardCostObjective(CardCostObjective):
         parts=dict(style_bone=s.wb**2*(1-bone_dot).mul(free[:,:,None]).sum((-1,-2)),
             style_tip=s.wtip**2*((apex-c['tips'])*1000).square().sum(-1).mul(free).sum(-1),
             style_normal=s.wn**2*(1-(pad_normals*c['normals']).sum(-1).clamp(-1,1)).mul(free).sum(-1),
-            smooth_joint=s.wtheta**2*(q-references).square().sum(-1) if references is not None else q.new_zeros(size))
+            smooth_joint=s.wtheta**2*(q[...,:20]-references[...,:20]).square().sum(-1) if references is not None else q.new_zeros(size))
         selected,nn,local=self.contact_points(frames,c)
         old=None
         if references is not None and previous_rows and all(row is not None for row in previous_rows):
@@ -96,15 +90,30 @@ class NeuralCardCostObjective(CardCostObjective):
         for k in ('contact_position','contact_direction','contact_fix'):parts[k]=q.new_zeros(size)
         parts['link_continuity']=q.new_zeros(size)
         max_gap=q.new_zeros(size);max_angle=q.new_zeros(size);keep_cost=q.new_zeros(size);keep_counts=[0]*size
+        finger_gap=q.new_zeros(size);palm_gap=q.new_zeros(size);finger_angle=q.new_zeros(size)
+        finger_count=torch.zeros(size,device=q.device,dtype=torch.long)
+        palm_count=torch.zeros_like(finger_count)
+        fixed_palm_position=q.new_zeros(size);fixed_palm_direction=q.new_zeros(size)
         for region,((ids,pos),normal,material) in enumerate(zip(selected,nn,local)):
             if pos is None:continue
             rho=1+.5*c['force'][ids,region]/c['force'][ids].amax(-1).clamp_min(1.e-20)
             error=(pos-c['anchor_position'][ids,region]).square().sum(-1)
             dot=(normal*c['anchor_normal'][ids,region]).sum(-1).clamp(-1,1)
-            parts['contact_position']=parts['contact_position'].index_add(0,ids,rho.square()*s.wc**2*1.e6*error)
-            parts['contact_direction']=parts['contact_direction'].index_add(0,ids,rho.square()*s.wc**2*s.direction_price*s.radius_mm**2*(1-dot))
             max_gap=max_gap.index_copy(0,ids,torch.maximum(max_gap[ids],error.detach().sqrt()))
             max_angle=max_angle.index_copy(0,ids,torch.maximum(max_angle[ids],torch.rad2deg(torch.acos(dot.detach()))))
+            if region==0:
+                palm_gap=palm_gap.index_copy(0,ids,error.detach().sqrt())
+                palm_count=palm_count.index_add(0,ids,torch.ones_like(ids))
+                if getattr(self,'fixed_palm_diagnostic_only',False):
+                    fixed_palm_position=fixed_palm_position.index_add(0,ids,rho.square()*s.wc**2*1.e6*error.detach())
+                    fixed_palm_direction=fixed_palm_direction.index_add(0,ids,rho.square()*s.wc**2*s.direction_price*s.radius_mm**2*(1-dot.detach()))
+                    continue
+            else:
+                finger_gap=finger_gap.index_copy(0,ids,torch.maximum(finger_gap[ids],error.detach().sqrt()))
+                finger_angle=finger_angle.index_copy(0,ids,torch.maximum(finger_angle[ids],torch.rad2deg(torch.acos(dot.detach()))))
+                finger_count=finger_count.index_add(0,ids,torch.ones_like(ids))
+            parts['contact_position']=parts['contact_position'].index_add(0,ids,rho.square()*s.wc**2*1.e6*error)
+            parts['contact_direction']=parts['contact_direction'].index_add(0,ids,rho.square()*s.wc**2*s.direction_price*s.radius_mm**2*(1-dot))
             if old is not None and old[region] is not None:
                 # Dense correspondence through row indices; no detached earlier
                 # predicted state, so retention also preserves the BPTT path.
@@ -134,17 +143,22 @@ class NeuralCardCostObjective(CardCostObjective):
         parts['penetration_cap']=collision[3] if len(collision)==4 else self.settings.penetration_cap_weight**2*((depth-self.settings.penetration_limit_m)*1000).clamp_min(0).square()
         total=sum(parts.values())
         means={k:v.mean() for k,v in parts.items()}
+        means.update(fixed_palm_position_diagnostic=fixed_palm_position.mean(),fixed_palm_direction_diagnostic=fixed_palm_direction.mean())
         # Familiar chart aliases; sum the primary cost parts, not their aliases.
         means.update(direction=means['style_bone'],smooth=means['smooth_joint'],contact=means['contact_position'],
             normal=means['contact_direction'],penetration=means['collision_self']+means['collision_object'],contact_keep=means['contact_fix'])
         if acceleration is not None:means['acceleration']=acceleration.square().mean()  # monitor only
         if not collect_metrics:return total.mean(),means,[]
         valid=torch.ones(size,device=q.device,dtype=torch.bool)
-        if audit:depth,valid=self.collision.audit(q,rows,frames)
+        if audit:depth,valid=self.collision.audit(q[...,:20],rows,frames)
         feasible=valid&(depth<=self.settings.penetration_limit_m)&(max_gap<=self.settings.contact_limit_m)&(max_angle<=self.settings.normal_deg)
-        feasible=feasible&(q>=h.low-1.e-6).all(-1)&(q<=h.high+1.e-6).all(-1)&torch.isfinite(total)
+        feasible=feasible&(q[...,:20]>=h.low-1.e-6).all(-1)&(q[...,:20]<=h.high+1.e-6).all(-1)&torch.isfinite(total)
         dir_error=torch.rad2deg(torch.acos(bone_dot.detach())).mean((-1,-2))
         metrics=[dict(feasible=feasible[i:i+1],contact_count=int(c['mask'][i].sum()),max_gap_m=max_gap[i:i+1],
+            palm_gap_m=palm_gap[i:i+1],palm_contact_count=int(palm_count[i]),
+            finger_gap_m=finger_gap[i:i+1],finger_contact_count=int(finger_count[i]),
+            actuated_gap_m=finger_gap[i:i+1],actuated_contact_count=int(finger_count[i]),
+            actuated_contact_satisfied=((finger_gap[i:i+1]<=self.settings.contact_limit_m)&(finger_angle[i:i+1]<=self.settings.normal_deg)&(depth[i:i+1]<=self.settings.penetration_limit_m)&valid[i:i+1]),
             max_normal_deg=max_angle[i:i+1],max_penetration_m=depth[i:i+1],bone_direction_deg=dir_error[i:i+1],
             query_valid=valid[i:i+1],contact_query_valid=valid[i:i+1],unresolved_contact_count=q.new_zeros(1,dtype=torch.long),
             points=[],groups={},contact_keep_count=keep_counts[i],

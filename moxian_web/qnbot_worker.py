@@ -426,7 +426,7 @@ def main():
                 calibration_fingerprint=frame.get('calibration_fingerprint'),skeleton_runtime_revision=frame.get('skeleton_runtime_revision'),
                 source_joint_positions_rad=q[0].cpu().tolist(),
                 mesh_frame=dict(sequence=sequence,vertex_count=len(vertices),joint_count=len(joints)),mesh_f32_b64=base64.b64encode(payload).decode(),
-                tracking_source='wuji_sdk_native21' if runtime.wuji else frame['skeleton'].get('ik_solver',QP_REVISION) if runtime.model_hash else 'qnbot_native25_fixed_forward',model_hash=runtime.model_hash,model_implementation='Wuji native21 FK → Qnbot display LBS' if runtime.wuji else 'Qnbot SKN + bone-length-driven skin',calibrated=bool(profile and preview is None),preview=preview is not None,
+                model_name=(preview or profile or {}).get('model_name'),tracking_source='wuji_sdk_native21' if runtime.wuji else frame['skeleton'].get('ik_solver',QP_REVISION) if runtime.model_hash else 'qnbot_native25_fixed_forward',model_hash=runtime.model_hash,model_implementation='Wuji native21 FK → Qnbot display LBS' if runtime.wuji else 'Qnbot SKN + bone-length-driven skin',calibrated=bool(profile and preview is None),preview=preview is not None,
                 sensor_positions_m=pred[0].cpu().tolist(),tip_positions_m=j[0,model.tip_bodies].cpu().tolist(),root_rotation=np.eye(3).tolist(),
                 input_targets=dict(timestamp_ms=frame['timestamp_ms'],positions_local=(observations([frame],model.device)[0][0]@model.alignment()[0].T+model.alignment()[1]).cpu().tolist()),
                 sensor_mounting=dict(status='multi_pose_calibrated' if profile else 'multi_pose_candidate' if reference else 'position_prior',flat_reference_id=reference.fingerprint if reference else None),

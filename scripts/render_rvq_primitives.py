@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dataset', type=Path, default=ROOT/'data/datasets/dex_grasping_primitives_20261115')
-    parser.add_argument('--output', type=Path, default=ROOT/'moxian_web/rvq_primitives')
+    parser.add_argument('--output', type=Path, default=ROOT/'output/rvq_primitives')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     source = json.loads((args.dataset/'source-manifest.json').read_text())

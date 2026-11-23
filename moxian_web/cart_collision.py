@@ -1,11 +1,10 @@
 """Online mesh-supervised distance and directional contact fields with exact FK."""
 from contextlib import contextmanager
 import torch
-from torch import nn
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 import warp as wp
-from .cart_contact_field import ContactField,ContactTeacher
+from .cart_contact_field import ContactTeacher
 
 
 @wp.kernel(enable_backward=False)
@@ -21,29 +20,6 @@ def _distance(meshes: wp.array(dtype=wp.uint64), points: wp.array(dtype=wp.vec3)
         n=wp.mesh_eval_face_normal(meshes[links[i]],hit.face)
         if length>1.e-7:n=hit.sign*delta/length
         normals[i]=n;valid[i]=1
-
-
-class LinkSDF(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.links=nn.Embedding(21,16)
-        self.network=nn.Sequential(nn.Linear(19,128),nn.Softplus(beta=10),
-            nn.Linear(128,128),nn.Softplus(beta=10),nn.Linear(128,128),nn.Softplus(beta=10),nn.Linear(128,1))
-        self.contact_field=ContactField()
-
-    def forward(self,local_points,links):
-        return .05*self.network(torch.cat((local_points/.05,self.links(links.long())), -1)).squeeze(-1)
-
-    def contact(self,points,directions,links,palmar):
-        return self.contact_field(points,directions,palmar,self.links(links.long()))
-
-    def query(self,hand,q,points,links,frames=None):
-        """points[B,N,3], links[N] or [B,N]; gradients through points AND FK."""
-        frames=hand.frames(q) if frames is None else frames
-        p,r=frames[:2]; links=links.expand(len(q),-1)
-        batch=torch.arange(len(q),device=q.device)[:,None]
-        local=(r[batch,links].transpose(-1,-2)@(points-p[batch,links])[...,None]).squeeze(-1)
-        return self(local,links)
 
 
 @contextmanager
@@ -166,7 +142,8 @@ class MeshOracle:
 class CollisionModel:
     """Geometry loss adapter, replay collection, and independent true-mesh audit."""
     def __init__(self,hand,model=None):
-        self.hand=hand;self.model=model if model is not None else LinkSDF().to(hand.device)
+        from .cart_pretrained_sdf import fresh_geometry_spec,restore_geometry
+        self.hand=hand;self.model=model if model is not None else restore_geometry(hand,fresh_geometry_spec(hand))
         self.oracle=MeshOracle(hand);self.collected=[];self.contact_collected=[];self.collecting=False;self.auditing=False
         self.q_collected=[]
 
@@ -186,23 +163,6 @@ class CollisionModel:
             local=(r[:,target,None].transpose(-1,-2)@(points-p[:,target,None])[...,None]).squeeze(-1)
             escape=-(r[:,target,None].transpose(-1,-2)@normals[...,None]).squeeze(-1)
             yield source,target,points,normals,local,escape
-
-    def soft_pair(self,p,r,a,b,target,scale,angle_scale):
-        """All material candidates and both directions contribute through softmax."""
-        values=[]
-        for source,other,points,normals,local,escape in self.pair_queries(p,r,a,b):
-            hit,hn=self.contact(local,escape,other)
-            witness=(r[:,other,None]@hit[...,None]).squeeze(-1)+p[:,other,None]
-            outward=(r[:,other,None]@hn[...,None]).squeeze(-1)
-            distance=(points-witness).square().sum(-1)
-            angle=1+(normals*outward).sum(-1)
-            centre=(.5*(points+witness)-target[:,None]).square().sum(-1)
-            if source==a:values.append((distance,angle,points,witness,normals,outward,centre))
-            else:values.append((distance,angle,witness,points,outward,normals,centre))
-        distance,angle,pa,pb,na,nb,centre=[torch.cat(x,1) for x in zip(*values)]
-        weight=torch.softmax(-(distance/scale**2+angle/angle_scale),dim=-1)
-        def reduce(x):return (weight.reshape(weight.shape+(1,)*(x.ndim-2))*x).sum(1)
-        return tuple(reduce(x) for x in (distance,angle,pa,pb,na,nb))+(torch.ones(len(p),device=p.device,dtype=torch.bool),reduce(centre))
 
     def collect_contact(self,local,direction,links,palmar):
         n=local.numel()//3
@@ -271,106 +231,6 @@ class CollisionModel:
             for _,owner,_,_,local,direction in self.pair_queries(p[ids],r[ids],a,b):
                 links=torch.full(local.shape[:-1],owner,device=q.device,dtype=torch.long)
                 self.collect_contact(local,direction,links,torch.zeros_like(links,dtype=torch.bool))
-
-    def penalties(self,q,rows,frames):
-        local,links,valid=self.oracle.self_queries(frames)
-        tactile,tactile_links,counts=self.oracle.flat_tactile_queries(frames,rows)
-        self_size=local.numel()//3;counts=[n*21 for n in counts]
-        points=torch.cat((local.reshape(-1,3),tactile.reshape(-1,3)))
-        owners=torch.cat((links.flatten(),tactile_links.flatten()))
-        poses=None
-        if hasattr(self.model,'at_frames'):
-            poses=torch.cat((torch.arange(len(q),device=q.device).repeat_interleave(self_size//len(q)),
-                torch.arange(len(q),device=q.device).repeat_interleave(torch.as_tensor(counts,device=q.device))))
-        values=self.distance(points,owners,configuration=q,pose_ids=poses,frames=frames)
-        sdf=values[:self_size].reshape(links.shape)
-        if self.auditing:self_depth=torch.where(valid,(-sdf).clamp_min(0),0.).amax(-1)
-        else:
-            # The fixed mechanical exclusions are already absent from queries.
-            # Replace the moving collar cut and hard maximum by smooth weights.
-            a,b=self.oracle.query_sources,self.oracle.query_targets
-            source=self.oracle.surface_owners[a];tau=.00005
-            moving=((source==0)&(self.oracle.collar[b]>0))[None]
-            collar_weight=torch.sigmoid((torch.linalg.vector_norm(local,dim=-1)-self.oracle.collar[b][None])/.0001)
-            weight=torch.where(moving,collar_weight,1.)
-            reverse=((b==0)&(self.oracle.collar[source]>0))&(self.oracle.surface[a].norm(dim=-1)<=self.oracle.collar[source])
-            weight=torch.where(reverse[None],0.,weight)
-            depth=F.softplus(-sdf/tau)*tau*weight
-            logits=torch.where(reverse[None],-torch.inf,depth/tau)
-            attention=torch.softmax(logits,dim=-1)
-            self_depth=(attention*depth).sum(-1)
-        if not self.auditing:
-            flat=values[self_size:]
-            ids=torch.arange(len(rows),device=q.device).repeat_interleave(torch.as_tensor(counts,device=q.device))
-            depth=F.softplus(-flat/.00005)*.00005;logits=depth/.00005
-            maximum=q.new_full((len(rows),),-torch.inf).scatter_reduce(0,ids,logits.detach(),reduce='amax',include_self=True)
-            weight=torch.exp(logits-maximum[ids])
-            denominator=q.new_zeros(len(rows)).index_add(0,ids,weight)
-            numerator=q.new_zeros(len(rows)).index_add(0,ids,weight*depth)
-            return self_depth,numerator/denominator.clamp_min(1.e-20)
-        point_depth=[]
-        for d in values[self_size:].split(counts):
-            if not d.numel():point_depth.append(q.new_zeros(()))
-            elif self.auditing:point_depth.append((-d).clamp_min(0).amax())
-            else:
-                depth=F.softplus(-d/.00005)*.00005
-                point_depth.append((torch.softmax(depth/.00005,dim=0)*depth).sum())
-        return self_depth,torch.stack(point_depth)
-
-    def retention(self,q,rows,previous_rows,frames,scale=.001):
-        from .cart_contacts import link_owner
-        p,r=frames[:2];counts=[];clouds=[];sources=[];targets=[];batches=[];segments=[];terms=[]
-        segment_count=0
-        def entry(points,source,target,batch):
-            nonlocal segment_count
-            n=len(points);clouds.extend(points);sources.extend([source]*n);targets.extend([target]*n)
-            batches.extend([batch]*n);segments.extend([segment_count]*n)
-            segment_count+=1;return segment_count-1
-        def active(row):
-            return {link_owner(c['region']) for c in row['contacts']['object_contacts']} if row['contacts']['tactile_ready'] else set()
-        for i,(row,previous) in enumerate(zip(rows,previous_rows)):
-            row_terms=[]
-            continuous=previous is not None and 0<row['timestamp_ms']-previous['timestamp_ms']<=250 and row.get('stream_epoch')==previous.get('stream_epoch')
-            if continuous:
-                retained=active(row)&active(previous)
-                for owner in retained:
-                    # Current witnesses may slide or switch SID on the same link.
-                    contacts=[c for c in row['contacts']['object_contacts'] if link_owner(c['region'])==owner]
-                    points=[point for c in contacts for point in c.get('observed_points_m',[c['position_m']])]
-                    if points:row_terms.append([entry(points,-1,owner,i)])
-                old_pairs={tuple(sorted(c['regions'])) for c in previous['contacts']['self_pairs']}
-                for pair in row['contacts']['self_pairs']:
-                    if tuple(sorted(pair['regions'])) not in old_pairs:continue
-                    a,b=map(link_owner,pair['regions'])
-                    pair_segments=[]
-                    for source,target in ((a,b),(b,a)):
-                        material=self.oracle.surface_by_link_cpu[source]
-                        pair_segments.append(entry(material,source,target,i))
-                    row_terms.append(pair_segments)
-            counts.append(len(row_terms));terms.append(row_terms)
-        if not clouds:return q.new_zeros(len(q)),counts
-        point=q.new_tensor(clouds);source=torch.tensor(sources,device=q.device);target=torch.tensor(targets,device=q.device)
-        batch=torch.tensor(batches,device=q.device);segment=torch.tensor(segments,device=q.device)
-        world=(r[batch,source.clamp_min(0)]@point[...,None]).squeeze(-1)+p[batch,source.clamp_min(0)]
-        world=torch.where((source>=0)[:,None],world,point)
-        local=(r[batch,target].transpose(-1,-2)@(world-p[batch,target])[...,None]).squeeze(-1)
-        cost=(self.distance(local,target,configuration=q,pose_ids=batch,frames=frames)/scale).square()
-        minimum=q.new_full((segment_count,),torch.inf).scatter_reduce(0,segment,cost.detach(),reduce='amin',include_self=True)
-        weight=torch.exp(-(cost-minimum[segment]));reward=torch.exp(-.5*cost)
-        denominator=q.new_zeros(segment_count).index_add(0,segment,weight)
-        numerator=q.new_zeros(segment_count).index_add(0,segment,weight*reward)
-        rewards=numerator/denominator.clamp_min(1.e-20)
-        # First average the two directions of each retained link pair, then
-        # average semantic terms within each row. No per-row CUDA reductions.
-        segment_terms=[0]*segment_count;term_rows=[];term_sizes=[]
-        for row,row_terms in enumerate(terms):
-            for ids in row_terms:
-                term=len(term_rows);term_rows.append(row);term_sizes.append(len(ids))
-                for segment_id in ids:segment_terms[segment_id]=term
-        term_index=torch.as_tensor(segment_terms,device=q.device)
-        reward=q.new_zeros(len(term_rows)).index_add(0,term_index,rewards)/q.new_tensor(term_sizes)
-        values=q.new_zeros(len(q)).index_add(0,torch.as_tensor(term_rows,device=q.device),1-reward)
-        return values/q.new_tensor(counts).clamp_min(1),counts
 
     @torch.no_grad()
     def audit(self,q,rows,frames):

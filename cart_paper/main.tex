@@ -1,0 +1,31 @@
+\documentclass[letterpaper,journal]{IEEEtran}
+
+\usepackage{amsmath,amsfonts}
+\usepackage{graphicx}
+\usepackage{cite}
+
+\begin{document}
+
+\title{Contact-Aware Retargeting Network}
+\author{} % Add author names and affiliations when available.
+
+\maketitle
+
+\begin{abstract}
+We introduce the Contact-Aware Retargeting Network (CART), a neural method for transferring human manipulation from a tactile glove to a dexterous robot hand. Geometric retargeting can preserve finger motion while losing task-relevant contacts when human and robot hands differ in size, proportions, and kinematics. Some existing methods reconstruct the scene and then use reinforcement learning to train task-specific manipulation policies, a process that requires scene setup and policy tuning. CART extracts contact anchors from active tactile sensors for training and uses cross-attention to fuse tactile observations with five fingertip poses over a buffered ten-frame window. Conditioned on the current robot configuration, five finger-specific decoders predict joint increments from a shared representation. Differentiable contact and collision objectives guide training, and a forward pass predicts each update without iterative optimization. The same formulation targets both prehensile and nonprehensile manipulation.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Egocentric Data, Dexterous Manipulation, Motion Retargeting, Tactile Sensing.
+\end{IEEEkeywords}
+
+\input{introduction}
+\input{related}
+\input{method}
+\input{experiment}
+\input{conclusion}
+
+\bibliographystyle{IEEEtran}
+\bibliography{reference}
+
+\end{document}

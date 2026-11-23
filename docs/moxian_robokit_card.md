@@ -38,4 +38,49 @@
 
 `solver.consistency_scope='objective_and_cem_only'`；`search_center`、`previous_used_as_search_center`、`empty_elite_iterations`、`output_selection_scope='all_scored_candidates'` 和实际 `evaluations` 说明本帧求解过程。`backend_timing_ms` 是 `timing_ms.cem` 的子项，不应重复相加；首次构建／图捕获由 `cold_start` 标记。
 
+### 实时 CARD 延迟优化（2026-11-23）
+
+实时仍优化当前＋未来 3 个真实观测，保留 1024×16 CEM、关节平滑权重 30、跨窗口连续项与原有候选选择。接收端维护连续窗口，输入发送上限从 30 Hz 提高到 120 Hz（实际受源骨架输出频率限制），有界缓存重复解码的几何帧。`input_queue_ms` 和 `input_source_age_ms` 现在从窗口最新输入计时，真实未来帧等待单独由 `buffer_delay_ms` 表示。
+
+CEM 在 GPU 上检查候选有限性，只回传选中的 4 姿态轨迹，不再逐帧回传约 10 MB 候选轨迹并在 CPU 反复堆叠。评分、精英更新、全部已评分候选的最优选择和相同代价时的顺序保持不变。
+
+实时原生 mesh 穿透诊断约 2 Hz 在后台运行；每个结果带源时间戳和求解会话，过期或其他会话结果被丢弃。`collision.self_mesh` 在当前帧未验收时为 `null`，历史报告放在 `collision.mesh_audit`，网页明确标为异步历史诊断，且不使用旧报告给当前 link 着色。胶囊／物体软 cost 和输出候选的接触、材料点报告仍逐帧计算。离线 `TactileRetarget` 仍同步诊断；`FixedLagCardRetarget(mesh_audit_async=False)` 可显式请求同步诊断。
+
+固定同一录制的 6 个连续窗口，冻结 RTC 的墙钟延迟输入后，新旧 26 维输出、最优代价、全部 cost 分项、评价次数与 prefix 权重逐项完全一致。原生全身变换查询和后台选中 link 变换查询也逐项一致。现场抽样的中位数／P95 如下；动作和 GPU 负载会影响数值，不是固定耗时保证。
+
+| 指标 | 优化前 ms | 优化后 ms |
+|---|---:|---:|
+| 未来帧等待中位数 | 108 | 66 |
+| 整帧处理中位数 | 83 | 75 |
+| 整帧处理 P95 | 174 | 88 |
+| 后端结果源帧年龄中位数 | 316 | 249 |
+| 后端结果源帧年龄 P95 | 374 | 343 |
+
 录制片段通过 `scripts/retarget_moxian_wuji2.py --solver cem --input <recording.jsonl> --output <new.jsonl>` 离线重算；输出路径必须新建。
+
+### 源手 mesh 穿透接触
+
+CARD 原生 Robokit CEM 在当前及未来三帧分别复用 CART `SourceContacts` 的有符号 mesh 检测和深穿透方向回退见证。触觉未知或全零不屏蔽几何接触；不跨帧保留已释放的几何证据。同一源几何的检测结果至多缓存八帧。相邻连接排除沿用 CART 检测器。
+
+每对源接触按语义 link 映射到 Wuji2 双侧表面，以方向修正后的源见证中点查询最近面。新增 `contact_self_closure` 为双侧间隙平方乘 `wpinch²`，以及两侧到中点的距离平方乘 `wc²`，距离以 mm 计。零间隙是目标，不奖励负穿透。接触对的胶囊安全间隙由 6 mm 改为零，其负间隙穿透软惩罚仍保留。该项在 GPU CEM 每个候选、每个时刻计算，不触发历史实验 pinch seed 或硬拒绝。
+
+`solver.source_mesh_contacts` 按时间顺序列出每帧的区域对、目标、源穿透深度和见证修正方式。此功能增加精确源 mesh 查询，不能假定耗时不变；六窗口录制 smoke 预热后约 175–205 ms，仍需优化实时开销。
+
+### 当前网页：v9 单帧运动一致性＋mesh 接触
+
+网页 `cem` 现在使用 `SingleFrameCardRetarget`，算法标识 `card_wuji2_v9_single_frame_source_motion_mesh_contact`，不读未来帧、不等待轨迹窗口。恢复 2026-11-14 `98df8ec5` 的运动参考：`previous_CEM_q + current_IK_q - previous_IK_q`，权重 300；12.5% 候选围绕该参考局部采样，参考本身也重新评分。默认 1024×16 预算不变。当前有界关节域、软碰撞及有限候选选择保留，没有恢复旧版 mesh 硬验收。
+
+源 mesh 的方向修正接触证据及 `contact_self_closure` 保留；机器人原生 mesh 输出诊断仍异步。`solver.horizon=1`、`future_frames=0`、`buffer_delay_frames=0`；`source_motion_samples_per_round` 和 `joint_motion_reference_rad` 可核对防抖是否生效。首次帧没有历史参考，标定／断流会重置参考。单帧不等于 GPU 求解和传输零延迟。
+
+5 帧真实录制回放（1024×16）通过，预热后 84–108 ms/帧；第二帧起每轮 128 个运动参考候选，未知触觉的独立 mesh 接触及接触证据撤销测试通过。未宣称当前实戴动作已与历史主观平滑效果完全相同。
+
+### 单帧姿态纠偏
+
+当前算法标识为 `card_wuji2_v9_single_frame_pose_aligned_mesh_contact`。仅网页单帧 CARD 使用以下目标修正，CART 训练配置和其他求解器保持各自设置：
+
+- 指腹方向使用同段触觉材料面的平均物理法向，投影到末节骨轴的正交平面，避免曲面法向的轴向成分逼迫末节改变弯曲角；退化投影沿用原法向。
+- 骨轴权重 240、指腹法向权重 30，防止以骨轴错位换取法向代价下降。
+- 当前帧 IK 的腕部位置／朝向作为软参考；旋转代价为 `250² × (3 - trace(R_ref.T R))`，平移为 `5² × ||(t-t_ref)*1000||²`。单独记录 `style_wrist`。该项是当前观测约束，与相邻帧平滑分开。
+- v9 运动参考的历史修正以实际时间间隔、0.5 秒时间常数衰减，保留运动参考采样但不永久保存错误偏置。
+
+捕获的同一异常无接触输入，经 12 次固定姿态求解，小拇指末节骨轴误差由现场原输出 51.8° 降为 12.4°，腕部偏转约 15.5° 降为 1.4°；其他末节误差约 2.2/8.2/3.5/4.0°。这是固定样本验证，不代替所有抓握姿态验收。五帧含源 mesh 接触回放通过，闭合项在接触撤销后归零，仍无硬拒绝；单帧无需未来缓冲。

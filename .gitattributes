@@ -4,3 +4,7 @@
 # Keep pinned upstream sources byte-identical, including original whitespace.
 /retarget/baseline/geort/upstream/** -text -whitespace
 /retarget/baseline/wuji_retargeting/upstream/** -text -whitespace
+
+# Preserve upstream IEEE style files byte-for-byte.
+/cart_paper/IEEEtran.cls -text -whitespace
+/cart_paper/IEEEtran.bst -text -whitespace

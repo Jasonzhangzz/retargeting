@@ -32,7 +32,6 @@ from .checkpoints import CheckpointCatalog
 from .shared_capture import OfficialSensorRecorder
 from .recording import SnapshotRecorder
 from .wuji_bridge import WujiBridge
-from .contact_prediction_bridge import ContactPredictionBridge
 from qnbot_sdk.core import DataKeys, QnBotSDK
 from qnbot_sdk.core.config import CalibrationConfig, DeviceSpec, QnBotConfig, SerialConnection, Side
 from qnbot_sdk.glove import GloveModule
@@ -94,8 +93,6 @@ class Runtime:
             try:
                 self.wuji.cart_model_path=str(self.cart.model_folder(self.cart.selected));self.wuji.backend='cart'
             except (OSError,ValueError):pass
-        self.contact_prediction = ContactPredictionBridge(ROOT, OUTPUT)
-        self.contact_prediction.start()
         self.last_mano_send = 0.
         self.hand_inputs = HandInputSynchronizer()
         self.shared_recorder = None
@@ -123,7 +120,7 @@ class Runtime:
         self.geort_diagnostic_context=None
         from .wuji_sdf_service import CollisionComparisonService
         self.wuji_collision = CollisionComparisonService(self.wuji_collision_input, OUTPUT / 'wuji2_collision')
-        self.wuji_collision.configure(True)
+        self.wuji_collision.configure(False)
         self.thread = threading.Thread(target=self.run, name="moxian-sdk", daemon=True)
         self.thread.start()
 
@@ -190,8 +187,6 @@ class Runtime:
             result['hand_model'].update(geometry_version=top['geometry_version'],binding_version=top['binding_version'],status='geort_replay')
         if result["skeleton"].get("status")=="input_invalid":
             result["hand_model"].update(ready=False,status="input_invalid",error=result["skeleton"]["error"])
-        if hasattr(self,'contact_prediction'):
-            result['contact_prediction']=self.contact_prediction.snapshot(result['connected'] and result['hand_model'].get('ready',False))
         return result
 
     def command(self, name, data=None):
@@ -252,16 +247,16 @@ class Runtime:
 
     def apply_command(self, name, data=None):
         data = data or {}
+        if name == 'mano_fit' and data.get('method') not in ('moxian_wuji','wuji_native'):
+            raise ValueError('网页仅支持当前六动作标定；旧实验方法已移除')
+        if name == 'mano_restart' and data.get('surface_backend') not in (None,'qnbot'):
+            raise ValueError('网页仅使用当前 Qnbot 手部模型')
         if name == 'wuji2_collision_set':
             return self.wuji_collision.configure(data.get('enabled'))
         if name.startswith('cart_'):return self.cart_command(name,data)
         if name.startswith('geort_'):
             return self.geort_command(name,data)
-        if name == 'contact_prediction_reset':
-            return self.contact_prediction.reset_metrics()
-        elif name == 'contact_prediction_restart':
-            self.contact_prediction.stop();self.contact_prediction.start();return {'ok':True}
-        elif name == "connect":
+        if name == "connect":
             self.wanted = True
         elif name == "disconnect":
             self.wanted = False
@@ -711,7 +706,6 @@ class Runtime:
                                   'skeleton_official':self.official_ik.snapshot(copy_state=False),
                                   'hand_model':hand_state,'hand_model_topology':topology,'raw_6dof':ik_frame,
                                   'hand_model_input':hand_input,'wuji2':self.wuji.snapshot(copy_state=False),
-                                  'contact_prediction':self.contact_prediction.snapshot(copy_state=False),
                                   'wuji2_topology':wuji_topology})
 
     def run(self):
@@ -739,7 +733,6 @@ class Runtime:
                         from .web_state import needs_wuji
                         with self.lock:views=dict(self.view_demand)
                         if not (self.geort.replay_active or self.cart.replay_active) and needs_wuji(views,time.monotonic(),self.recorder.active):self.wuji.dispatch(self.hand)
-                        self.contact_prediction.dispatch(self.hand)
                         if time.monotonic() - (self.last_frame or connected_at) > 3:
                             raise ValueError("数据流中断，正在重新连接")
                 except Exception as exc:
@@ -753,7 +746,6 @@ class Runtime:
         finally:
             self.stop_recording(wait=True)
             self.disconnect()
-            self.contact_prediction.stop()
             self.wuji_collision.close()
             self.geort.close()
             self.cart.close()
@@ -912,13 +904,12 @@ def handler(runtime):
                              "/gestures/together.png": "gestures/together.png",
                              "/gestures/spread.png": "gestures/spread.png",
                              "/gestures/knuckle-and-fist.png": "gestures/knuckle-and-fist.png"}.get(route, "__missing__")
-            extra = {"/geort-workspace-fk.js":"geort-workspace-fk.js","/geort-workspace-pose.js":"geort-workspace-pose.js","/cart-preview.js":"cart-preview.js","/geort-coverage.js":"geort-coverage.js","/geort.js":"geort.js","/cart.js":"cart.js","/cart-overlay.js":"cart-overlay.js","/training-view.js":"training-view.js","/contact-prediction-view.js":"contact-prediction-view.js","/wuji-view.js":"wuji-view.js","/mano-view.js": "mano-view.js", "/taxel-view.js": "taxel-view.js", "/checkpoint-view.js":"checkpoint-view.js", "/curved-surface.js": "curved-surface.js", "/vendor/three.module.min.js": "vendor/three.module.min.js",
+            extra = {"/geort-workspace-fk.js":"geort-workspace-fk.js","/geort-workspace-pose.js":"geort-workspace-pose.js","/cart-preview.js":"cart-preview.js","/geort-coverage.js":"geort-coverage.js","/geort.js":"geort.js","/cart.js":"cart.js","/cart-overlay.js":"cart-overlay.js","/training-view.js":"training-view.js","/wuji-view.js":"wuji-view.js","/mano-view.js": "mano-view.js", "/taxel-view.js": "taxel-view.js", "/checkpoint-view.js":"checkpoint-view.js", "/curved-surface.js": "curved-surface.js", "/vendor/three.module.min.js": "vendor/three.module.min.js",
                      "/vendor/OrbitControls.js": "vendor/OrbitControls.js"}
             if route in extra:
                 file = STATIC / extra[route]
             guides={f'/wuji-calibration-guides/{stage}-{side}.png':STATIC/'gestures/wuji_native'/f'{stage}-{side}.png' for stage in ('pinch_index','pinch_middle','pinch_ring','pinch_pinky','four_finger_bend_90','flat_open') for side in ('left','right')}
             if route in guides:file=guides[route]
-            if route == '/contact-prediction.css':file=STATIC/'contact-prediction.css'
             if route == '/calibration-contact-targets.json':file=STATIC/'calibration-contact-targets.json'
             if route == '/cart-ik-view.js':file=STATIC/'cart-ik-view.js'
             if route == '/wuji-collision.js':file=STATIC/'wuji-collision.js'

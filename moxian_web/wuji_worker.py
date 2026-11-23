@@ -9,14 +9,14 @@ import sys
 import threading
 import traceback
 import time
+from collections import OrderedDict
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import torch
 from moxian_web.wuji_backends import create_retarget, SOLVERS, SLSQP_PROFILES, DEFAULT_SOLVER
 from retarget.baseline.card.geometry import TrackedMesh
 from moxian_web.wuji_transport import pack_result_geometry, decode_source_frame
-from moxian_web.wuji_rvq import WujiRVQ
-from moxian_web.wuji_window import SourceFrameWindow,FUTURE,HORIZON
+from moxian_web.wuji_window import SourceFrameWindow,FUTURE,HORIZON,identity
 
 
 def main():
@@ -35,6 +35,13 @@ def main():
         with emit_lock:stream.write(json.dumps(m,allow_nan=False,separators=(',',':'))+'\n');stream.flush()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set())
     frames=queue.Queue(maxsize=1);controls=queue.Queue(maxsize=32);recent=SourceFrameWindow();cart_recent=SourceFrameWindow(horizon=11)
+    decoded_sources=OrderedDict()
+    def decode_received(frame):
+        key=identity(frame)+(frame['timestamp_ms'],)
+        if key not in decoded_sources:
+            decoded_sources[key]=decode_source_frame(frame)
+            while len(decoded_sources)>16:decoded_sources.popitem(last=False)
+        return decoded_sources[key]
     def reader():
         heartbeat=0.;previous_received=None;previous_stamp=None;epoch=0
         try:
@@ -56,7 +63,6 @@ def main():
                 else:controls.put(m)
         finally:stop.set()
     threading.Thread(target=reader,daemon=True).start();torch.set_num_threads(1)
-    rvq=WujiRVQ()
     backend=args.solver;device='cuda:0' if torch.cuda.is_available() else 'cpu'
     model_paths={'geort':args.geort_model or None,'cart':args.cart_model or None}
     model_path=model_paths.get(backend);replay=None;solver=None;topology=None;rebuild=False;version=None;object_sdf=None;last_output_wall_ms=None
@@ -117,7 +123,7 @@ def main():
                 extra={'realtime':True} if backend in SLSQP_PROFILES or backend=='cem' else {'model_path':model_path} if backend in ('geort','cart') else {}
                 solver_device='cpu' if backend=='wuji-retargeting' else device
                 solver=create_retarget(backend,topology,args.home/'mappings',solver_device,rebuild=rebuild,object_sdf=object_sdf,**extra);rebuild=False
-                model={**solver.topology(),'solver_backend':backend,'rvq':rvq.metadata()}
+                model={**solver.topology(),'solver_backend':backend}
                 emit({'type':'topology','model':model})
                 emit({'type':'state','status':'initializing','ready':False,'mapping_ready':solver.mapping['ready'],
                       'failed_sids':solver.mapping['failed_sids'],'requested_solver_backend':backend,
@@ -154,14 +160,18 @@ def main():
                 frame=dict(window[0],cart_future_frames=window[1:],cart_received_window=True,
                     cart_latest_timestamp_ms=window[-1]['timestamp_ms'],
                     cart_latest_received_wall_ms=window[-1]['input_received_wall_ms'])
-            else:frame=decode_source_frame(frame)
-            if backend=='cem':
+            elif backend!='cem' or replay or not getattr(solver,'requires_future',True):frame=decode_source_frame(frame)
+            if backend=='cem' and getattr(solver,'requires_future',True):
                 if replay:
                     frame=dict(frame,card_future_frames=[decode_source_frame(f) for f in replay.future_frames(frame,FUTURE)])
                 else:
-                    window=[decode_source_frame(f) for f in recent.snapshot()]
+                    received=recent.snapshot()
+                    if received and (received[0].get('geometry_version'),received[0].get('binding_version'),received[0].get('model_hash'))!=version:continue
+                    window=[decode_received(f) for f in received]
                     if len(window)==HORIZON:
-                        frame=dict(window[0],card_future_frames=window[1:])
+                        frame=dict(window[0],card_future_frames=window[1:],
+                            window_latest_timestamp_ms=window[-1]['timestamp_ms'],
+                            window_latest_received_wall_ms=window[-1]['input_received_wall_ms'])
                         if (solver.last_seen_timestamp is not None and frame['timestamp_ms']<=solver.last_seen_timestamp
                                 and frame.get('input_stream_epoch')==solver.previous_input_stream_epoch):continue
                     else:frame=dict(frame,card_future_frames=[])
@@ -172,11 +182,8 @@ def main():
                 emit({'type':'state',**result,'solver_backend':backend,
                       'playback':replay.snapshot() if replay else {'active':False}})
                 continue
-            annotation=rvq.infer(result,model)
-            result['rvq']=annotation
-            result['quality']['rvq_inference_ms']=annotation.get('inference_ms')
-            result['quality'].update(input_queue_ms=processing_started-frame.get('cart_latest_received_wall_ms',frame['input_received_wall_ms']),
-                input_source_age_ms=processing_started-frame.get('cart_latest_timestamp_ms',frame['timestamp_ms']))
+            result['quality'].update(input_queue_ms=processing_started-frame.get('window_latest_received_wall_ms',frame.get('cart_latest_received_wall_ms',frame['input_received_wall_ms'])),
+                input_source_age_ms=processing_started-frame.get('window_latest_timestamp_ms',frame.get('cart_latest_timestamp_ms',frame['timestamp_ms'])))
             published=time.time()*1000
             if backend=='cem':
                 result['inference_delay_ms']=published-result['live_source_timestamp_ms']

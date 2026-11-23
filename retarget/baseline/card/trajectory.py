@@ -276,7 +276,12 @@ class TrajectoryCEM(RobokitCardSolver):
         task=self.window_task;task.counter.zero_();task.archive_width.zero_();task.archive_cost.fill_(wp.inf)
         wp.synchronize_device(device);prepared=time.perf_counter()
         self.solver.solve(self.var);wp.synchronize_device(device);sampled=time.perf_counter()
-        widths=task.archive_width.numpy();costs=task.archive_cost.numpy();xs=task.archive_x.numpy()
+        widths=task.archive_width.numpy();costs=task.archive_cost.numpy()
+        archive_size=len(costs)
+        # Validate on GPU and read back only the chosen 4-pose trajectory.
+        # The complete archive is ~10 MB and used to be copied/stacked for
+        # every frame, although candidate selection only needs its scores.
+        finite_x=torch.isfinite(wp.to_torch(task.archive_x)).all(-1).cpu().numpy()
         depth=task.flat_task.buffers[s.population*h][2].numpy().reshape(s.population,h,2)
         exceedances=dict(palm_capsule=int((depth[:,:,1]<s.margin_mm).any(1).sum()),
             object_penetration=int((depth[:,:,0]>s.hard_penetration_mm).any(1).sum()),
@@ -291,10 +296,11 @@ class TrajectoryCEM(RobokitCardSolver):
             wp.copy(variable.get(VarKey.ROBOT).x,wp.array(value.reshape(1,-1),dtype=float,device=device))
             task.precompute(variable);out=wp.zeros(1,dtype=float,device=device)
             task.compute_weighted_cost(variable,out_cost=out);cost=float(out.numpy()[0]);seed_costs.append(cost)
-            ids=np.r_[ids,len(costs)];xs=np.vstack((xs,value.reshape(1,-1)));costs=np.r_[costs,cost]
-        finite=ids[np.isfinite(costs[ids])&np.isfinite(xs[ids]).all(1)];feasible=bool(len(finite))
+            ids=np.r_[ids,len(costs)];finite_x=np.r_[finite_x,np.isfinite(value).all()];costs=np.r_[costs,cost]
+        finite=ids[np.isfinite(costs[ids])&finite_x[ids]];feasible=bool(len(finite))
         chosen=int(finite[np.argmin(costs[finite])]) if feasible else None
-        value=xs[chosen].reshape(h,26) if feasible else project(current)
+        value=(wp.to_torch(task.archive_x)[chosen].cpu().numpy().reshape(h,26).copy()
+            if feasible and chosen<archive_size else seeds[chosen-archive_size].copy() if feasible else project(current))
         if feasible:self.warm_values=value.copy();self.warm_stamps=stamps.copy()
         first=value[0];best=(o.tensor(first[:3]),o.tensor(Rotation.from_rotvec(first[3:6]).as_matrix()),o.tensor(first[6:]))
         elapsed=(time.perf_counter()-began)*1000
@@ -325,11 +331,19 @@ class TrajectoryCEM(RobokitCardSolver):
 
 
 class FixedLagCardRetarget(TactileRetarget):
-    def __init__(self,*args,realtime=True,settings=None,**kwargs):
+    def __init__(self,*args,realtime=True,settings=None,mesh_audit_async=None,**kwargs):
         self.window=[];self.engine=None;self.live_frame=None
+        self.mesh_audit_async=bool(realtime if mesh_audit_async is None else mesh_audit_async)
+        self.mesh_audit=None
         # Only the live window changes; offline CARD/CART defaults stay intact.
         settings=settings or replace(CardSettings(),wtheta=LIVE_JOINT_SMOOTH_WEIGHT)
         super().__init__(*args,settings=settings,**kwargs)
+        if self.mesh_audit_async:
+            from .diagnostics import MeshAudit
+            self.mesh_audit=MeshAudit(self.mesh_collision,self.device)
+
+    def close(self):
+        if self.mesh_audit is not None:self.mesh_audit.close()
 
     def topology(self):
         model=super().topology()
@@ -339,7 +353,8 @@ class FixedLagCardRetarget(TactileRetarget):
             joint_smooth_weight=self.settings.wtheta,joint_smooth_coefficient=self.settings.wtheta**2,
             boundary_joint_multiplier=BOUNDARY_JOINT_MULTIPLIER,boundary_joint_averaged_over_horizon=False,
             warm_start_policy='same_timestamp_overlap_only',chunk_continuity='rtc_inspired_cem_soft_prefix',
-            prefix_schedule='rtc_exp',inference_delay_source='previous_worker_step_wall_time',post_filter=False))
+            prefix_schedule='rtc_exp',inference_delay_source='previous_worker_step_wall_time',post_filter=False,
+            mesh_diagnostics='async_2hz' if self.mesh_audit_async else 'same_frame',input_window_source='receiver'))
         model['topology_version']=hashlib.sha256(json.dumps([model['topology_version'],ALGORITHM,model['trajectory']],sort_keys=True).encode()).hexdigest()[:24]
         return model
 
@@ -370,6 +385,8 @@ class FixedLagCardRetarget(TactileRetarget):
         finally:
             for k,value in saved.items():setattr(self.initializer,k,value)
         best,diagnostic=self.engine.solve(initials,contexts,np.asarray([f['timestamp_ms'] for f in self.window]))
+        diagnostic['source_mesh_contacts']=[c.get('mesh_contacts',[]) for c in contexts]
+        diagnostic['mesh_contact_policy']='CART_directional_witness_zero_gap_soft_closure'
         diagnostic['state_reference_q_rad']=context['previous'][2].cpu().tolist() if context['previous'] is not None else None
         self.robokit_cem=self.engine
         return best,diagnostic,True,cold
@@ -387,6 +404,10 @@ class FixedLagCardRetarget(TactileRetarget):
                 identity(window[0])[0]!=self.previous_input_stream_epoch):self.reset()
         self.window=window;self.live_frame=window[-1];self.contact_enabled=contact_enabled
         result=super().step(frame,contact_enabled)
+        if self.mesh_audit is not None:
+            audit=self.mesh_audit.snapshot(self.session_id)
+            self.mesh_audit.submit(result['link_positions_m'],result['link_rotations'],frame['timestamp_ms'],self.session_id)
+            result['collision'].update(mesh_audit=audit,mesh_audit_error=self.mesh_audit.error,mesh_audit_async=True)
         if self.engine is not None:
             self.engine.inference_delay_ms=float(result.get('quality',{}).get('processing_ms',0.))
         result.update(algorithm=ALGORITHM,baseline_commit=BASELINE,postprocessing='main_card_window_no_output_filter',

@@ -116,27 +116,8 @@ W&B记录训练总损失、重建MSE、分类交叉熵、commitment、学习率�
 
 `wandb_run.json`保存run链接与ID，`wandb_sync_status.json`记录同步进度。重复启动会恢复同一个run；目录锁防止同时出现两个写入进程。W&B连接不进入GPU训练进程，认证或同步问题不改变训练与检查点。
 
-## 接入 Moxian Glove 网页
+## 网页集成状态
 
-训练后的联合权重已下载到本地 `data/models/wuji2_rvq_joint_v1/`：`joint.pt`为完整encoder、RVQ及双头decoder，`decoder.pt`为独立双头解码包；`download.json`记录远端来源与逐文件SHA256。
-
-按原方式启动 Moxian 网页并应用个人六动作标定，选择 **Moxian／Wuji2 对照**。先通过当前选定的重定向后端得到Wuji2原生20维关节角，再进行RVQ推理。该模型不直接接收Moxian的25＋4维原生角或EMF信号。
-
-新增“RVQ · 手势识别与重建”面板显示类别、模型概率、Top-3、四个token及相对同帧重定向输入的关节重建均差。右侧灰色机器人保留原重定向结果，蓝色线框显示RVQ重建；可取消“叠加重建手型”。重建的同帧手腕变换来自实际机器人根link，保留现有左右手镜像约定。
-
-推理默认在Wuji2独立worker中使用CPU，模型只读、EMA不更新；它不替换重定向结果，也不发送机器人或手套控制命令。缺少权重、关节名称/范围不匹配或输入无效时，RVQ单独报告错误，原重定向仍可使用。新增结果位于 `/api/state?view=wuji2` 的 `wuji2.rvq`，含概率、token、重建关节角与link变换；模型来源和类别列表位于 `/api/wuji2/model` 的 `rvq`。
-
-环境变量（在启动网页前设置）：
-
-```bash
-# 可指定另一个联合模型；目录默认读取其中的joint.pt。
-MOXIAN_RVQ_MODEL=/absolute/path/to/joint.pt bash scripts/start_moxian_web.sh
-# 关闭附加推理：
-MOXIAN_RVQ_ENABLED=0 bash scripts/start_moxian_web.sh
-```
-
-权重更新后可点击“重启求解”；不需要重新标定。GeoRT或CART若提示设备/标定身份不匹配，需要选择兼容模型或其他可用重定向后端，RVQ不能绕过上游标定校验。
-
-原版 `wuji-retargeting` 的右手 URDF 使用自身 FK 绘制重建，其他原生 Wuji2 后端使用 MuJoCo FK。原版左手 URDF 的角度约定尚未映射到该右手训练模型，使用该组合时 RVQ 会单独报错；已输出标准右手 Wuji2 角度的镜像后端不受此限制。
-
-对照画面右上角的小窗显示当前预测的 grasp type、概率及其 **primitive 静态示意图**。31类插图取自原始MANO primitive（选择有效样本中 `size_scale` 最接近1的固定行），类别不变时图片不变，不受实时关节姿态影响。它与蓝色RVQ重建叠加是两个独立视图。插图和来源指纹在 `moxian_web/rvq_primitives/`；可用 `.venv-contact/bin/python scripts/render_rvq_primitives.py` 重新生成，目录通过模型拓扑一次加载，不随每帧重复传输。
+Moxian Web 已移除 RVQ/grasp type 分类、蓝色重建及 primitive 小窗。
+本文前述独立训练、编码与解码工具保留，不再由网页 worker 加载。
+`scripts/render_rvq_primitives.py` 的默认输出为 `output/rvq_primitives/`，不会将插图重新写入网页目录。

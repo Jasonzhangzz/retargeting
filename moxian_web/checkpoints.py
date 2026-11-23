@@ -5,7 +5,7 @@ import json
 import time
 from pathlib import Path
 
-LABELS={'moxian_wuji':'Moxian六动作骨长与EMF外参','wuji_native':'Wuji原生六动作标定','bone_extrinsics':'Moxian 17动作标定（历史）','parameters':'xMimic 思路版（历史）','flashsac':'FlashSAC buffer 版（历史）','delta':'MANO＋Delta 联合训练（历史）','least_squares':'分阶段最小二乘标定（历史）'}
+LABELS={'moxian_wuji':'Moxian六动作骨长与EMF外参','wuji_native':'Wuji原生六动作标定（诊断）'}
 
 def preview_revision_compatible(candidate):
     if candidate.get('surface_backend')=='qnbot':

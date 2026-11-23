@@ -43,7 +43,7 @@ def main():
         p=sub.add_parser(name);p.add_argument('--datasets',nargs='+',required=True);p.add_argument('--job-id')
         if name=='train':
             p.add_argument('--epochs',type=int,default=200);p.add_argument('--smoke-test',action='store_true')
-            p.add_argument('--architecture',choices=('attention','fsq'),default='attention')
+            p.add_argument('--architecture',choices=('attention',),default='attention')
             p.add_argument('--batch-size',type=int,default=0,help='Simultaneous windows per optimizer step; 0 selects from free memory')
             p.add_argument('--micro-batch-size',type=int,default=0,help='Deprecated alias for a simultaneous-window cap; never gradient accumulation')
             p.add_argument('--attention-precision',choices=('auto','float32','bfloat16'),default='auto',help='Only CUDA attention uses BF16; geometry and output stay FP32')
@@ -59,14 +59,15 @@ def main():
             p.add_argument('--initialize-contact-from',type=Path,help='Load only independently pretrained contact-head weights; keep policy and optimizer fresh')
             p.add_argument('--initialize-q-collision-from',type=Path,help='Import a mesh/Jacobian-supervised q-only self collision field')
             p.add_argument('--fresh-policy-optimizer',action='store_true',help='Transfer policy weights with a fresh optimizer in a new run')
-            p.add_argument('--policy-loss-scale',type=float,default=0.,help='CARD C/(C+scale) on the full batch mean; 0 keeps raw cost')
-            p.add_argument('--optimizer',choices=('adamw','muon_sgd'),default='adamw',help='Policy and geometry optimizers; Muon matrices plus momentum SGD for vectors/embeddings')
+            p.add_argument('--policy-loss-scale',type=float,default=1.e8,help='CARD C/(C+scale) on the full batch mean; 0 keeps raw cost')
+            p.add_argument('--optimizer',choices=('adamw','muon_sgd'),default='muon_sgd',help='Policy and geometry optimizers; Muon matrices plus momentum SGD for vectors/embeddings')
             p.add_argument('--wandb-project');p.add_argument('--wandb-entity')
             p.add_argument('--wandb-base-url',help='Self-hosted W&B origin, without /home')
             p.add_argument('--wandb-mode',choices=('online','offline'),default='online')
             p.add_argument('--initial-noise-rad',type=float,default=.1,help='Uniform IK reset noise in [-amplitude, amplitude]; 0 disables')
-            p.add_argument('--policy-objective',choices=('multiscale_exp_card_v1','card_raw_neural_collision_v1','card_raw_neural_surface_v2','card_raw_neural_self_contact_v3'),
-                default='multiscale_exp_card_v1',help='Policy energy; CARD uses exact native pad contacts and Neural SDF collision')
+            from .cart_protocol import OBJECTIVES,WRIST_OBJECTIVE
+            p.add_argument('--policy-objective',choices=OBJECTIVES,default=WRIST_OBJECTIVE,
+                help='v9 fixed wrist or floating wrist; both use measured future EMF and neural geometry')
         if name=='evaluate':p.add_argument('--model',required=True)
     cap=sub.add_parser('capture');cap.add_argument('--dataset',required=True);cap.add_argument('--follow',action='store_true');cap.add_argument('--device')
     imp=sub.add_parser('import-emf');imp.add_argument('--dataset',required=True);imp.add_argument('--raw',type=Path,required=True)

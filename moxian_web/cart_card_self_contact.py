@@ -5,15 +5,8 @@ from .cart_card_neural_surface import NeuralCardCostObjective
 from .cart_contacts import link_owner
 from .cart_q_collision import GROUPS
 
-VERSION='card_raw_neural_self_contact_v3'
-
 
 class SelfContactCardCostObjective(NeuralCardCostObjective):
-    def __init__(self,hand,collision):
-        super().__init__(hand,collision)
-        from dataclasses import replace
-        self.settings=replace(self.settings,loss_kind=VERSION)
-
     def contact_collision_groups(self,rows):
         mask=torch.zeros((len(rows),len(GROUPS)),device=self.hand.device,dtype=torch.bool)
         for i,row in enumerate(rows):
@@ -76,5 +69,23 @@ class SelfContactCardCostObjective(NeuralCardCostObjective):
             metric['self_contact_count']=int(counts[i])
             metric['self_contact_gap_m']=gaps[i:i+1]
             metric['self_contact_satisfied']=(gaps[i:i+1]<=self.settings.contact_limit_m)&(angles[i:i+1]<=self.settings.normal_deg)&(metric['max_penetration_m']<=self.settings.penetration_limit_m)
+            if 'actuated_gap_m' in metric:
+                metric['actuated_gap_m']=torch.maximum(metric['actuated_gap_m'],gaps[i:i+1])
+                metric['actuated_contact_count']+=int(counts[i])
+                metric['actuated_contact_satisfied']=metric['actuated_contact_satisfied']&metric['self_contact_satisfied']
             metric['feasible']=metric['feasible']&(gaps[i:i+1]<=self.settings.contact_limit_m)&(angles[i:i+1]<=self.settings.normal_deg)
         return total+closure.mean()+normal_cost.mean(),parts,metrics
+
+
+class ActuatedSelfContactCardCostObjective(SelfContactCardCostObjective):
+    """Fixed palm is observable but cannot be controlled by the 20 finger DOFs.
+
+    Preserve raw physical audit/acceptance, including palm errors. Only remove
+    terms with identically zero policy-input Jacobian from the policy objective.
+    Moving fingers touching the palm remain subject to contact/collision losses.
+    """
+    def __init__(self,hand,collision):
+        super().__init__(hand,collision)
+        from dataclasses import replace
+        self.fixed_palm_diagnostic_only=True
+        self.settings=replace(self.settings,loss_kind='card_raw_neural_self_contact_v4_actuated')

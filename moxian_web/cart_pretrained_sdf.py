@@ -62,7 +62,9 @@ def load_pretrained(hand,path):
         source_name=path.name,source_fingerprint=saved.get('fingerprint'),source_epoch=saved.get('epoch'),
         fine_tune_lr=1.e-5,
         query='actual_rollout_q_native_wrist_points',online_supervision='mesh_local_replay_random_configuration_augmentation')
-    model=PretrainedSDF(hand,spec)
+    from .cart_q_collision import field_spec
+    spec['q_collision']=field_spec(hand)
+    model=restore_geometry(hand,spec)
     model.pretrained.load_state_dict(saved['model'],strict=True)
     for name,want in (('lower',hand.low),('upper',hand.high),('joint_mask',hand.tensor(expected['joint_mask']))):
         if not torch.equal(getattr(model.pretrained,name),want):raise ValueError('Pretrained SDF buffers disagree with its geometry metadata')
@@ -116,12 +118,20 @@ class PretrainedSDF(nn.Module):
         return self.pretrained(q[:,None],native,links.expand(points.shape[:-1]))
 
 
+def fresh_geometry_spec(hand):
+    from .cart_q_collision import field_spec
+    geometry=geometry_spec(hand)
+    return dict(kind=KIND,geometry=geometry,
+        model_config=dict(lower=hand.domain['lower'],upper=hand.domain['upper'],
+            joint_mask=geometry['joint_mask'],width=256,depth=4,embedding=16),
+        fine_tune_lr=1.e-5,q_collision=field_spec(hand),
+        query='actual_rollout_q_native_wrist_points',online_supervision='mesh_local_replay_random_configuration_augmentation')
+
+
 def restore_geometry(hand,spec):
-    if spec.get('kind','link_sdf_v1')=='link_sdf_v1':
-        from .cart_collision import LinkSDF
-        model=LinkSDF().to(hand.device)
-    else:model=PretrainedSDF(hand,spec)
-    if spec.get('q_collision'):
-        from .cart_q_collision import QCollisionField
-        model.q_collision=QCollisionField(hand,spec['q_collision'])
+    if spec.get('kind')!=KIND or not spec.get('q_collision'):
+        raise ValueError('CART v9/wrist requires an articulated SDF and q-only self-collision field')
+    model=PretrainedSDF(hand,spec)
+    from .cart_q_collision import QCollisionField
+    model.q_collision=QCollisionField(hand,spec['q_collision'])
     return model

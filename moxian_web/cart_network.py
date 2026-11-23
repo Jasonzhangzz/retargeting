@@ -1,35 +1,8 @@
 """Ten-frame measured EMF policies with five independent finger decoders."""
-import math
 import numpy as np
 import torch
 from torch import nn
 from torch.utils.checkpoint import checkpoint
-
-LEVELS = (8, 8, 8, 8, 5, 5, 5, 5)
-
-
-class FiniteScalarQuantizer(nn.Module):
-    """FSQ bounded scalar grids, including the offset of even-sized grids."""
-    def __init__(self, levels=LEVELS):
-        super().__init__()
-        if not levels or any(type(n) is not int or n < 2 for n in levels):
-            raise ValueError('FSQ levels must be integers >= 2')
-        self.register_buffer('levels', torch.tensor(levels, dtype=torch.long))
-        self.register_buffer('radix', torch.tensor([math.prod(levels[:i]) for i in range(len(levels))]))
-
-    def forward(self, z):
-        half = (self.levels.to(z) - 1) * 1.001 / 2
-        offset = (self.levels % 2 == 0).to(z) * .5
-        bounded = (z + torch.atanh(offset / half)).tanh() * half - offset
-        rounded = bounded.round()
-        codes = (bounded + (rounded - bounded).detach()) / (self.levels // 2).to(z)
-        indices = ((rounded.long() + self.levels // 2) * self.radix).sum(-1)
-        return codes, indices
-
-    def decode_indices(self, indices):
-        digits = (indices[..., None] // self.radix) % self.levels
-        return (digits - self.levels // 2).float() / (self.levels // 2)
-
 
 class CrossBlock(nn.Module):
     def __init__(self):
@@ -85,11 +58,11 @@ class CartNetwork(JointDeltaPolicy):
     No future IK, skeleton or IK reference correction enters the policy graph.
     Each EMF receiver supplies position in metres and two rotation columns.
     """
-    def __init__(self, lower, upper, architecture='attention', levels=LEVELS,
+    def __init__(self, lower, upper, architecture='attention',
                  position_mean=None, position_scale=None):
         super().__init__()
-        if architecture not in ('attention', 'fsq'):
-            raise ValueError('architecture must be attention or fsq')
+        if architecture!='attention':
+            raise ValueError('CART requires the measured-EMF attention architecture')
         low, high = torch.as_tensor(lower).float(), torch.as_tensor(upper).float()
         if low.shape != (20,) or high.shape != (20,) or not torch.isfinite(torch.stack((low, high))).all() or (low >= high).any():
             raise ValueError('CART requires finite 20-joint output bounds')
@@ -99,24 +72,23 @@ class CartNetwork(JointDeltaPolicy):
         if self.position_mean.shape != (3,) or self.position_scale.shape != (3,) or not torch.isfinite(self.position_mean).all() or not torch.isfinite(self.position_scale).all() or (self.position_scale <= 0).any():
             raise ValueError('Invalid position normalization')
         self.architecture=architecture;self.checkpoint_observations=False
-        if architecture=='fsq':
-            # Current q:20; ten poses:10*5*9; masks:10*5; timestamps:10.
-            self.encoder=nn.Sequential(nn.Linear(530,256),nn.LayerNorm(256),nn.GELU(),
-                nn.Linear(256,256),nn.GELU(),nn.Linear(256,len(levels)))
-            self.fsq=FiniteScalarQuantizer(levels);incoming=len(levels)
-        else:
-            self.emf=nn.Linear(9,128);self.touch=nn.Linear(4,128)
-            self.time=nn.Linear(1,128);self.finger=nn.Embedding(5,128)
-            self.sid=nn.Embedding(460,128);self.frame=nn.Embedding(10,128)
-            self.current=nn.Linear(20,128)
-            self.null_touch=nn.Parameter(torch.zeros(1,1,128));self.null_emf=nn.Parameter(torch.zeros(1,1,128))
-            self.blocks=nn.ModuleList([CrossBlock(),CrossBlock()]);self.pool=CrossBlock();incoming=128
+        self.emf=nn.Linear(9,128);self.touch=nn.Linear(4,128)
+        self.time=nn.Linear(1,128);self.finger=nn.Embedding(5,128)
+        self.sid=nn.Embedding(460,128);self.frame=nn.Embedding(10,128)
+        self.current=nn.Linear(20,128)
+        self.null_touch=nn.Parameter(torch.zeros(1,1,128));self.null_emf=nn.Parameter(torch.zeros(1,1,128))
+        self.blocks=nn.ModuleList([CrossBlock(),CrossBlock()]);self.pool=CrossBlock();incoming=128
         self.decoders=nn.ModuleList([nn.Sequential(nn.Linear(incoming,256),nn.LayerNorm(256),nn.GELU(),
             nn.Linear(256,256),nn.GELU(),nn.Linear(256,4),nn.Tanh()) for _ in range(5)])
         # A fresh policy holds its supplied current state, with an identity
         # state path through BPTT. Delta is not limited around a future IK pose.
         for decoder in self.decoders:
             nn.init.zeros_(decoder[-2].weight);nn.init.zeros_(decoder[-2].bias)
+
+    state_size=20
+
+    def initial_state(self,q):
+        return q
 
     def decode_fingers(self,context):
         return torch.cat([decoder(context) for decoder in self.decoders],-1)
@@ -159,30 +131,23 @@ class CartNetwork(JointDeltaPolicy):
         return self.decode_fingers(context)
 
     def forward(self,current_q,future_emf,emf_valid,future_dt,tactile_positions=None,
-                tactile_state=None,tactile_valid=None,*,return_codes=False,validate=True):
+                tactile_state=None,tactile_valid=None,*,validate=True):
         b=len(current_q)
-        if current_q.shape!=(b,20) or future_emf.shape!=(b,10,5,9) or emf_valid.shape!=(b,10,5) or future_dt.shape!=(b,10):
-            raise ValueError('Expected q[B,20], EMF[B,10,5,9], valid[B,10,5], dt[B,10]')
+        if current_q.shape!=(b,self.state_size) or future_emf.shape!=(b,10,5,9) or emf_valid.shape!=(b,10,5) or future_dt.shape!=(b,10):
+            raise ValueError(f'Expected q[B,{self.state_size}], EMF[B,10,5,9], valid[B,10,5], dt[B,10]')
         valid=emf_valid.bool()
         if validate and (not torch.isfinite(current_q).all() or not torch.isfinite(future_emf[valid]).all() or not torch.isfinite(future_dt).all()):
             raise ValueError('Nonfinite CART input')
         if validate and ((future_dt<=0).any() or (future_dt[:,1:]<=future_dt[:,:-1]).any() or (torch.diff(future_dt,dim=1)>.250001).any() or (future_dt[:,0]>.250001).any()):
             raise ValueError('Future timestamps must increase without a stream gap')
-        pose=self.normalized_emf(future_emf,valid);q=self.normalize(current_q);extra={}
-        if self.architecture=='fsq':
-            z=self.encoder(torch.cat((q,pose.flatten(1),valid.flatten(1).to(q),future_dt),-1))
-            context,indices=self.fsq(z);extra=dict(codes=context,indices=indices)
-            delta=self.decode_fingers(context)
-        else:
-            if tactile_positions is None or tactile_state is None or tactile_valid is None or tactile_positions.shape!=(b,10,460,3) or tactile_state.shape!=(b,10,460) or tactile_valid.shape!=(b,10,460):
-                raise ValueError('Attention requires tactile positions[B,10,460,3], state/valid[B,10,460]')
-            tv=tactile_valid.bool()
-            if validate and (not torch.isfinite(tactile_positions[tv]).all() or not torch.isfinite(tactile_state[tv]).all() or ((tactile_state[tv]!=0)&(tactile_state[tv]!=1)).any()):
-                raise ValueError('Tactile input must contain finite positions and binary states')
-            delta=self.decode_observation_context(current_q,self.sensor_context(pose,valid,future_dt,tactile_positions,tactile_state,tv))
-        return dict(delta_q=self.delta_to_radians(delta),normalized_delta_q=delta,
-            q=self.apply_delta(current_q,delta),normalized_q=self.apply_delta(current_q,delta,normalized=True),
-            **extra) if return_codes else delta
+        pose=self.normalized_emf(future_emf,valid)
+        if tactile_positions is None or tactile_state is None or tactile_valid is None or tactile_positions.shape!=(b,10,460,3) or tactile_state.shape!=(b,10,460) or tactile_valid.shape!=(b,10,460):
+            raise ValueError('Attention requires tactile positions[B,10,460,3], state/valid[B,10,460]')
+        tv=tactile_valid.bool()
+        if validate and (not torch.isfinite(tactile_positions[tv]).all() or not torch.isfinite(tactile_state[tv]).all() or ((tactile_state[tv]!=0)&(tactile_state[tv]!=1)).any()):
+            raise ValueError('Tactile input must contain finite positions and binary states')
+        return self.decode_observation_context(current_q,self.sensor_context(pose,valid,future_dt,tactile_positions,tactile_state,tv))
+
 
 
 class FutureBuffer:

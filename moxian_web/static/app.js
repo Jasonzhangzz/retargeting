@@ -30,8 +30,6 @@ async function command(command, data = {}) {
     const response = await fetch('/api/command', {method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({command, ...data}), signal: AbortSignal.timeout(6500)});
     const result = await response.json();
     if (!response.ok) throw Error(result.error || '操作失败');
-    if (command === 'baseline') toast('正在采集 50 帧，请保持手套无接触。');
-    if (command === 'clear_baseline') toast('已清除当前设备基线。');
     if (command === 'record_start') toast('开始记录真实姿态与触觉快照。');
     if (result.recording&&state)state.recording=result.recording;
     if (command === 'record_stop') toast(result.recording?.saving?'正在后台保存，完成后可下载 JSONL。':'录制已保存，可下载 JSONL。');
@@ -41,8 +39,6 @@ async function command(command, data = {}) {
 }
 $('connect').onclick = () => command(state?.connected || ['waiting','connecting','stale'].includes(state?.status) ? 'disconnect' : 'connect');
 $('mobileConnect').onclick = () => $('connect').click();
-$('baseline').onclick = () => command('baseline');
-$('clearBaseline').onclick = () => command('clear_baseline');
 $('record').onclick = () => command(state?.recording?.active ? 'record_stop' : 'record_start');
 
 function updateUI() {
@@ -78,8 +74,6 @@ function updateUI() {
   $('heatEmptyText').textContent = live ? '等待触觉数据' : status;
   $('baselineTag').textContent = state?.tactile?.has_baseline ? '去基线' : '原始值';
   $('baselineStatus').textContent = state?.baseline_collecting ? '采集基线中，请勿触碰手套…' : state?.tactile?.has_baseline ? '已应用当前设备的静态基线' : '尚未去除静态基线';
-  $('baseline').disabled = !live || state?.baseline_collecting;
-  $('baseline').textContent = state?.baseline_collecting ? '采集中…' : '采集基线';
   const recording = state?.recording;
   $('record').disabled = busy||recording?.saving||(!live && !recording?.active);
   $('record').innerHTML = pendingCommand==='record_start'?'正在开始录制…':pendingCommand==='record_stop'||recording?.saving?'正在保存…':recording?.active ? '<span>■</span> 停止录制' : '<span>●</span> 开始录制';
@@ -107,7 +101,7 @@ function updateUI() {
     }
   }
   updateModes(live);
-  window.currentMoxianState=state;window.updateGeortUI?.(state);window.updateWujiCollisionUI?.(state);window.updateCartUI?.(state);window.updateCheckpointComparison?.(state);window.updateContactPrediction?.(state);updateHandUI(live);if(poseMode!=='mano')window.updateManoView?.(state,false);if(poseMode!=='wuji2')window.updateWujiView?.(state,false);
+  window.currentMoxianState=state;window.updateGeortUI?.(state);window.updateWujiCollisionUI?.(state);window.updateCartUI?.(state);window.updateCheckpointComparison?.(state);updateHandUI(live);if(poseMode!=='mano')window.updateManoView?.(state,false);if(poseMode!=='wuji2')window.updateWujiView?.(state,false);
   if(replaying){$('liveText').textContent='录制回放 · 本地文件';$('deviceStatus').textContent='录制回放';$('footerState').textContent='REPLAY · 不操作设备';}
 }
 
@@ -459,20 +453,12 @@ function manoControl(action,data={}){return command('mano_'+action,data);}
 $('manoStart').onclick=async()=>{if(!['wuji_native','moxian_wuji'].includes(state?.hand_model?.calibration_method)&&state?.hand_model?.capture?.state==='fit_ready'&&!state?.hand_model?.fit?.validation_pending)return $('manoFit').onclick();if(state?.hand_model?.checkpoint_preview){const result=await manoControl('checkpoint_end');if(!result?.ok)return;}if(state?.skeleton?.ready)return manoControl('capture_start');returnToManoAfterCalibration={session:state?.skeleton?.capture?.session_id};$('poseMode').value='skeleton';$('poseMode').dispatchEvent(new Event('change'));toast('先完成八动作初始化，再开始静态 EMF 与骨架标定。');};
 $('manoMotionConfirm').onclick=()=>manoControl(state?.hand_model?.capture?.state==='fit_ready'?'capture_resume':'capture_confirm',{request_id:state?.hand_model?.capture?.request_id});
 $('manoMotionRetry').onclick=()=>manoControl('capture_retry',{stage_id:state?.hand_model?.capture?.stage_id});$('manoMotionCancel').onclick=()=>manoControl('capture_cancel',{stage_id:state?.hand_model?.capture?.stage_id});
-function selectedTrainingOptions(){return {adam_steps:Number($('manoTrainSteps').value),max_seconds:Number($('manoTrainSeconds').value),batch_size:Number($('manoTrainBatch').value),optimizer:$('manoTrainOptimizer').value};}
-$('manoFit').onclick=()=>{
- const method=$('manoFitMethod').value;
- if(['bone_extrinsics','wuji_native','moxian_wuji'].includes(method))return manoControl('fit',{method});
- if(method==='least_squares')return manoControl('fit',{method,solver_options:{max_seconds:Number($('manoLsqSeconds').value),max_iterations:Number($('manoLsqIterations').value),stages:[['extrinsics','Extrinsics'],['dimensions','Dimensions'],['kinematics','Kinematics'],['tactile','Tactile'],['surface','Surface']].filter(([,id])=>$('manoLsq'+id).checked).map(([name])=>name)}});
- return manoControl('fit',{method,training_options:selectedTrainingOptions()});
-};$('manoFitCancel').onclick=()=>manoControl('fit_cancel');
-$('manoResumeFit').onclick=()=>manoControl('fit',{method:'delta',resume:true,resume_run_id:state?.hand_model?.fit?.run_id,training_options:selectedTrainingOptions()});
-$('manoStartFit').onclick=()=>{const next=window.MoxianCalibrationWorkflow.view(state?.hand_model||{},apiAlive,busy);if(next.disabled)return toast(next.reason||next.phase);if(next.action==='start')return $('manoStart').onclick();if(next.action==='capture'){$('manoMotionGuide').scrollIntoView({behavior:'smooth',block:'center'});return $('manoMotionConfirm').onclick();}if(next.action==='fit')return $('manoFit').onclick();toast(next.reason||next.phase);};$('manoFitSettings').onclick=()=>$('manoFitMethod').scrollIntoView({behavior:'smooth',block:'center'});$('manoFitMethod').onchange=()=>updateUI();
+$('manoFit').onclick=()=>manoControl('fit',{method:$('manoFitMethod').value});
+$('manoFitCancel').onclick=()=>manoControl('fit_cancel');
+$('manoStartFit').onclick=()=>{const next=window.MoxianCalibrationWorkflow.view(state?.hand_model||{},apiAlive,busy);if(next.disabled)return toast(next.reason||next.phase);if(next.action==='start')return $('manoStart').onclick();if(next.action==='capture'){$('manoMotionGuide').scrollIntoView({behavior:'smooth',block:'center'});return $('manoMotionConfirm').onclick();}if(next.action==='fit')return $('manoFit').onclick();toast(next.reason||next.phase);};$('manoFitSettings').onclick=()=>{$('manoAdvanced').open=true;$('manoFitMethod').scrollIntoView({behavior:'smooth',block:'center'});};$('manoFitMethod').onchange=()=>updateUI();
 $('manoRestart').onclick=()=>manoControl('restart');$('manoApply').onclick=()=>manoControl('apply');$('manoRestore').onclick=()=>manoControl('restore');
-$('surfaceBackend').onchange=()=>manoControl('restart',{surface_backend:$('surfaceBackend').value});
 $('manoPreview').onclick=()=>manoControl('preview',{enabled:!state?.hand_model?.preview});
 $('manoFitOptions').onclick=()=>manoControl('fit_options',{penetration_tolerance_mm:Number($('manoPenetration').value)});
-$('manoMaterial').onclick=()=>manoControl('material',{material:{young_pa:Number($('manoYoung').value)*1000,thickness_m:Number($('manoThickness').value)/1000,max_compression_m:.002}});
 $('officialRestart').onclick=()=>command('ik_official_restart');
 $('showTipTargets').onchange=()=>{updateUI();drawPose();};
 $('bindSid').onclick=()=>{if(!selectedSids.size)return toast('先在 02 矩阵选中 SID，再在模型曲面点选位置。');$('poseMode').value=poseMode='mano';updateUI();window.startManoBinding?.();toast('在 MANO 曲面点击对应位置；必须属于同一解剖 patch。');};
@@ -504,7 +490,7 @@ function updateHandUI(live){
  $('manoBadge').textContent=h.checkpoint_preview?'权重对比 · 未应用':h.status==='input_invalid'?'位姿输入异常':working?'标定计算中':h.preview?'候选预览':h.calibrated?'已标定 ✓':fit.accepted?'候选通过 · 待应用':cap.state==='complete'?'采集完成 · 尺寸未应用':'默认固定尺寸';
  $('manoPenetration').disabled=working;$('manoFitOptions').disabled=working;
  if(document.activeElement!==$('manoPenetration'))$('manoPenetration').value=(h.penetration_tolerance_m??.002)*1000;
- if(h.surface_backend==='qnbot'){if(document.activeElement!==$('surfaceBackend'))$('surfaceBackend').value='qnbot';if(mano){$('poseTitle').textContent='Qnbot 官方手部 mesh';$('coordinateLabel').textContent='QNBOT WRIST · 11,598 VERTICES';$('poseSource').textContent='NATIVE 25 DOF · FIXED MODEL';$('frameLabel').textContent='官方腕坐标 · 原生骨架与蒙皮';}}else if(h.ready&&document.activeElement!==$('surfaceBackend'))$('surfaceBackend').value='mano';
+ if(h.surface_backend==='qnbot'&&mano){$('poseTitle').textContent='Qnbot 官方手部 mesh';$('coordinateLabel').textContent='QNBOT WRIST · 11,598 VERTICES';$('poseSource').textContent='NATIVE 25 DOF · FIXED MODEL';$('frameLabel').textContent='官方腕坐标 · 原生骨架与蒙皮';}
  const shared=cap.metadata||{},nativeCalibration=['wuji_native','moxian_wuji'].includes(h.calibration_method)||cap.protocol==='wuji_studio_native_v1',nativeCapture=cap.protocol==='wuji_studio_native_v1',staticCapture=['contact_static_v5','wuji_studio_native_v1'].includes(cap.protocol),motion=['continuous_motion','static_holds','wuji_native_static'].includes(cap.source),contactV3=['contact_motion_v3','contact_motion_v4'].includes(cap.protocol||shared.protocol);
  $('manoMotionGuide').hidden=!motion||['complete','fit_ready'].includes(cap.state)||h.surface_backend==='qnbot'&&!staticCapture;
  $('manoMotionPrompt').textContent=[cap.error,cap.prompt].filter(Boolean).join('。');
@@ -513,15 +499,6 @@ function updateHandUI(live){
  const guideKey=[cap.stage_id,staticCapture?cap.static_endpoint:guidePhase,side,guide?.revision].join(':');
  if(nativeCapture&&$('manoMotionIllustrations').dataset.key!==guideKey){const labels={pinch_index:'拇指／食指对指',pinch_middle:'拇指／中指对指',pinch_ring:'拇指／无名指对指',pinch_pinky:'拇指／小指对指',four_finger_bend_90:'四指弯曲90°',flat_open:'伸直并拢、手掌展平'};const stage=cap.stage_id||'flat_open';$('manoMotionIllustrations').innerHTML=`<figure class="motion-step active"><img src="/wuji-calibration-guides/${stage}-${side}.png" alt="Wuji Studio ${labels[stage]}" style="width:100%;max-height:260px;object-fit:contain"><figcaption><strong>${labels[stage]}</strong><small>Wuji Studio 2026.7.1 原版动作示意</small></figcaption></figure>`;$('manoMotionIllustrations').dataset.key=guideKey;}
  else if(motion&&guide&&$('manoMotionIllustrations').dataset.key!==guideKey){$('manoMotionIllustrations').innerHTML=staticCapture?guide.staticMarkup(cap.stage_id,cap.static_endpoint,side):guide.markup(cap.stage_id||'range_thumb',guidePhase,side);$('manoMotionIllustrations').dataset.key=guideKey;}
- const targetOverview=$('manoContactTargetOverview');
- if(guide&&guide.revision!=='loading'&&targetOverview.dataset.key!==side+guide.revision){targetOverview.innerHTML=guide.overview(side);targetOverview.dataset.key=side+guide.revision;}
- const templateStatus=$('manoContactTemplateStatus'),template=fit.contact_templates;
- const templateKey=[fit.run_id,template?.revision,fit.state].join(':');
- if(templateStatus&&templateStatus.dataset.key!==templateKey){
-  templateStatus.dataset.key=templateKey;
-  if(template?.actions?.length){templateStatus.replaceChildren(...template.actions.map(a=>{const p=document.createElement('p'),edges=a.edges.filter(e=>e.required);p.textContent=`${guide?.expected(a.stage)?.label||a.stage}：${a.feasible?'参考模板可行':'参考模板仍有残差（保留样本）'} · 最大间隙 ${Math.max(...edges.map(e=>e.template_gap_mm)).toFixed(2)} mm · 法向偏差 ${Math.max(...edges.map(e=>e.template_normal_error_deg)).toFixed(1)}° · 穿透 ${Math.max(...edges.map(e=>e.template_penetration_mm)).toFixed(2)} mm`;return p;}));}
-  else templateStatus.textContent='完成新流程采集后生成；独立复测不参与模板选择。';
- }
  $('manoMotionIllustrationNote').textContent=`${side==='left'?'左手':'右手'}掌面示意 · 黄色为期望接触区域 · 橙色为活动手指 · 不是触觉测量${guide?.error?' · '+guide.error:''}`;
  $('manoMotionPhase').textContent=cap.state==='collecting'?`第 ${cap.index+1}/${cap.total} 组 · 第 ${cap.cycle} 轮${cap.cycle===3?'（独立验证）':''} · ${({apart:'分开',approach:'缓慢接近',touch:'指腹轻触并保持',release:'释放并分开',extend:'伸直',curl:'缓慢弯曲／钩状',return:'再次展开',spread:'拇指外展',oppose:'扫向各指',hold:'保持姿态',motion:'缓慢覆盖活动范围'})[cap.motion_phase]||'准备'} · 本轮剩余 ${Math.ceil(cap.cycle_remaining_s||0)} 秒 · 采集预计剩余 ${Math.ceil(cap.estimated_remaining_s||0)} 秒（不含准备与拟合）`:cap.state==='paused'?`已暂停 · 已保留前 ${cap.retained_cycles||0} 轮；点击继续，仅重做第 ${cap.cycle} 轮。`:cap.state==='cancelled'?'已取消；可重试当前动作，已完成动作保留。':'对照示意图摆好起始姿势，点击开始；第三轮只作验证。';
  if(contactV3){
@@ -547,7 +524,7 @@ function updateHandUI(live){
  if(h.capture_storage_error)$('manoSharedStatus').textContent='采集后台保存失败：'+h.capture_storage_error+'；请保留当前会话并检查磁盘。';
  if(staticCapture)$('manoSharedStatus').textContent=`静态17动作 · 拟合采集 ${cap.completed_train||0}/17 · 独立复测 ${cap.completed_validation||0}/17 · 有效保持片段 ${cap.aggregate_count||0} · 通过后自动下一动作，17类完成后停下，点击 EMF 与骨架拟合；独立复测单独开始。`;
  if(nativeCalibration){
-  $('manoSharedStatus').textContent=nativeCapture?`Wuji 原生六动作 · 已完成 ${cap.aggregate_count||0}/6 · 每动作保持1秒＋采集1秒 · 自动切换；全部完成后点击原生拟合。`:'新默认流程：Wuji 原生六动作、原生21自由度objective与solver；历史17动作只读保留。';
+  $('manoSharedStatus').textContent=nativeCapture?`Wuji 原生六动作 · 已完成 ${cap.aggregate_count||0}/6 · 每动作保持1秒＋采集1秒 · 自动切换；全部完成后点击原生拟合。`:'新默认流程：Wuji 原生六动作、原生21自由度objective与solver；';
   if(nativeCapture){const phases={waiting_movement:'请变换到目标手势',waiting_pose:'等待姿态满足',waiting_stable:'等待稳定',hold:'稳定保持1秒',collect:'采集1秒',done:'六动作采集完成'};$('manoMotionPhase').textContent=(cap.constraints_ok?'✓ 姿态通过 · ':'')+`动作 ${Math.min((cap.index||0)+1,6)}/6 · ${phases[cap.motion_phase]||'请就位'}`+(cap.constraints_ok===false?' · '+(cap.constraint_failures||[]).slice(0,2).join('；'):'');$('manoMotionConfirm').textContent=cap.state==='paused'?'继续当前原生动作':'开始自动六动作采集';}
  }
  const betaValues=h.betas||fit.official_betas;$('manoBetaStatus').textContent=betaValues?`官方 betas（10 维）：${betaValues.map(x=>x.toFixed(3)).join(' · ')}；固定尺寸和安装参数另行辨识。`:'全部训练动作混训，联合辨识手型、几何与安装；Delta 版同时更新姿态策略。';
@@ -563,8 +540,7 @@ function updateHandUI(live){
  if(h.surface_backend==='qnbot'&&!staticCapture)$('manoStart').disabled=busy||!live||working||cap.state==='preparing'||state?.skeleton?.capture?.session_state==='running';
  $('manoStart').textContent=pendingCommand==='mano_capture_start'?'正在启动 17 动作标定…':cap.state==='preparing'?'正在后台准备参考模型…':'开始 17 动作联合标定 · 约 204 秒';
  if(h.surface_backend==='qnbot'){$('manoStart').textContent=cap.state==='preparing'?'正在准备静态标定…':cap.state==='fit_ready'&&!fit.validation_pending?'开始 EMF 与骨架拟合':cap.fit_data_ready?'重新采集静态17动作':'开始静态17动作标定';}
- const workflow=window.MoxianCalibrationWorkflow.view(h,apiAlive,busy,pendingCommand);$('manoFit').disabled=!workflow.canFit;$('manoFitCancel').disabled=!working;$('manoApply').disabled=fit.method==='least_squares'||!!h.checkpoint_preview||!fit.accepted||working||!live||!h.ready||!!fit.applied;$('manoPreview').disabled=['geort_motion_v2','contact_motion_v3','contact_motion_v4'].includes(fit.capture_protocol)||!fit.accepted||fit.state!=='preview'||!live||!h.ready;$('manoPreview').textContent=h.preview?'结束预览':'预览候选';
- $('manoResumeFit').disabled=!workflow.canFit||!!h.preview||!!h.checkpoint_preview||fit.method!=='delta'||!fit.solver?.joint_geometry_policy||!fit.run_id;
+ const workflow=window.MoxianCalibrationWorkflow.view(h,apiAlive,busy,pendingCommand);$('manoFit').disabled=!workflow.canFit;$('manoFitCancel').disabled=!working;$('manoApply').disabled=!!h.checkpoint_preview||!fit.accepted||working||!live||!h.ready||!!fit.applied;$('manoPreview').disabled=['geort_motion_v2','contact_motion_v3','contact_motion_v4'].includes(fit.capture_protocol)||!fit.accepted||fit.state!=='preview'||!live||!h.ready;$('manoPreview').textContent=h.preview?'结束预览':'预览候选';
  const warmup=h.gpu_warmup||{};$('gpuWarmupStatus').hidden=!['running','failed'].includes(warmup.state);$('gpuWarmupStatus').textContent=warmup.state==='failed'?`GPU 预热失败：${warmup.error}；拟合时将重新尝试。`:`GPU 首次编译预热：${warmup.message||'准备固定形状计算图'}（单独计时）`;
  const eta=fit.estimated_remaining_s;const duration=s=>s>=60?`${Math.floor(s/60)} 分 ${Math.ceil(s%60)} 秒`:`${Math.ceil(s)} 秒`;
  $('manoFitETA').hidden=!working;$('manoFitETA').textContent=Number.isFinite(eta)?`${['optimization_budget','budget'].includes(fit.eta_scope)?'优化预算剩余':fit.eta_scope==='stage'?'本阶段预计剩余':'拟合预计剩余'} ${duration(eta)} · 已用 ${duration(Number.isFinite(fit.started_at_ms)?Math.max(0,(Date.now()-fit.started_at_ms)/1000):fit.elapsed_s||0)}（随处理速度更新）`:'正在估算剩余时长…';
@@ -577,31 +553,15 @@ function updateHandUI(live){
  $('manoFitBlockedReason').textContent=workflow.reason;
  $('manoWorkflowPhase').textContent=workflow.phase+(Number.isFinite(workflow.remaining)?` · 预计剩余 ${Math.ceil(workflow.remaining)} 秒`:working||storage.active||cap.state==='preparing'?' · 正在估算剩余时长':'');
  const workflowProgress=$('manoWorkflowProgress');workflowProgress.hidden=!(working||pendingCommand==='mano_fit'||storage.active||['collecting','preparing'].includes(cap.state)||warmup.state==='running');if(Number.isFinite(workflow.progress))workflowProgress.value=workflow.progress;else workflowProgress.removeAttribute('value');
- if(h.surface_backend==='mano'&&$('manoFitMethod').value==='least_squares'&&!working)$('manoFitMethod').value='parameters';
- const leastSquares=$('manoFitMethod').value==='least_squares';
  const bones=h.surface_backend==='qnbot';
- for(const option of $('manoFitMethod').options){option.hidden=bones?option.value!==(nativeCalibration?(h.calibration_method||'wuji_native'):'bone_extrinsics'):['bone_extrinsics','wuji_native','moxian_wuji'].includes(option.value);option.disabled=option.hidden;}
- if(bones&&!working)$('manoFitMethod').value=nativeCalibration?(h.calibration_method||'wuji_native'):'bone_extrinsics';
- if(!bones&&['bone_extrinsics','wuji_native','moxian_wuji'].includes($('manoFitMethod').value))$('manoFitMethod').value='parameters';
- $('manoLegacyTrainingNotes').hidden=leastSquares;$('manoLegacyTrainingFooter').hidden=leastSquares;
- if(leastSquares)$('manoBetaStatus').textContent='最小二乘：15维长宽厚 → 小幅运动学 → 区域触觉注册 → 低维表面，按可辨识性开放。离线交替求姿态，实时只做固定前向；没有网络或EMA。';
- $('manoLeastSquaresSettings').hidden=!leastSquares;$('manoLegacyTrainingControls').hidden=leastSquares;$('manoLegacyTrainingExplanation').hidden=leastSquares;
- for(const suffix of ['Seconds','Iterations','Extrinsics','Dimensions','Kinematics','Tactile','Surface'])$('manoLsq'+suffix).disabled=working;
- $('manoFit').textContent=leastSquares?'开始最小二乘标定（仅保存候选）':'开始拟合（通过验收后应用）';
- const muonAvailable=$('manoFitMethod').value==='delta';$('manoTrainOptimizer').querySelector('option[value="muon"]').disabled=!muonAvailable;
- if(!muonAvailable&&!working)$('manoTrainOptimizer').value='adam';
- $('manoOptimizerHint').textContent=muonAvailable?'可选 Muon＋Adam：Delta 隐藏层矩阵用 Muon，几何、偏置和输出层用 Adam；Muon 学习率 0.001，几何 Adam 为 0.01。':'当前模式使用 Adam。Muon 针对网络隐藏层二维矩阵；选择 几何＋Delta 后可启用。';
- if(leastSquares)$('manoOptimizerHint').textContent='分阶段最小二乘：按证据开放共享参数，消去逐帧姿态检查可辨识性；没有学习率、网络或EMA。';
- $('manoFitMethod').querySelector('option[value="least_squares"]').disabled=h.surface_backend!=='qnbot';
+ if(!working)$('manoFitMethod').value=['moxian_wuji','wuji_native'].includes(h.calibration_method)?h.calibration_method:'moxian_wuji';
  if(bones){
-  for(const id of ['manoLeastSquaresSettings','manoLegacyTrainingControls','manoLegacyTrainingExplanation','manoLegacyTrainingNotes','manoLegacyTrainingFooter','manoResumeFit'])$(id).hidden=true;
   $('manoOptimizerHint').textContent='NLopt LD_LBFGS · ftol_rel 1e-10 · 最多20000次评估；通过原始EMF驱动QP的独立复测后应用。';
   $('manoFit').textContent=fit.validation_pending&&cap.state==='complete'?'验收 EMF 与骨架拟合结果':'开始 EMF 与骨架拟合';
   if(fit.bone_lengths_m)$('manoBetaStatus').textContent+=' 骨长 mm：'+Object.entries(fit.bone_lengths_m).map(([f,segments])=>f+' '+Object.values(segments).map(x=>(x*1000).toFixed(1)).join('/')).join(' · ');
   $('manoExtrinsicsResult').hidden=!fit.T_wrist_TX;
   if(fit.T_wrist_TX)$('manoExtrinsicsValues').textContent=JSON.stringify({units:{translation:'m',rotation:'matrix'},T_wrist_TX:fit.T_wrist_TX,T_distal_RX:fit.T_distal_RX},null,2);
-  if(fit.contact_templates)$('manoContactTemplateStatus').textContent='接触材料点与连接关系由拟合观测确定后冻结；独立复测未参与选择。';
-  if(h.model_hash)$('manoStatus').textContent=`${h.calibrated?'已标定':'预览'} · 实时逐指QP · ${q.processing_ms?.toFixed(1)||'—'} ms mesh/帧 · EMF残差 ${q.position_rmse_mm?.toFixed(1)||'—'} mm · 模型 ${h.model_hash.slice(0,12)}`;
+  if(h.model_hash)$('manoStatus').textContent=`${h.calibrated?'已标定':'预览'} · 实时逐指QP · ${q.processing_ms?.toFixed(1)||'—'} ms mesh/帧 · EMF残差 ${q.position_rmse_mm?.toFixed(1)||'—'} mm · 模型 ${h.model_name||h.model_hash.slice(0,12)}`;
  }
  if(nativeCalibration){
   $('manoStart').textContent=nativeCapture?'重新采集 Wuji 六动作':'开始 Wuji 原生六动作标定';
@@ -610,7 +570,6 @@ function updateHandUI(live){
   $('manoBetaStatus').textContent='Wuji原生21自由度手模型；51个共享几何/EMF外参变量。原生六动作、边界、先验、objective和L-BFGS均由固定版本SDK执行。Moxian mesh仅做显示适配。';
   $('manoOptimizerHint').textContent='直接调用 Wuji Studio 2026.7.1 完整原生calibration；成功后应用原生URDF与同版本SDK实时IK。';
   $('manoPenetration').closest('label').hidden=true;$('manoFitOptions').hidden=true;
-  $('manoLegacyTargets').hidden=true;
   $('manoMethodExplanation').textContent='原生动作：四组对指、四指弯曲90°、伸直并拢平掌。保持与采样规则、姿态阈值使用固定版本原生规则；直接执行原生objective和L-BFGS，生成原生URDF。实时21自由度IK由同版SDK计算，Moxian mesh仅适配显示。';
  }
  if(h.calibration_method==='moxian_wuji'){
@@ -621,8 +580,6 @@ function updateHandUI(live){
   $('manoStart').textContent=nativeCapture?'重新采集六动作':'开始六动作标定';
  }
  $('manoFitMethod').disabled=working;
- for(const id of ['manoTrainSteps','manoTrainSeconds','manoTrainBatch','manoTrainOptimizer'])$(id).disabled=working;
- if(working&&fit.training_options){$('manoTrainSteps').value=fit.training_options.adam_steps;$('manoTrainSeconds').value=fit.training_options.max_seconds;$('manoTrainBatch').value=fit.training_options.batch_size;$('manoTrainOptimizer').value=fit.training_options.optimizer||'adam';}
  window.updateTrainingCharts?.(state);
  $('manoFitProgress').hidden=!working;if(!Number.isFinite(fit.progress))$('manoFitProgress').removeAttribute('value');else $('manoFitProgress').value=fit.progress;
  const liveSolver=h.mano_solver||{};
@@ -639,10 +596,10 @@ function updateHandUI(live){
  if(officialFk&&h.calibrated&&!h.calibration_matches_tracking&&!working)$('manoFitStatus').textContent='旧驱动版本的标定报告（当前骨架已更新）：'+$('manoFitStatus').textContent;
  if(nativeCalibration){
   const currentNativeFit=fit.method===(h.calibration_method||'wuji_native')&&(!nativeCapture||fit.capture_session_id===cap.metadata?.motion_session_id);
-  $('manoFitStatus').textContent=currentNativeFit?(fit.error||fit.application_error||fit.message||fit.reason||'Wuji 原生标定结果'):(nativeCapture&&cap.state==='complete'?'六动作已采集完成，请点击原生 EMF 与骨架拟合。':'请开始 Wuji 原生六动作标定；历史17动作只读保留。');
+  $('manoFitStatus').textContent=currentNativeFit?(fit.error||fit.application_error||fit.message||fit.reason||'Wuji 原生标定结果'):(nativeCapture&&cap.state==='complete'?'六动作已采集完成，请点击原生 EMF 与骨架拟合。':'请开始 Wuji 原生六动作标定；');
   if(working)$('manoFitETA').textContent='原生求解中 · '+(fit.native_profile||'准备原生输入')+' · 耗时由原生收敛决定';
   if(h.model_hash&&h.tracking_source==='wuji_sdk_native21'){
-   $('manoStatus').textContent=`Wuji 原生21自由度 IK → Moxian mesh · ${q.processing_ms?.toFixed(1)||'—'} ms mesh/帧 · EMF残差 ${q.position_rmse_mm?.toFixed(1)||'—'} mm · 模型 ${h.model_hash.slice(0,12)}`;
+   $('manoStatus').textContent=`Wuji 原生21自由度 IK → Moxian mesh · ${q.processing_ms?.toFixed(1)||'—'} ms mesh/帧 · EMF残差 ${q.position_rmse_mm?.toFixed(1)||'—'} mm · 模型 ${h.model_name||h.model_hash.slice(0,12)}`;
    if(mano){$('poseSource').textContent='WUJI NATIVE 21 DOF → QNBOT MESH';$('frameLabel').textContent='原生腕坐标经固定旋转适配显示';$('poseStatus').textContent='原生标定已应用 · SDK实时IK';}
   }
  }
@@ -650,7 +607,6 @@ function updateHandUI(live){
  const audit=h.calibration_audit||{},appliedComparison=!!(h.calibrated&&fit.applied&&fit.dimensions_before_mm),current=h.checkpoint_preview?h.checkpoint_preview.base_dimensions_mm:appliedComparison?fit.dimensions_before_mm:h.preview?(audit.active_dimensions_mm||fit.dimensions_before_mm):(h.dimensions_mm||audit.active_dimensions_mm),candidate=h.checkpoint_preview?h.dimensions_mm:appliedComparison?h.dimensions_mm:fit.dimensions_after_mm||audit.candidate_dimensions_mm;
  $('manoDimensionsTitle').textContent=h.checkpoint_preview?'原模型与预览权重尺寸':appliedComparison?'标定前与已应用尺寸':'当前尺寸与候选尺寸';document.querySelectorAll('.mano-dimension-direction').forEach(e=>e.textContent=appliedComparison?'标定前 → 已应用':'当前 → 候选');
  $('manoApplicationStatus').textContent=h.checkpoint_preview?`权重对比预览：${h.checkpoint_preview.label}；原标定未更改。`:`当前：${h.calibrated?'已标定，尺寸已生效 '+(h.applied_revision||'').slice(0,8):'默认尺寸，未应用候选'}；候选：${fit.applied?'已自动应用':fit.accepted?'等待自动应用':fit.state==='preview'?'未通过检查，可预览':'尚未拟合'}${h.preview?'；正在预览候选':''}。`;
- if(fit.method==='least_squares'&&!h.checkpoint_preview)$('manoApplicationStatus').textContent='最小二乘结果仅保存为独立候选；请在“已训练权重”选择“分阶段最小二乘标定”预览，当前模型未替换。';
  if(h.flat_pose_calibration?.applied){
   const flat=h.flat_pose_calibration.validation;
   $('manoApplicationStatus').textContent+=` 平摊姿态标定已生效 · 留出最大弯折 ${flat?.max_bend_deg?.toFixed(1)||'—'}°。`;
@@ -659,10 +615,8 @@ function updateHandUI(live){
  const num=x=>Number.isFinite(x)?x.toFixed(1):'—';const segments=a=>a?.segment_lengths_mm?.map(num).join(' / ')||'—';
  const dimensionKey=JSON.stringify([current,candidate]);if(dimensionKey!==shownManoDimensions){shownManoDimensions=dimensionKey;
  $('manoDimensionsRows').innerHTML=fingers.map((f,i)=>{const a=current?.[f],b=candidate?.[f];return `<tr><td>${names[i]}</td><td>${num(a?.surface_length_mm)} → ${num(b?.surface_length_mm)}<br><small>分段 ${segments(a)}<br>→ ${segments(b)}</small></td><td>${num(a?.proximal_width_mm)} × ${num(a?.proximal_depth_mm)}<br>→ ${num(b?.proximal_width_mm)} × ${num(b?.proximal_depth_mm)}</td></tr>`;}).join('');}
- if(h.material&&document.activeElement!==$('manoYoung')&&document.activeElement!==$('manoThickness')){if(!$('manoYoung').dataset.edited)$('manoYoung').value=h.material.young_pa/1000;if(!$('manoThickness').dataset.edited)$('manoThickness').value=h.material.thickness_m*1000;}
 
 }
-$('manoYoung').addEventListener('input',()=>$('manoYoung').dataset.edited='1');$('manoThickness').addEventListener('input',()=>$('manoThickness').dataset.edited='1');
 
 
 $('replayLoad').onclick=()=>$('replayFile').click();

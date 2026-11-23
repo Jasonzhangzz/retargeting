@@ -14,7 +14,6 @@ from .cart_protocol import PROTOCOL
 from .cart_network import FutureBuffer
 from .cart_live import LiveAudit,policy_row
 from .wuji_transport import decode_source_frame
-from .cart_objective import CartObjective,policy_settings
 from .cart_initialization import RetargetSession
 
 
@@ -35,7 +34,6 @@ class CartRetarget(GeoRTRetarget):
             mirror_matrix=self.source.mirror.tolist(),policy='cart_observed_contacts_v5')
         profile=json.loads((Path(model_path)/'source_profile.json').read_text())
         self.geometry=SourceGeometry(topology,profile,device)
-        self.objective=CartObjective(self.cart_predictor.hand,policy_settings(),self.cart_predictor.collision)
         self.buffer=FutureBuffer();self.external_sdf=None;self.audit=LiveAudit(self);self.reset()
 
     def topology(self):
@@ -122,7 +120,7 @@ class CartRetarget(GeoRTRetarget):
                 buffering=False,observation_timestamp_ms=row['timestamp_ms'],
                 experimental=bool((self.cart_predictor.deployment or {}).get('experimental')),
                 acceptance_status=(self.cart_predictor.deployment or {}).get('acceptance_status','completed'),
-                self_contact_trained=self.cart_predictor.config.get('objective_version')=='card_raw_neural_self_contact_v3',
+                self_contact_trained=True,
                 buffer_delay_ms=delay,window_source='received' if frame.get('cart_received_window') else 'replay' if 'cart_future_frames' in frame else 'processed',
                 self_contacts=audit['self_contacts'] if audit else None,object_contacts=audit['object_contacts'] if audit else None,
                 tactile_status=audit['tactile_status'] if audit else 'unknown',online_search=False,hard_contact_guarantee=False),

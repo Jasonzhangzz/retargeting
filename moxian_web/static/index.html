@@ -4,14 +4,12 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#eeeae3">
   <title>墨现 · 手套感知控制台</title>
-  <link rel="stylesheet" href="/style.css?v=surface-diagnostics-v1">
-  <link rel="stylesheet" href="/contact-prediction.css">
+  <link rel="stylesheet" href="/style.css?v=console-cleanup-v1">
   <script defer src="/motion-guide.js?v=qnbot-link-contact-1"></script>
   <script defer src="/calibration-workflow.js?v=qnbot-link-contact-1"></script>
-  <script defer src="/app.js?v=wuji-moxian-skeleton-v2-20261116"></script>
-  <script defer src="/contact-prediction-view.js?v=qnbot-link-contact-1"></script>
-  <script defer src="/checkpoint-view.js?v=qnbot-link-contact-1"></script>
-  <script defer src="/training-view.js?v=qnbot-link-contact-1"></script>
+  <script defer src="/app.js?v=jason-default-v1"></script>
+  <script defer src="/checkpoint-view.js?v=console-cleanup-v1"></script>
+  <script defer src="/training-view.js?v=console-cleanup-v1"></script>
 </head>
 <body>
   <aside class="sidebar">
@@ -33,18 +31,11 @@
         <div class="pose-toolbar"><span id="coordinateLabel">WRIST LOCAL · 25 JOINTS</span><label><input id="showTipTargets" type="checkbox"> 指尖匹配检查</label><div class="segmented" aria-label="相机视角"><button class="selected" data-camera="orbit">透视</button><button data-camera="top">俯视</button><button data-camera="front">正视</button></div></div>
         <div class="pose-stage"><canvas id="manoCanvas" hidden aria-label="MANO 手部曲面模型"></canvas><canvas id="poseCanvas" aria-label="可旋转的官方骨架或指尖姿态"></canvas><div class="stage-top"><span><i class="dot"></i><b id="poseStatus">等待骨架</b></span><span id="poseSource">OFFICIAL SKELETON IK</span></div><div class="stage-scale"><span id="frameLabel">腕部局部坐标系</span><span>单位 mm</span></div><button id="resetCamera" class="reset-camera" title="重置相机" aria-label="重置相机">↺</button><div id="poseEmpty" class="empty-state"><span>⌁</span><b id="poseEmptyText">等待骨架标定</b></div><div class="stage-help">拖动旋转 <span>·</span> 滚轮缩放 <span>·</span> 仅显示腕部局部手型</div></div>
         <section id="wujiCompare" hidden>
-          <div class="wuji-tools"><label>求解器 <select id="wujiSolver"><option value="slsqp_graph">SLSQP · 离散接触图 + Laplacian</option><option value="wuji-retargeting">wuji-retargeting</option><option value="cem">CEM · CARD</option><option value="geort">GeoRT · 已训练网络</option><option value="cart">CART · 接触驱动网络</option></select></label><label><input id="wujiRVQOverlay" type="checkbox" autocomplete="off"> 蓝色重建预测</label><label><input id="wujiShowGraspType" type="checkbox" autocomplete="off" aria-controls="wujiRVQ wujiGraspPreview"> grasp type 预测</label><label>SID <input id="wujiSid" type="number" min="0" max="459" value="0"></label><label><input id="wujiNormals" type="checkbox"> 法向 · 8 mm</label><label><input id="wujiRays" type="checkbox"> 关节原点射线</label><label><input id="wujiErrors" type="checkbox"> 接触误差连线</label><button id="wujiRestart" class="text-button">重启求解</button><button id="wujiRebuild" class="text-button">重建映射</button></div>
-          <section id="wujiRVQ" class="rvq-panel" aria-label="RVQ 手势识别与重建" hidden>
-            <div class="rvq-heading"><h3>RVQ · 手势识别与重建</h3></div>
-            <p id="wujiRVQStatus" role="status">等待 Wuji2 重定向结果</p>
-            <div class="rvq-fields"><div><span>预测手势</span><strong id="wujiRVQLabel">—</strong></div><div><span>模型概率</span><strong id="wujiRVQProbability">—</strong></div><div><span>重建关节均差</span><strong id="wujiRVQError">—</strong></div></div>
-            <p id="wujiRVQTop3" class="footnote">Top-3：—</p>
-            <details class="rvq-codes"><summary>离散编码</summary><p id="wujiRVQTokens">—</p></details>
-            <p class="footnote">输入为重定向后的 Wuji2 手型。灰色为重定向结果，蓝色线框为 RVQ 重建；关节均差相对同帧重定向输入计算。</p>
-          </section>
-          <details id="wujiCollisionPanel" class="workspace-coverage" open>
+          <div class="wuji-tools"><label>求解器 <select id="wujiSolver"><option value="slsqp_graph">SLSQP · 接触图</option><option value="wuji-retargeting">wuji-retargeting</option><option value="cem">CEM · CARD</option><option value="geort">GeoRT · 已训练网络</option><option value="cart">CART · 接触驱动网络</option></select></label><label>SID <input id="wujiSid" type="number" min="0" max="459" value="0"></label><label><input id="wujiNormals" type="checkbox"> 法向 · 8 mm</label><label><input id="wujiRays" type="checkbox"> 关节原点射线</label><label><input id="wujiErrors" type="checkbox"> 接触误差连线</label><button id="wujiRestart" class="text-button">重启求解</button><button id="wujiRebuild" class="text-button">重建映射</button></div>
+
+          <details id="wujiCollisionPanel" class="workspace-coverage">
             <summary>Wuji2 · 真实网格与 Neural SDF 碰撞对照</summary>
-            <div class="guide-actions"><button id="wujiCollisionToggle" class="button">停止碰撞对照</button></div>
+            <div class="guide-actions"><button id="wujiCollisionToggle" class="button">启动碰撞对照</button></div>
             <div class="collision-visual-toolbar">
               <button id="wujiCollisionExample" class="button">测试姿态</button><select id="wujiCollisionExampleSelect" aria-label="独立测试姿态" hidden></select><button id="wujiCollisionLive" class="text-button" hidden>返回实时</button>
               <label>左侧参考 <select id="wujiCollisionReference"><option value="matched">同点网格</option><option value="dense">密集网格</option></select></label>
@@ -61,14 +52,14 @@
             <div style="overflow:auto"><table class="coverage-table"><thead><tr><th>link 对</th><th>密集网格 mm</th><th>同点网格 mm</th><th>MLP mm</th><th>密集／MLP 判定</th></tr></thead><tbody id="wujiCollisionPairs"></tbody></table></div>
             <p class="footnote">所有结果使用同一帧重定向 Wuji2 关节角，穿透 &gt;0.5 mm 判为碰撞。密集网格检查原生顶点及面心；同点网格与 MLP 查询相同的固定曲面样本，并沿用相同机械连接排除。约每秒 4 帧抽样，回放暂停保留该帧；当前没有有效姿态时显示等待，不使用旧帧代替。MLP 为关节角条件化近似距离场，密集网格也属于离散表面检查。</p>
           </details>
-          <details id="geortPanel" class="ik-guide" open>
+          <details id="geortPanel" class="ik-guide">
             <summary>GeoRT · 动作录制与网络训练</summary>
             <p class="footnote">完成六动作手型标定后，自由伸展、弯曲各指并自然对指，覆盖日常使用的活动范围。可录制多段，再选择训练数据。建议另录一段独立动作进行评估。</p>
             <div class="guide-actions"><input id="geortLabel" aria-label="录制名称" placeholder="录制名称（可选）"><button id="geortRecordStart" class="button">开始录制动作</button><button id="geortRecordStop" class="button" disabled>停止并保存</button><button id="geortRefresh" class="text-button">刷新数据与模型</button></div>
             <p id="geortRecordingStatus" role="status">等待标定后的手部模型</p>
             <label>录制数据（可多选用于训练或独立评估）<select id="geortDatasets" multiple size="5" style="width:100%"></select></label>
             <div class="guide-actions"><button id="geortDeleteDatasets" class="text-button">删除所选录制</button><button id="geortCoverageSelect" class="button">叠加所选录制散点</button><button id="geortCoverageReset" class="text-button">清空叠加录制</button></div>
-            <details class="workspace-coverage" open>
+            <details class="workspace-coverage">
               <summary>采集散点 · 手套与Wuji2参考</summary>
               <p class="footnote">绿色：已录制的手套指尖（1 mm网格去重）；灰色：训练样本中同时满足当前网络输出角度范围与最大自穿透≤5 mm的Wuji2原始FK指尖。两者均使用掌部坐标，不缩放。机器人手指长度和关节结构不同，灰点不代表手套必须达到的位置。</p>
               <div class="guide-actions"><label>查看手指 <select id="geortWorkspaceFinger"><option value="thumb">拇指</option><option value="index">食指</option><option value="middle">中指</option><option value="ring">无名指</option><option value="pinky">小指</option></select></label><label><input id="geortShowReference" type="checkbox" checked> 显示Wuji2姿态参考</label><button id="geortWorkspaceRebuild" class="text-button">重建姿态参考</button></div>
@@ -85,7 +76,7 @@
               <p id="geortScatterStatus" class="footnote"></p>
               <p class="footnote">拖动旋转。参考仅保留原训练样本中的合格完整姿态，数量可能稀疏；≤5 mm仍允许轻微穿透，不表示无碰撞或人体关节耦合有效。原生网格顶点及面心密集检查不构成连续无穿透证明，连接关节的机械重叠区域沿用模型排除规则。</p>
             </details>
-            <details class="workspace-coverage" open>
+            <details class="workspace-coverage">
               <summary>网格穿透与表面接触诊断 · 只读</summary>
               <div class="guide-actions"><button id="geortDiagnosticsToggle" class="button">开始表面诊断</button></div>
               <p id="geortDiagnosticsStatus" role="status">诊断未启动</p>
@@ -102,16 +93,11 @@
             <p id="geortError" role="alert" style="color:#b44738">录制控件加载中…</p><pre id="geortEvaluation" style="white-space:pre-wrap"></pre>
           </details>
           <div class="wuji-canvas-wrap"><canvas id="wujiCanvas" aria-label="同步视角的 Moxian glove 与 Wuji2 触觉对照"></canvas><span class="wuji-left-label">Moxian · 源手套模型</span><span class="wuji-right-label">WUJI2.2 · 虚拟触觉映射</span>
-            <aside id="wujiGraspPreview" class="grasp-preview" aria-label="预测 grasp type 与 primitive 示意图" hidden>
-              <div class="grasp-preview-heading"><span>预测 GRASP TYPE</span><b id="wujiGraspConfidence">—</b></div>
-              <strong id="wujiGraspType">等待预测</strong>
-              <img id="wujiPrimitiveImage" width="384" height="276" alt="" hidden>
-              <p id="wujiPrimitiveStatus">等待手套姿态</p>
-            </aside>
+
           </div>
           <p id="wujiStatus" role="status">等待 Moxian 输入</p><p id="wujiFrameIdentity" role="status">画面后端：等待首帧</p><p id="wujiError"></p><p id="wujiSidInfo" class="footnote"></p><p id="wujiSourceQuality" class="footnote"></p><p class="footnote">共同虚拟世界 · 相同单位与比例 · 紫色：阵列；黄色：手套二值接触标签。红色 link：原生 mesh 自碰撞穿透大于 0.5 mm 的双方；触觉接触及物体穿透不触发红色。离散图 SLSQP 使用骨架与接触点统一图，跨语义 link 接触边高权重；橙线显示接触边及材料点到骨架的连接。wuji-retargeting 使用当前已标定 Moxian 骨架和原版两阶段机器人重定向。各后端按自身时序策略输出，动力学关闭，力权重仅为相对触觉强度。</p>
         </section>
-        <details id="cartPanel" class="ik-guide" open>
+        <details id="cartPanel" class="ik-guide">
           <summary>CART · 任意动作与接触监督</summary>
           <p class="footnote">自然录制任意动作，例如拧瓶盖、揉搓、接触与释放。训练和独立验证分开采集，无需指定抓取类别。使用已应用的源手几何标定。逐帧保存 EMF、460 路触觉 0/1，以及全部检测到的穿透／接触点和触觉点在 wrist 下的三维位置；停止后等待几何保存完成。</p>
           <div class="guide-actions"><label>分区 <select id="cartSplit"><option value="train">训练会话</option><option value="validation">独立验证会话</option></select></label><button id="cartPreview" class="button">预览接触</button><label><input id="cartShowHull" type="checkbox" checked> 显示接触点与局部 patch</label></div>
@@ -122,7 +108,7 @@
           <p id="cartRecordStatus" role="status">未录制</p><p id="cartGeometryStatus" role="status"></p>
           <label>录制会话（多选训练与验证数据）<select id="cartDatasets" multiple size="6" style="width:100%"></select></label><button id="cartDeleteDatasets" class="text-button">删除所选录制</button><ul id="cartRecordings"></ul>
           <p id="cartTrainingHint" class="muted" aria-live="polite"></p>
-          <div class="guide-actions"><button id="cartPreprocess" class="button">准备观测、触点与 IK</button><label>轮数 <input id="cartEpochs" type="number" min="1" max="2000" value="200"></label><label>并行窗口数（0 按显存自动） <input id="cartBatchSize" type="number" min="0" max="65536" value="0"></label><label>IK 初始噪声 ±rad <input id="cartInitialNoise" type="number" min="0" max="0.5" step="0.01" value="0.1"></label><label>结构 <select id="cartArchitecture"><option value="attention">Attention · 未来 IK＋触觉</option><option value="fsq">FSQ · 未来 IK</option></select></label><button id="cartTrain" class="button">训练可微策略</button><button id="cartCancel" class="text-button">取消后台任务</button></div>
+          <div class="guide-actions"><button id="cartPreprocess" class="button">准备观测、触点与 IK</button><label>轮数 <input id="cartEpochs" type="number" min="1" max="2000" value="200"></label><label>并行窗口数（0 按显存自动） <input id="cartBatchSize" type="number" min="0" max="65536" value="0"></label><label>IK 初始噪声 ±rad <input id="cartInitialNoise" type="number" min="0" max="0.5" step="0.01" value="0.1"></label><label>结构 <select id="cartArchitecture"><option value="attention">Attention · 未来 10 帧 EMF＋触觉</option></select></label><label>训练版本 <select id="cartObjective"><option value="card_raw_neural_self_contact_v5_wrist">腕部 pose＋五指</option><option value="card_raw_neural_self_contact_v4_actuated">v9 · 固定腕部五指</option></select></label><button id="cartTrain" class="button">训练可微策略</button><button id="cartCancel" class="text-button">取消后台任务</button></div>
           <p id="cartBufferStatus" role="status"></p><p id="cartJob" role="status">请选择独立的训练和验证会话</p><pre id="cartLosses" style="white-space:pre-wrap"></pre>
           <section class="ik-viewer" aria-label="缓存 IK 轨迹回放">
             <div class="guide-actions"><strong>IK 轨迹回放</strong><button id="cartIKLoad" class="button">查看／刷新 IK 轨迹</button></div>
@@ -148,50 +134,40 @@
         <section id="manoGuide" class="mano-guide" hidden>
           <div class="guide-top"><strong>个体手套 · 官方 mesh 与骨架联合标定</strong><span id="manoBadge">默认手型</span></div>
           <p id="manoSharedStatus" class="footnote" role="status">八动作仅用于兼容初始化；个体标定采用 Wuji 原生六动作，通过后自动切换，全部完成后点击原生拟合。</p><p id="manoStatus" role="status">等待 GPU 手部模型</p><p id="manoSourceWarning" class="footnote" role="status" hidden></p><button id="manoGoSkeleton" class="button" hidden>转到骨架标定</button>
-          <label>模型基础 <select id="surfaceBackend"><option value="qnbot" selected>Qnbot 官方连续 mesh</option><option value="mano">历史 MANO（旧权重对比）</option></select></label><label class="mano-wire"><input id="manoWire" type="checkbox"> 骨架线框</label><p class="footnote">触觉点固定在曲面上：淡紫色为点阵，醒目的黄色小球表示对应 SID 的实测接触；未知或过期数据不显示黄色。初始点位为解剖映射，可通过 SID 绑定核对。</p><p class="footnote">参考取自八动作张开阶段的同帧官方骨架与 EMF 观测，无需额外采集或拟合平摊姿态。EMF 原点与曲面指尖分开处理。</p>
-          <p class="footnote">紫色点阵固定于当前模型曲面，黄色小球显示实测触觉。个体模型在离线标定后固定；实时由 EMF 驱动 IK 与蒙皮，触觉仅作显示。</p>
-          <div class="guide-actions"><button id="manoStart" class="button primary">开始 Wuji 原生六动作标定</button><button id="manoRestart" class="text-button">重启模型</button></div>
-          <section class="capture-workflow" aria-label="标定数据与拟合"><p id="manoDatasetStatus" role="status">正在读取已保存的标定进度…</p><p id="manoDatasetLocation" class="footnote"></p><p id="manoWorkflowPhase" role="status" aria-live="polite"></p><progress id="manoWorkflowProgress" max="1" hidden aria-label="数据处理与拟合进度"></progress><div class="guide-actions"><button id="manoStartFit" class="button primary" disabled>开始拟合</button><a id="manoCaptureDownload" href="/api/hand_model/capture" class="text-button" download>下载已保存的标定数据 JSON ↓</a><button id="manoFitSettings" class="text-button">拟合方法与参数 ↓</button><a class="text-button" href="#manoTrainingCurves">查看拟合误差曲线 ↓</a></div><p id="manoFitBlockedReason" class="footnote" role="status"></p></section>
+          <span class="subtle">Qnbot 官方连续 mesh</span><label class="mano-wire"><input id="manoWire" type="checkbox"> 骨架线框</label><p class="footnote">触觉点固定在曲面上：淡紫色为点阵，醒目的黄色小球表示对应 SID 的实测接触；未知或过期数据不显示黄色。初始点位为解剖映射，可通过 SID 绑定核对。</p>
+
+          <div class="guide-actions"><button id="manoStart" class="button primary" hidden>开始 Wuji 原生六动作标定</button><button id="manoRestart" class="text-button">重启模型</button></div>
+          <section class="capture-workflow" aria-label="标定数据与拟合"><p id="manoDatasetStatus" role="status">正在读取已保存的标定进度…</p><p id="manoDatasetLocation" class="footnote"></p><p id="manoWorkflowPhase" role="status" aria-live="polite"></p><progress id="manoWorkflowProgress" max="1" hidden aria-label="数据处理与拟合进度"></progress><div class="guide-actions"><button id="manoStartFit" class="button primary" disabled>开始拟合</button><a id="manoCaptureDownload" href="/api/hand_model/capture" class="text-button" download>下载已保存的标定数据 JSON ↓</a><button id="manoFitSettings" class="text-button" aria-controls="manoAdvanced">方法与手动操作 ↓</button><a class="text-button" href="#manoTrainingCurves">查看拟合误差曲线 ↓</a></div><p id="manoFitBlockedReason" class="footnote" role="status"></p></section>
           <div id="manoMotionGuide" hidden><p id="manoMotionIllustrationNote" class="footnote">掌面动作示意 · 橙色为目标手指 · 示意图不代表实时测量</p><div id="manoMotionIllustrations" class="motion-steps"></div><p id="manoMotionPrompt" role="status"></p><p id="manoMotionPhase" role="status"></p><div id="manoMotionTrajectory" hidden></div><progress id="manoMotionProgress" max="1" value="0"></progress><div class="guide-actions"><button id="manoMotionConfirm" class="button primary">已就位，开始此动作</button><button id="manoMotionRetry" class="button">重试此动作</button><button id="manoMotionCancel" class="text-button">取消采集</button></div></div>
-          <section class="checkpoint-comparison" aria-label="训练权重对比">
-            <h3>训练权重对比</h3>
-            <p class="footnote">对比 xMimic 思路版与 FlashSAC buffer 版最近一次完整训练的个体参数。未通过验收的结果仅供临时预览，不替换当前标定。</p>
-            <label for="manoCheckpoint">模型与历史结果</label><select id="manoCheckpoint"><option value="wuji_native">Wuji 原生标定</option><option value="bone_extrinsics">Moxian 17动作标定（历史）</option><option value="parameters">xMimic 思路版</option><option value="flashsac">FlashSAC buffer 版</option><option value="delta">几何＋Delta 联合训练</option><option value="least_squares">分阶段最小二乘标定</option></select>
+          <details class="checkpoint-comparison"><summary>当前标定结果对照</summary>
+            <h3>六动作标定结果</h3>
+            <p class="footnote">查看与当前设备和标定匹配的六动作结果。预览与应用分开，原标定保留。</p>
+            <label for="manoCheckpoint">标定结果</label><select id="manoCheckpoint"><option value="moxian_wuji">Moxian 六动作标定</option><option value="wuji_native">Wuji 内置手型（诊断）</option></select>
             <div class="guide-actions"><button id="manoCheckpointLoad" class="button" disabled>预览此权重</button><button id="manoCheckpointEnd" class="button" disabled>返回当前模型</button><button id="manoCheckpointRefresh" class="text-button">刷新列表</button></div>
             <p id="manoCheckpointSummary" class="footnote"></p><p id="manoCheckpointStatus" class="footnote" role="status">正在读取训练与标定结果…</p>
-          </section>
-          <details id="manoLegacyTargets" open><summary>17 动作期望接触区域 · 黄色虚线供核对</summary><p class="footnote">两指、三指、四指、五指、MCP 指根掌面、握拳与折叠。多指形成连通指尖簇，并尽量各指接触拇指。握拳和折叠忽略拇指 EMF。虚线黄色是模板目标，网格上的实心黄色小球是实测触觉。</p><div id="manoContactTargetOverview" class="motion-steps"></div><details><summary>冻结参考模板求解残差</summary><div id="manoContactTemplateStatus" class="footnote" role="status">完成新流程采集后生成；独立复测不参与模板选择。</div></details></details>
-          <p id="manoBetaStatus" class="footnote" role="status">只优化15段骨长、五个EMF安装变换与全局对齐，共51个共享参数。</p><details id="manoExtrinsicsResult" hidden><summary>查看标定后的 EMF 刚体变换</summary><pre id="manoExtrinsicsValues"></pre></details><div class="mano-fit"><p id="manoMethodExplanation" class="footnote">Wuji Studio 2026.7.1 原生六动作：四组对指、四指弯曲90°、伸直并拢平掌。采用原版姿态约束及保持/采样规则，完成后点击原生拟合；成功后应用原生URDF与21自由度IK，Moxian mesh仅适配显示。</p><div class="mapping-row"><label>穿透硬验收 mm <input id="manoPenetration" type="number" min="2" max="2" step="0.5" value="2" readonly></label><button id="manoFitOptions" class="button">核对验收阈值</button></div><p id="manoCalibrationWarnings" class="footnote" role="status"></p><p id="manoTogetherStatus" class="footnote"></p><p id="gpuWarmupStatus" class="footnote" hidden></p><p id="manoFitStatus">标定基础尺寸只在应用时改变；实时接触以黄色触觉点显示。</p><p id="manoFitETA" class="footnote" role="status" hidden></p><progress id="manoFitProgress" max="1" value="0" hidden></progress><div class="guide-actions"><label>标定方法 <select id="manoFitMethod"><option value="moxian_wuji" selected>Moxian 六动作 · 25＋4侧旋自由度</option><option value="wuji_native">Wuji内置手型（诊断）</option><option value="bone_extrinsics">Moxian 17动作（历史）</option><option value="parameters">GPU 个体参数</option><option value="flashsac">FlashSAC buffer 实验（直接损失）</option><option value="delta">几何＋Delta 同步联合训练</option><option value="least_squares">分阶段最小二乘标定（Qnbot）</option></select></label><button id="manoFit" class="button">开始拟合（通过验收后应用）</button><button id="manoResumeFit" class="button" disabled>继续训练当前 Delta 权重</button><button id="manoFitCancel" class="text-button">取消拟合</button><button id="manoPreview" class="button">预览候选</button><button id="manoApply" class="button primary">应用候选</button><button id="manoRestore" class="text-button">恢复上一版本</button></div></div>
-          <details class="mano-dimensions" open><summary id="manoDimensionsTitle">当前尺寸与候选尺寸</summary><p id="manoApplicationStatus" class="footnote">读取尺寸应用状态…</p><div class="dimension-table-wrap"><table class="dimension-table"><thead><tr><th>手指</th><th>长度 mm<br><span class="mano-dimension-direction">当前 → 候选</span></th><th>宽 × 厚 mm<br><span class="mano-dimension-direction">当前 → 候选</span></th></tr></thead><tbody id="manoDimensionsRows"></tbody></table></div><p class="footnote">均为静息局部几何尺寸；曲面由所选后端的骨架蒙皮生成。厚度依赖接触和先验，展平 EMF 不能单独测出厚度。训练通过厚度、局部刚性与边长软惩罚约束形变；原始曲面穿透超过 2 mm 时不应用。</p></details>
-          <details class="mano-material"><summary>有效软层材料先验</summary><div class="mapping-row"><label>杨氏模量 kPa <input id="manoYoung" type="number" min="1" max="1000" step="1" value="30"></label><label>厚度 mm <input id="manoThickness" type="number" min="0.5" max="20" step="0.1" value="3"></label><button id="manoMaterial" class="button">保存先验</button></div><p class="footnote">近似戴手套外表面的有效柔顺性；不是佩戴者或手套实测材料参数。</p></details>
-          <section id="manoTrainingCurves" class="training-curves" aria-label="标定拟合曲线">
+          </details>
+
+          <details id="manoAdvanced"><summary>标定方法、参数与手动操作</summary>
+          <p id="manoBetaStatus" class="footnote" role="status">只优化15段骨长、五个EMF安装变换与全局对齐，共51个共享参数。</p><details id="manoExtrinsicsResult" hidden><summary>查看标定后的 EMF 刚体变换</summary><pre id="manoExtrinsicsValues"></pre></details><div class="mano-fit"><p id="manoMethodExplanation" class="footnote">Wuji Studio 2026.7.1 原生六动作：四组对指、四指弯曲90°、伸直并拢平掌。采用原版姿态约束及保持/采样规则，完成后点击原生拟合；成功后应用原生URDF与21自由度IK，Moxian mesh仅适配显示。</p><div class="mapping-row"><label>穿透硬验收 mm <input id="manoPenetration" type="number" min="2" max="2" step="0.5" value="2" readonly></label><button id="manoFitOptions" class="button">核对验收阈值</button></div><p id="manoCalibrationWarnings" class="footnote" role="status"></p><p id="manoTogetherStatus" class="footnote"></p><p id="gpuWarmupStatus" class="footnote" hidden></p><p id="manoFitStatus">标定基础尺寸只在应用时改变；实时接触以黄色触觉点显示。</p><p id="manoFitETA" class="footnote" role="status" hidden></p><progress id="manoFitProgress" max="1" value="0" hidden></progress><div class="guide-actions"><label>标定方法 <select id="manoFitMethod"><option value="moxian_wuji" selected>Moxian 六动作 · 25＋4侧旋自由度</option><option value="wuji_native">Wuji内置手型（诊断）</option></select></label><button id="manoFit" class="button">开始拟合（通过验收后应用）</button><button id="manoFitCancel" class="text-button">取消拟合</button><button id="manoPreview" class="button">预览候选</button><button id="manoApply" class="button primary">应用候选</button><button id="manoRestore" class="text-button">恢复上一版本</button></div></div>
+          </details>
+          <details class="mano-dimensions"><summary id="manoDimensionsTitle">当前尺寸与候选尺寸</summary><p id="manoApplicationStatus" class="footnote">读取尺寸应用状态…</p><div class="dimension-table-wrap"><table class="dimension-table"><thead><tr><th>手指</th><th>长度 mm<br><span class="mano-dimension-direction">当前 → 候选</span></th><th>宽 × 厚 mm<br><span class="mano-dimension-direction">当前 → 候选</span></th></tr></thead><tbody id="manoDimensionsRows"></tbody></table></div><p class="footnote">均为静息局部几何尺寸；曲面由所选后端的骨架蒙皮生成。厚度依赖接触和先验，展平 EMF 不能单独测出厚度。训练通过厚度、局部刚性与边长软惩罚约束形变；原始曲面穿透超过 2 mm 时不应用。</p></details>
+
+          <details id="manoTrainingCurves" class="training-curves"><summary>标定拟合曲线</summary>
             <h3>离线拟合与收敛</h3>
-            <div class="training-controls" id="manoLegacyTrainingControls">
-              <label>混训最大更新步数 <input id="manoTrainSteps" type="number" min="128" max="8192" step="32" value="480"></label>
-              <label>优化器 <select id="manoTrainOptimizer"><option value="adam" selected>Adam</option><option value="muon" disabled>Muon＋Adam（几何＋Delta）</option></select></label>
-              <label>优化时间预算（秒） <input id="manoTrainSeconds" type="number" min="15" max="600" step="15" value="45"></label>
-              <label>Batch · 混合轨迹 <select id="manoTrainBatch"><option value="0">默认覆盖批次（官方 mesh：256帧）</option><option value="512">512帧</option><option value="768">768帧</option></select></label>
-            </div>
-            <div id="manoLeastSquaresSettings" hidden>
-              <div class="training-controls"><label>最小二乘优化预算（秒） <input id="manoLsqSeconds" type="number" min="1" max="3600" value="600"></label><label>每阶段最大迭代 <input id="manoLsqIterations" type="number" min="1" max="100" value="6"></label></div>
-              <p class="footnote">有界分块 LM；离线交替求姿态，实时固定前向。完整验证另计，60秒仅作诊断；结果仅存为候选，请在“已训练权重”预览。</p>
-              <div class="training-controls">阶段：<label><input type="checkbox" id="manoLsqExtrinsics" checked>EMF外参</label><label><input type="checkbox" id="manoLsqDimensions" checked>尺寸</label><label><input type="checkbox" id="manoLsqKinematics" checked>运动学</label><label><input type="checkbox" id="manoLsqTactile" checked>触觉注册</label><label><input type="checkbox" id="manoLsqSurface" checked>低维表面</label></div>
-            </div>
-            <p id="manoOptimizerHint" class="footnote">个体参数版与 FlashSAC 使用 Adam；选择 几何＋Delta 后可启用 Muon 更新隐藏层矩阵。</p>
-            <p id="manoLegacyTrainingExplanation" class="footnote">所有动作来自同一训练 buffer，按连续片段混合抽样，不分标定阶段、不按对指轮换。FlashSAC 模式使用有放回的 GPU 片段抽样。接触样本只向指定手指几何反传，非指定 EMF 权重为零。独立完整复测只作验收。增大步数需给足预算；60 秒性能验收仍保留。</p>
-            <div class="training-controls"><label>曲线记录 <select id="manoTrainingMethod"><option value="moxian_wuji">Moxian六动作 · Wuji原生L-BFGS</option><option value="wuji_native">Wuji完整原生标定</option><option value="">当前／最近求解</option><option value="bone_extrinsics">Moxian 17动作标定（历史）</option><option value="parameters">xMimic 思路版最近训练</option><option value="flashsac">FlashSAC buffer 版最近训练</option><option value="delta">几何＋Delta 联合训练</option><option value="least_squares">分阶段最小二乘标定</option></select></label><label>曲线范围 <select id="manoTrainingScope"><option value="replay">全 buffer 混训曲线</option><option value="all">全部训练记录</option><option value="mixed">全动作混训</option><option value="extrinsics">最小二乘：外参</option><option value="dimensions">最小二乘：尺寸</option><option value="kinematics">最小二乘：运动学</option><option value="tactile">最小二乘：触觉</option><option value="surface">最小二乘：表面</option><option value="all_pinches">四组对指联合复测</option><option value="pinch_index">拇指／食指</option><option value="pinch_middle">拇指／中指</option><option value="pinch_ring">拇指／无名指</option><option value="pinch_pinky">拇指／小指</option></select></label><label>损失项 <select id="manoTrainingLossPart"><option value="loss">总损失</option><option value="terms.sensor_position">EMF 位置</option><option value="terms.sensor_orientation">EMF 姿态</option><option value="terms.trajectory_position">连续 patch 位置</option><option value="terms.trajectory_normal">连续 patch 法向</option><option value="terms.mesh_smoothness">mesh 平滑惩罚</option><option value="terms.mesh_edge">mesh 边长惩罚</option><option value="terms.contact_position">接触位置</option><option value="terms.contact_normal">接触法向</option><option value="terms.tip_emf_orientation">全程指尖—EMF 方向</option><option value="terms.dimension_prior">手指长宽厚软先验</option><option value="terms.dimension_extreme">尺寸极端变化惩罚</option><option value="terms.section_aspect">宽厚比例先验</option><option value="terms.geometry_prior">几何先验</option><option value="terms.cross_section_prior">截面先验</option><option value="terms.shape_soft_constraints">形状软约束</option><option value="terms.shape_parameter_soft_constraints">形状参数软先验</option><option value="terms.delta_output_prior">Delta 原始输出幅度</option><option value="terms.delta_pose_prior">Delta 姿态先验</option><option value="terms.delta_rate_prior">Delta 变化率惩罚</option><option value="terms.inactive_surface_anchor">非参与区域位移</option></select></label><label><input id="manoTrainingLogScale" type="checkbox" checked> 目标值使用 log(1+x) 纵轴</label><a id="manoTrainingExport" href="/api/hand_model/training_trace?after=0" target="_blank" rel="noopener">查看原始曲线 JSON</a></div>
+
+            <p id="manoOptimizerHint" class="footnote">六动作原生 L-BFGS 拟合，仅显示真实目标评估记录。</p>
+
+            <div class="training-controls"><label>曲线记录 <select id="manoTrainingMethod"><option value="moxian_wuji">Moxian六动作 · Wuji原生L-BFGS</option><option value="wuji_native">Wuji完整原生标定</option><option value="">当前／最近求解</option></select></label><label><input id="manoTrainingLogScale" type="checkbox" checked> 目标值使用 log(1+x) 纵轴</label><a id="manoTrainingExport" href="/api/hand_model/training_trace?after=0" target="_blank" rel="noopener">查看原始曲线 JSON</a></div>
             <p id="manoTrainingStatus" role="status">尚无拟合曲线；点击拟合后显示真实数据。</p>
             <div class="training-plot-grid">
-              <figure><figcaption>所选损失项 · 橙色原始参数／绿色接受结果</figcaption><canvas id="manoLossChart" aria-label="训练损失下降曲线"></canvas></figure>
-              <figure><figcaption id="manoPriorCaption">几何软先验 · 蓝：参数先验，紫：mesh 边长</figcaption><canvas id="manoKLChart" aria-label="MANO 手型和几何先验KL曲线"></canvas></figure>
-              <figure><figcaption>训练误差 mm · 绿色接触间隙／橙色 EMF RMSE</figcaption><canvas id="manoErrorChart" aria-label="训练接触间隙和EMF误差曲线"></canvas></figure>
-              <figure><figcaption>角度差 ° · 指尖—EMF：绿色接受结果／橙色原始；接触法向：紫色；完整 EMF 朝向：蓝色</figcaption><canvas id="manoDirectionChart" aria-label="接触法向和指尖EMF方向的角度误差曲线"></canvas></figure>
+              <figure><figcaption>拟合目标值</figcaption><canvas id="manoLossChart" aria-label="训练损失下降曲线"></canvas></figure>
+              <figure><figcaption id="manoPriorCaption">骨长与 EMF 外参先验</figcaption><canvas id="manoKLChart" aria-label="MANO 手型和几何先验KL曲线"></canvas></figure>
+
             </div>
-            <div class="training-plot-grid"><figure><figcaption>Delta 实际修正 ° · 绿：RMS，紫：最大值</figcaption><canvas id="manoDeltaChart"></canvas></figure><figure><figcaption>梯度范数 · 绿：几何，紫：Delta（裁剪前）</figcaption><canvas id="manoGradientChart"></canvas></figure><figure><figcaption>学习率 · 绿：几何，紫：Delta</figcaption><canvas id="manoLearningRateChart"></canvas></figure><figure><figcaption>有效关节限位饱和比例</figcaption><canvas id="manoSaturationChart"></canvas></figure></div><p id="manoTrainingHover" class="footnote">悬停曲线查看更新步数、阶段、损失与 KL。</p>
-            <div id="manoLegacyTrainingNotes"><p class="footnote">当前接触目标：距离按 2 mm 归一化；指定link指腹区域在当前原始三角面上的最近距离目标为0、该处外法向严格相反；法向按15°尺度计入损失，不设15°死区。最近点随当前姿态重新查询，区域与触觉绑定保持固定，仅选定接触帧生效。位置／法向权重仍为 320／40。紫色角度曲线表示训练接触法向偏差。</p>
-            <p class="footnote">默认从标准Qnbot手型学习每指长、宽、厚，共15个独立尺寸；同指骨段保持原始比例，掌骨固定。冻结自由顶点、指根、关节轴及安装变换，尺寸范围与宽厚比例采用软先验，不设置形状硬截断。非关键手指的尺寸使用0.95 EMA，不向mesh写入补偿残差。所有动作轨迹混训；接触位置320、相对法向40仅用于选定贴合帧；接触吸引目标始终为0；防穿透项另允许目标接触对最多2 mm轻微压入，非目标对无此容差。EMF位置权重320，全程 EMF 朝向和指尖方向权重各40；Delta 幅度以3°为软尺度惩罚（权重320／原始输出80），学习率0.00001，主要更新mesh。保留弱patch运动监督。拇指MCP/IP允许相对展平30°负向屈伸；这是可配置建模范围，并非实测个人限位。独立复测不参与训练或模板生成。推理期间模型和策略权重固定。官方模型的触觉点位是解剖学初始化，请逐区核对；不是实测手套CAD。</p></div>
-          </section>
-          <p id="manoLegacyTrainingFooter" class="footnote">全部训练动作同时混训；每条对指样本只更新对应两指的几何。关键区域直接更新，非关键表面使用 EMA；所选标准曲面的厚度和边长采用软惩罚。完成后固定，显示只做前向。</p><p class="footnote">接触按 0 / 1 显示，触觉不参与在线更新。材料先验只用于离线拟合，不是实测力。SID 分区需逐区核对。</p>
+            <div class="training-plot-grid"><figure><figcaption>几何参数梯度范数</figcaption><canvas id="manoGradientChart"></canvas></figure></div><p id="manoTrainingHover" class="footnote">悬停曲线查看评估次数、拟合目标与参数梯度。</p>
+
+          </details>
+          <p class="footnote">接触按 0 / 1 显示，触觉不参与在线更新。SID 分区需逐区核对。</p>
         </section>
       </article>
       <article class="panel heat-panel">
@@ -202,25 +178,16 @@
         <details id="mappingEditor" class="mapping-editor"><summary>校正分区映射 <span id="mappingStatus">0 / 20 区已核对</span></summary><p>矩阵中拖动选择 SID，再分配到指定 patch。请逐区触碰核对；近端和掌心初始位置为示意。</p><div class="mapping-row"><select id="patchSelect" aria-label="选择待编辑 patch"></select><button id="assignPatch" class="button">分配所选 SID</button></div><div class="mapping-row"><span id="selectionInfo">已选 0 个 SID</span><button id="clearSelection" class="text-button">清空选择</button><button id="confirmPatch" class="text-button">已核对当前区</button></div><div class="mapping-row"><button id="bindSid" class="button">绑定 SID 到模型点</button><button id="saveMapping" class="button primary">保存映射</button><button id="restoreMapping" class="button">恢复默认</button><span id="mappingDirty"></span></div></details>
       </article>
     </section>
-    <section class="panel prediction-panel" id="contactPrediction">
-      <div class="panel-heading"><div><span class="panel-index">AI</span><h2>网络预测 × 实测触觉</h2><span class="tag" id="predictionStatus">加载模型</span></div><a class="text-button" href="#monitor" id="predictionShowMano">查看 MANO 热图 ↑</a></div>
-      <div class="prediction-toolbar"><span id="predictionInput">仅输入手套 MANO 位姿 · 8 帧历史</span><label><input id="predictionOverlay" type="checkbox"> MANO 预测热图（可选）</label><label><input id="predictionShowADC" type="checkbox"> 实测原始 ADC</label><button id="predictionReset" class="button">重置统计</button><button id="predictionRestart" class="text-button">重载网络</button></div>
-      <p id="predictionMessage" class="prediction-message" role="status">等待 MANO 输入；预测接触概率，真实触觉只用于对照。</p>
-      <div class="prediction-metrics"><div><span>当前 SID F1 · 映射示意</span><strong id="predictionF1">—</strong></div><div><span>累计 SID F1 · 映射示意</span><strong id="predictionCumulative">—</strong></div><div><span>已核验位置 F1</span><strong id="predictionVerified">—</strong></div><div><span>整帧接触概率</span><strong id="predictionFrame">—</strong></div></div>
-      <div class="prediction-grids"><figure><figcaption>网络接触概率 <small>手套掌面展开 · 0–1 · 阈值 0.52</small></figcaption><canvas id="predictionGrid" aria-label="手套轮廓上 460 个触觉位置的预测接触概率"></canvas></figure><figure><figcaption id="predictionTruthTitle">实测接触状态 <small>去皮后检测 · 同帧对齐</small></figcaption><canvas id="predictionTruthGrid" aria-label="手套轮廓上同帧实测触觉或接触状态"></canvas></figure><figure><figcaption>预测与实测差异 <small>绿：命中 · 红：误报 · 蓝：漏报</small></figcaption><canvas id="predictionDiffGrid" aria-label="手套轮廓上的接触误报与漏报"></canvas></figure></div>
-      <div class="prediction-footer"><span id="predictionCounts">等待有效触觉参考</span><span id="predictionTiming">CPU 推理</span></div>
-      <p class="prediction-note" id="predictionMapping">三图均为同一手套掌面展开，悬停可查看部位和 SID。SID 采用当前手型的固定曲面映射；未完成实测位置核验时，示意 F1 仅用于观察网络效果。</p>
-      <p class="prediction-note">输入使用固定前向的 MANO 关节旋转。手套未提供世界坐标腕部轨迹，腕部保持固定；网络预测接触概率，不预测 ADC 压力强度。</p>
-    </section>
+
     <section class="bottom-grid">
       <article class="panel telemetry-panel" id="telemetry"><div class="panel-heading"><div><span class="panel-index">03</span><h2>EMF 位姿遥测</h2></div><span class="subtle">位置 mm · 四元数 XYZW</span></div><div class="table-wrap"><table><thead><tr><th>传感器</th><th>状态</th><th>X</th><th>Y</th><th>Z</th><th>QUATERNION · XYZW</th></tr></thead><tbody id="fingerRows"></tbody></table></div></article>
-      <article class="panel capture-panel" id="capture"><div class="panel-heading"><div><span class="panel-index">04</span><h2>采集与校准</h2></div><span id="recordIndicator" class="record-indicator">●</span></div><div class="capture-content"><div class="capture-line"><div><h3>原始触觉基线</h3><p>旧模式的均值基线；接触模式请使用 02 的去皮。</p></div><button id="baseline" class="button">采集基线</button></div><button id="clearBaseline" class="text-button">清除当前设备基线 ↗</button><div class="capture-divider"></div><div class="capture-line"><div><h3>会话录制 <small>JSONL</small></h3><p id="recordInfo">保存姿态、触觉与时间戳快照。</p></div><button id="record" class="button primary"><span>●</span> 开始录制</button></div><div class="replay-loader"><input id="replayFile" type="file" accept=".jsonl,.ndjson" hidden><button id="replayLoad" class="text-button">载入 JSONL 回放 ↗</button></div><div id="replayControls" class="replay-controls" hidden><button id="replayPlay" class="button">暂停</button><input id="replaySeek" type="range" min="0" max="1" value="0" aria-label="录制回放进度"><button id="replayExit" class="text-button">返回实时</button><span id="replayTime"></span></div><a id="export" class="text-button" href="/api/recording" hidden>下载本次录制 ↓</a><p class="capture-footnote">快照约 100 Hz；设备原始流约 120 Hz。</p></div></article>
+      <article class="panel capture-panel" id="capture"><div class="panel-heading"><div><span class="panel-index">04</span><h2>会话录制与回放</h2></div><span id="recordIndicator" class="record-indicator">●</span></div><div class="capture-content"><div class="capture-line"><div><h3>会话录制 <small>JSONL</small></h3><p id="recordInfo">保存姿态、触觉与时间戳快照。</p></div><button id="record" class="button primary"><span>●</span> 开始录制</button></div><div class="replay-loader"><input id="replayFile" type="file" accept=".jsonl,.ndjson" hidden><button id="replayLoad" class="text-button">载入 JSONL 回放 ↗</button></div><div id="replayControls" class="replay-controls" hidden><button id="replayPlay" class="button">暂停</button><input id="replaySeek" type="range" min="0" max="1" value="0" aria-label="录制回放进度"><button id="replayExit" class="text-button">返回实时</button><span id="replayTime"></span></div><a id="export" class="text-button" href="/api/recording" hidden>下载本次录制 ↓</a><p class="capture-footnote">快照约 100 Hz；设备原始流约 120 Hz。</p></div></article>
     </section>
     <footer class="footer"><span>MOXIAN <b>×</b> RETARGET <span>／ 感知先于行动</span></span><span id="footerState">SDK 初始化中</span></footer>
   </main><div id="toast" class="toast" role="status" hidden></div>
 <script type="importmap">{"imports":{"three":"/vendor/three.module.min.js"}}</script>
-<script type="module" src="/mano-view.js"></script>
-<script type="module" src="/wuji-view.js?v=cart-anchor-render-v4"></script>
+<script type="module" src="/mano-view.js?v=console-cleanup-v1"></script>
+<script type="module" src="/wuji-view.js?v=console-cleanup-v1"></script>
 <script src="/geort-coverage.js?v=clickable-reference-v6"></script>
 <script type="module" src="/geort-workspace-pose.js?v=1"></script>
 <script src="/geort.js?v=pair-balanced-contact-v2-flat"></script>

@@ -207,6 +207,6 @@ bash scripts/start_moxian_web.sh --host 127.0.0.1 --port 8890
 
 目录与来源：[目录说明](docs/repository_layout.md) · [baseline 代码](retarget/baseline/README.md) · [第三方来源与许可](THIRD_PARTY.md)。
 
-Wuji2 手型重建与分类：[RVQ 双输出头联合训练、编码与解码](docs/wuji2_rvq.md)。 在“Moxian／Wuji2 对照”中可查看实时手势类别与蓝色线框重建手型。
+网页功能与维护范围：[当前功能清单](docs/moxian_web_features.md)。RVQ 独立训练工具保留，网页中的蓝色重建、grasp type 与旧 MANO 触觉预测入口已移除。
 
 Wuji2 随机姿态、原生网格碰撞采样与直接关节角条件化 MLP：[Configuration Neural SDF](docs/wuji2_configuration_sdf.md)。

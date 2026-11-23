@@ -59,6 +59,11 @@ def rotvec_near(vector: wp.vec3, reference: wp.vec3):
 
 @wp.struct
 class CardData:
+    mesh_contact_count: wp.array(dtype=int)
+    mesh_contact_regions: wp.array(dtype=wp.vec2i)
+    mesh_contact_targets: wp.array(dtype=wp.vec3)
+    wrist_reference: wp.array(dtype=wp_vec7)
+    wrist_reference_weights: wp.array(dtype=float)
     links: wp.array(dtype=int)
     meshes: wp.array(dtype=wp.uint64)
     active: wp.array(dtype=int)
@@ -105,14 +110,14 @@ def unpack(x: wp.array2d(dtype=float), mapping: wp.array(dtype=int),
 
 # Columns match the independently implemented Python objective for diagnostics.
 PARTS=('contact_position','contact_direction','contact_fix','style_tip','style_normal',
-       'style_bone','smooth_joint','smooth_translation','smooth_rotation','collision_self','collision_object','motion_joint')
+       'style_bone','smooth_joint','smooth_translation','smooth_rotation','collision_self','collision_object','motion_joint','contact_self_closure','style_wrist')
 
 
 @wp.kernel(enable_backward=False)
 def card_cost(x: wp.array2d(dtype=float), poses: wp.array2d(dtype=wp_vec7), data: CardData,
               parts: wp.array2d(dtype=float), raw: wp.array(dtype=float), depths: wp.array2d(dtype=float), costs: wp.array(dtype=float)):
     i=wp.tid();w=data.weights
-    for k in range(12):parts[i,k]=0.0
+    for k in range(14):parts[i,k]=0.0
     for region in range(16):
         tf=poses[i,data.links[region]];quat=rotation(tf)
         if data.active[region]!=0:
@@ -154,7 +159,11 @@ def card_cost(x: wp.array2d(dtype=float), poses: wp.array2d(dtype=wp_vec7), data
         ta=poses[i,data.links[ia]];tb=poses[i,data.links[ib]]
         gap=segment_distance(se3_apply_func(ta,data.cap_a[ia]),se3_apply_func(ta,data.cap_b[ia]),
             se3_apply_func(tb,data.cap_a[ib]),se3_apply_func(tb,data.cap_b[ib]))-data.cap_radius[ia]-data.cap_radius[ib]
-        parts[i,9]+=w[9]*wp.max(0.0,w[10]-gap*1000.0)**2.0
+        margin=w[10]
+        for c in range(data.mesh_contact_count[0]):
+            contact=data.mesh_contact_regions[c]
+            if (contact[0]==ia and contact[1]==ib) or (contact[0]==ib and contact[1]==ia):margin=0.0
+        parts[i,9]+=w[9]*wp.max(0.0,margin-gap*1000.0)**2.0
         if ia==0:palm_gap=wp.min(palm_gap,gap*1000.0)
     max_depth=float(0.0)
     if data.plane_count[0]>0 or data.object_mesh[0]!=wp.uint64(0):
@@ -174,8 +183,26 @@ def card_cost(x: wp.array2d(dtype=float), poses: wp.array2d(dtype=wp_vec7), data
                     depth=wp.max(0.0,-distance)*1000.0
                 max_depth=wp.max(max_depth,depth)
                 parts[i,10]+=w[11]*wp.max(0.0,depth-w[12])**2.0
+    for k in range(data.mesh_contact_count[0]):
+        pair=data.mesh_contact_regions[k];target=data.mesh_contact_targets[k]
+        ta=poses[i,data.links[pair[0]]];tb=poses[i,data.links[pair[1]]]
+        qa=se3_apply_func(se3_inverse_func(ta),target)
+        qb=se3_apply_func(se3_inverse_func(tb),target)
+        ha=wp.mesh_query_point_no_sign(data.meshes[pair[0]],qa,10.0)
+        hb=wp.mesh_query_point_no_sign(data.meshes[pair[1]],qb,10.0)
+        if ha.result and hb.result:
+            a=se3_apply_func(ta,wp.mesh_eval_position(data.meshes[pair[0]],ha.face,ha.u,ha.v))
+            b=se3_apply_func(tb,wp.mesh_eval_position(data.meshes[pair[1]],hb.face,hb.u,hb.v))
+            parts[i,12]+=w[15]*squared((a-b)*1000.0)
+            parts[i,12]+=w[0]*(squared((a-target)*1000.0)+squared((b-target)*1000.0))
+    if data.wrist_reference_weights[0]>0.0:
+        tf=poses[i,data.links[0]];ref=data.wrist_reference[0]
+        wrist_qa=rotation(tf);wrist_qb=rotation(ref)
+        dot=wrist_qa[0]*wrist_qb[0]+wrist_qa[1]*wrist_qb[1]+wrist_qa[2]*wrist_qb[2]+wrist_qa[3]*wrist_qb[3]
+        parts[i,13]+=data.wrist_reference_weights[0]*4.0*(1.0-dot*dot)
+        parts[i,13]+=data.wrist_reference_weights[1]*squared((wp.vec3(tf[0],tf[1],tf[2])-wp.vec3(ref[0],ref[1],ref[2]))*1000.0)
     total=float(0.0)
-    for k in range(12):total+=parts[i,k]
+    for k in range(14):total+=parts[i,k]
     raw[i]=total
     depths[i,0]=max_depth;depths[i,1]=palm_gap
     if not wp.isfinite(total):total=wp.inf
@@ -271,6 +298,22 @@ def elite_step(weights: wp.array2d(dtype=float),noise: wp.array2d(dtype=float),d
     std[b,d]=wp.max(std[b,d]*decay,1.0e-12)
 
 
+@wp.kernel(enable_backward=False)
+def motion_draws(x: wp.array2d(dtype=float),noise: wp.array2d(dtype=float),centers: wp.array2d(dtype=float),
+                 motion: wp.array2d(dtype=float),valid: wp.array(dtype=int),lower: wp.array2d(dtype=float),
+                 upper: wp.array2d(dtype=float),count: int,scale: float,std: wp.array2d(dtype=float),
+                 active: wp.array(dtype=float),seed: int,epoch: wp.array(dtype=int),salt: int):
+    i,j=wp.tid()
+    if valid[0]!=0 and i>=x.shape[0]-count:
+        # Read the same raw normal as Robokit, before global-centre clamping.
+        # Clipped global noise would wrongly truncate an interior local cloud
+        # whenever the global CEM mean sits on a native joint limit.
+        state=wp.rand_init(seed+epoch[0]*7919,(salt*1000003+i)*x.shape[1]+j)
+        value=centers[0,j]
+        if active[j]!=0.0:value=wp.clamp(motion[0,j]+scale*std[0,j]*wp.randn(state),lower[0,j],upper[0,j])
+        x[i,j]=value;noise[i,j]=value-centers[0,j]
+
+
 class CardSampler(GaussianSampler):
     def __init__(self,**kwargs):
         super().__init__(**kwargs)
@@ -298,6 +341,11 @@ class CardSampler(GaussianSampler):
     def sample(self,var,scores):
         result=super().sample(var,scores)
         if self.lower is not None:
+            if getattr(self,'motion_center',None) is not None:
+                wp.launch(motion_draws,result.get(self.var_key).x.shape,
+                    [result.get(self.var_key).x,self.noise,self._centers.get(self.var_key).x,
+                     self.motion_center,self.motion_valid,self.lower,self.upper,self.motion_count,.15,
+                     self.std,self.active_dof_mask,self.seed,self.epoch,self._round-1],device=self._device)
             wp.launch(ball_projection,result.batch_size,
                 [result.get(self.var_key).x,self.noise,self.lower,self.upper,self.radius],device=self._device)
         return result
@@ -318,11 +366,16 @@ class CardCostTask(Task):
         self.states={};self.buffers={};self.data=CardData();d=self.data;s=owner.settings
         def array(values,dtype):return wp.array(np.asarray(values),dtype=dtype,device=self.device)
         links=np.asarray(owner.initializer.link_ids)[[0]+[1+4*f+k for f in range(5) for k in range(3)]]
+        d.wrist_reference=array([[0,0,0,1,0,0,0]],wp_vec7)
+        d.wrist_reference_weights=array([0.,0.],float)
         d.links=array(links,int);self.meshes=[]
         for triangles in owner.pad_triangles:
             vertices=triangles.cpu().numpy().reshape(-1,3)
             self.meshes.append(wp.Mesh(points=array(vertices,wp.vec3),indices=array(np.arange(len(vertices)),int)))
         d.meshes=array([m.id for m in self.meshes],wp.uint64)
+        d.mesh_contact_count=array([0],int)
+        d.mesh_contact_regions=array(np.zeros((105,2),np.int32),wp.vec2i)
+        d.mesh_contact_targets=array(np.zeros((105,3)),wp.vec3)
         d.active=array(np.zeros(16,np.int32),int);d.rho=array(np.ones(16),float);d.old_valid=array(np.zeros(16,np.int32),int)
         for key in ['target','direction','preference','old_local']:setattr(d,key,array(np.zeros((16,3)),wp.vec3))
         d.apex=array(owner.apices.cpu().numpy(),wp.vec3);d.belly=array(owner.surface.normals[owner.region_owners],wp.vec3)
@@ -337,7 +390,7 @@ class CardCostTask(Task):
         d.wrist_inverse=array([[0,0,0,1,0,0,0]],wp_vec7);d.object_inverse=array([[0,0,0,1,0,0,0]],wp_vec7);d.object_mesh=array([0],wp.uint64);self.object_mesh=None
         d.previous=wp.zeros((1,26),dtype=float,device=self.device);d.previous_valid=array([0],int)
         d.motion_joint=wp.zeros(20,dtype=float,device=self.device);d.motion_valid=array([0],int)
-        d.weights=array([s.wc**2,s.direction_price*s.radius_mm**2,s.wfix**2,s.wtip**2,s.wn**2,s.wb**2,s.wtheta**2,s.wt**2,s.womega**2,s.wself**2,s.margin_mm,s.wobj_pseudo**2,s.allowance_mm,s.hard_penetration_mm,s.wmotion_joint**2],float)
+        d.weights=array([s.wc**2,s.direction_price*s.radius_mm**2,s.wfix**2,s.wtip**2,s.wn**2,s.wb**2,s.wtheta**2,s.wt**2,s.womega**2,s.wself**2,s.margin_mm,s.wobj_pseudo**2,s.allowance_mm,s.hard_penetration_mm,s.wmotion_joint**2,s.wpinch**2],float)
         self.counter=wp.zeros(1,dtype=int,device=self.device);slots=s.iterations+8
         self.archive_x=wp.zeros((slots*s.population,26),dtype=float,device=self.device)
         self.archive_cost=wp.full(slots*s.population,wp.inf,dtype=float,device=self.device)
@@ -346,6 +399,16 @@ class CardCostTask(Task):
     def update(self,c):
         d=self.data;o=self.owner
         def put(target,values):wp.copy(target,wp.array(np.asarray(values),dtype=target.dtype,device=self.device))
+        reference=c.get('wrist_reference')
+        put(d.wrist_reference_weights,c.get('wrist_reference_weights',(0.,0.)))
+        if reference is not None:
+            quat=Rotation.from_rotvec(reference[3:6]).as_quat()
+            put(d.wrist_reference,[np.r_[reference[:3],quat[3],quat[:3]]])
+        evidence=c.get('mesh_contacts',[])
+        if len(evidence)>105:raise ValueError('Too many source mesh contact pairs')
+        regions=np.zeros((105,2),np.int32);targets=np.zeros((105,3))
+        for k,item in enumerate(evidence):regions[k]=item['regions'];targets[k]=item['target']
+        put(d.mesh_contact_count,[len(evidence)]);put(d.mesh_contact_regions,regions);put(d.mesh_contact_targets,targets)
         active=np.zeros(16,np.int32);target=np.zeros((16,3));direction=target.copy();preference=target.copy();rho=np.ones(16)
         force_max=max((a['force'] for a in c['anchors']),default=0.)
         for a in c['anchors']:
@@ -422,6 +485,8 @@ class RobokitCardSolver:
         self.solver=CardPopulationSolver([self.task],PopulationSolverConfig(stages=[Stage(s.iterations)],samplers=[config],cuda_graph_mode='full',use_early_stopping=False),device)
         # Preallocate both widths before capture. Context buffers are filled first.
         self.lower=wp.zeros((1,26),dtype=float,device=device);self.upper=wp.zeros((1,26),dtype=float,device=device)
+        self.motion_center=wp.zeros((1,26),dtype=float,device=device)
+        self.motion_valid=wp.zeros(1,dtype=int,device=device)
         self.rotation_reference=None
         self.initialized=False
 
@@ -446,9 +511,20 @@ class RobokitCardSolver:
         center=project_value(center);self.task.update(c)
         wp.copy(self.var.get(VarKey.ROBOT).x,wp.array(center[None],dtype=float,device=device))
         wp.copy(self.lower,wp.array(lo[None],dtype=float,device=device));wp.copy(self.upper,wp.array(hi[None],dtype=float,device=device))
+        motion=None
+        if c.get('motion_joint') is not None and s.wmotion_joint>0:
+            t,r,_=c['previous']
+            if c.get('previous_source_wrist') is not None:
+                origin,rotation_now=source_wrist(c['joints']);old_origin,old_rotation=c['previous_source_wrist'];delta=o.tensor(rotation_now@old_rotation.T)
+                t=o.tensor(origin)+delta@(t-o.tensor(old_origin));r=delta@r
+            motion=(t,r,c['motion_joint'])
+            wp.copy(self.motion_center,wp.array(pack(motion,center[3:6])[None],dtype=float,device=device))
+        self.motion_valid.fill_(int(motion is not None))
         if not self.initialized:
             original=self.solver.config.cuda_graph_mode;self.solver.config.cuda_graph_mode='none';self.solver.setup(self.var)
             sampler=self.solver.samplers[0];sampler.lower=self.lower;sampler.upper=self.upper;sampler.radius=s.translation_step_m
+            sampler.motion_center=self.motion_center;sampler.motion_valid=self.motion_valid
+            sampler.motion_count=min(s.population-1,int(s.population*s.motion_sample_fraction))
             self.solver.config.cuda_graph_mode=original
             std=np.array([s.translation_sigma_m]*3+[s.rotation_sigma_rad]*3+[s.joint_sigma_rad]*20,np.float32)
             wp.copy(sampler.std_reset,wp.array(std[None],dtype=float,device=device))
@@ -463,6 +539,10 @@ class RobokitCardSolver:
         seed_costs=[]
         for value in [center]+([previous] if previous is not None else []):
             idx=len(costs);cost=self._parts_vector(value,total=True);seed_costs.append(cost)
+            xs=np.vstack((xs,value));costs=np.r_[costs,cost];ids=np.r_[ids,idx]
+        if motion is not None:
+            value=project_value(pack(motion,self.rotation_reference))
+            idx=len(costs);cost=self._parts_vector(value,total=True)
             xs=np.vstack((xs,value));costs=np.r_[costs,cost];ids=np.r_[ids,idx]
         finite=ids[np.isfinite(costs[ids])&np.isfinite(xs[ids]).all(1)]
         if elite_archive is not None:
@@ -483,7 +563,7 @@ class RobokitCardSolver:
             previous_incumbent_kind='previous' if previous is not None and chosen==ids[-1] else None,
             previous_incumbent_cost=prev_cost,temporal_candidate_costs={'previous':prev_cost} if previous is not None else {},
             sampled_candidates=s.population*s.iterations,evaluations=int(sum(widths))+len(seed_costs),
-            iterations=s.iterations,elite_count=max(1,int(s.population*s.elite_fraction)),source_motion_samples_per_round=0,
+            iterations=s.iterations,elite_count=max(1,int(s.population*s.elite_fraction)),source_motion_samples_per_round=min(s.population-1,int(s.population*s.motion_sample_fraction)) if motion is not None else 0,
             coarse_verified_candidates=0,coarse_verification_rejected=0,dense_verified_candidates=0,dense_verification_rejected=0,
             hard_rejected=int((~np.isfinite(costs[ids])).sum()),seed=s.seed,final_sigma_ratio=s.gamma,
             last_sample_sigma_ratio=s.gamma**((s.iterations-1)/s.iterations),cuda_graph=True,
@@ -507,7 +587,7 @@ class RobokitCardSolver:
         wp.launch(card_cost,1,[var.get(VarKey.ROBOT).x,self.task.states[1].T_world_link.reshape((1,self.task.robot.spec.num_links)),self.task.data,parts,raw,depths,cost],device=device)
         return float(cost.numpy()[0]) if total else dict(zip(PARTS,parts.numpy()[0].tolist()))
 
-    def details(self,initial,c):
+    def details(self,initial,c,*,mesh_audit=True):
         """Report exactly the search material points, plus the native endpoint audit."""
         import torch
         from retarget.baseline.card.contact_force import fit_coulomb_force
@@ -525,11 +605,17 @@ class RobokitCardSolver:
                 vector=o.tensor(estimate['vector_relative']) if estimate is not None else o.tensor(a['direction'])*a['force']
                 support[region]=fit_coulomb_force(vector,ns[region],o.settings.friction_coefficient,o.settings.normal_force_weight)
         parts={k:o.tensor([v]) for k,v in values.items()}
-        for k in ['collision_mesh','contact_force_vector','contact_normal_force','contact_self_closure']:parts[k]=o.tensor([0.])
+        for k in ['collision_mesh','contact_force_vector','contact_normal_force']:parts[k]=o.tensor([0.])
         groups={key:sum(parts[k] for k in names) for key,names in {
-            'contact':['contact_position','contact_direction','contact_fix'],'style':['style_tip','style_normal','style_bone'],
+            'contact':['contact_position','contact_direction','contact_fix','contact_self_closure'],'style':['style_tip','style_normal','style_bone','style_wrist'],
             'smooth':['smooth_joint','smooth_translation','smooth_rotation','motion_joint'],'collision':['collision_self','collision_object']}.items()}
-        t,r,j=initial;p,rr=o.frames(t[None],r[None],j[None]);mesh_depth,mesh_valid=o.mesh_collision.query(p,rr,dense=True)
+        t,r,j=initial
+        if mesh_audit:
+            p,rr=o.frames(t[None],r[None],j[None]);mesh_depth,mesh_valid=o.mesh_collision.query(p,rr,dense=True)
+        else:
+            # Unknown diagnostic state, never a successful mesh check. This
+            # does not enter CARD's objective or finite-candidate selection.
+            mesh_depth=j.new_zeros((1,21,21));mesh_valid=torch.zeros(1,dtype=torch.bool,device=device)
         maximum=mesh_depth.amax((-1,-2));hard_mesh=(maximum>o.settings.self_penetration_mm)|~mesh_valid
         depths=wp.to_torch(self.task.buffers[1][2]);object_depth=depths[:,0]
         hard_object=torch.zeros_like(hard_mesh)

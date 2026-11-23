@@ -90,6 +90,12 @@ class WujiMeshCollision:
 
     def query(self,positions,rotations,dense=False):
         p=positions[:,self.body_ids].contiguous();r=rotations[:,self.body_ids].contiguous()
+        return self.query_links(p,r,dense)
+
+    def query_links(self,positions,rotations,dense=False):
+        """The same query for already selected native link transforms."""
+        p=positions.contiguous();r=rotations.contiguous()
+        if p.shape[1:]!=(21,3) or r.shape!=(len(p),21,3,3):raise ValueError('Invalid WUJI2 collision link pose')
         if not torch.isfinite(p).all() or not torch.isfinite(r).all():raise ValueError('Nonfinite WUJI2 collision pose')
         points,owners=self.samples[dense];b=len(p)
         depth=wp.zeros((b,21,21),dtype=float,device=self.device);invalid=wp.zeros(b,dtype=int,device=self.device)

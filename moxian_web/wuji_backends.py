@@ -20,8 +20,8 @@ def create_retarget(backend, topology, cache=None, device='cpu', **kwargs):
         return ContactSLSQPRetarget(topology, cache, device, **kwargs)
     if backend == 'cem':
         if kwargs.pop('realtime', False):
-            from retarget.baseline.card.trajectory import FixedLagCardRetarget
-            return FixedLagCardRetarget(topology, cache, device, **kwargs)
+            from retarget.baseline.card.single_frame import SingleFrameCardRetarget
+            return SingleFrameCardRetarget(topology, cache, device, **kwargs)
         from retarget.baseline.card.retarget import TactileRetarget
         return TactileRetarget(topology, cache, device, **kwargs)
     raise ValueError('Unknown Wuji2 solver: ' + str(backend))

@@ -111,6 +111,32 @@ class TactileRetarget:
         bones=joints[1:].reshape(5,4,3)
         return dict(tips=self.tensor(apices),normals=self.tensor(normals),directions=self.tensor(unit(np.diff(bones,axis=1))))
 
+    def mesh_contact_evidence(self,vertices,joints):
+        """Use the same signed, directionally resolved source evidence as CART."""
+        if not hasattr(self.extractor,'material'):return []
+        if not hasattr(self,'source_contact_detector'):
+            from moxian_web.cart_contacts import SourceContacts
+            from moxian_web.qnbot_surface import QnbotSurface
+            topology=self.extractor.topology
+            model=QnbotSurface(topology['hand_side'],self.device,finger_twist=True)
+            self.source_contact_detector=SourceContacts(topology,model,self.device)
+            self.source_contact_cache={}
+        import hashlib
+        key=hashlib.sha256(np.ascontiguousarray(vertices).tobytes()).digest()
+        if key not in self.source_contact_cache:
+            result=self.source_contact_detector.detect(vertices@self.mirror,joints@self.mirror,{'timestamp_ms':0.})
+            from moxian_web.cart_contacts import link_owner
+            contacts=[]
+            for pair in result['self_pairs']:
+                owners=[link_owner(name) for name in pair['regions']]
+                regions=[int(np.flatnonzero(self.region_owners==owner)[0]) for owner in owners]
+                target=np.asarray(pair['points_m']).mean(0)@self.mirror.T
+                contacts.append(dict(regions=regions,target=target.tolist(),depth_m=pair['depth_m'],
+                    witness_resolution=pair['witness_resolution']))
+            self.source_contact_cache[key]=contacts
+            while len(self.source_contact_cache)>8:self.source_contact_cache.pop(next(iter(self.source_contact_cache)))
+        return self.source_contact_cache[key]
+
     def context(self,vertices,joints,anchors,initial=None):
         target=self.style_targets(vertices,joints);active=np.zeros(16,bool)
         for a in anchors:active[a['region']]=True
@@ -119,7 +145,7 @@ class TactileRetarget:
         if (self.settings.wmotion_joint>0 and initial is not None and self.previous is not None and self.previous_initial_joint is not None
                 and not self.initializer.last_report.get('history_reset_reason')):
             motion_joint=(self.previous[2]+initial[2]-self.previous_initial_joint).clamp(self.adapter.low[6:],self.adapter.high[6:])
-        return dict(**target,vertices=vertices,joints=joints,anchors=anchors,active=active,free=self.tensor(free),
+        return dict(mesh_contacts=self.mesh_contact_evidence(vertices,joints),**target,vertices=vertices,joints=joints,anchors=anchors,active=active,free=self.tensor(free),
                     sdf=self.sdf,previous=self.previous,motion_joint=motion_joint,previous_source_wrist=self.previous_source_wrist,self_pairs=self.self_contact_pairs,pair_targets=self.self_contact_targets,
                     paired_local=self.paired_local,paired_normal=self.paired_normal,paired_candidates=self.paired_candidates)
 
@@ -410,13 +436,14 @@ class TactileRetarget:
         diagnostic['contact_objective_policy']='experimental_pair_closure' if self.settings.experimental_self_contact else 'CARD_source_CoP_direction_force_and_semantic_pad_search'
         if seed_report['applied']:diagnostic['search_center']='current_frame_robokit_plus_tactile'
         t,r,theta=best
-        if use_robokit:detail=self.robokit_cem.details(best,c)
+        mesh_async=bool(getattr(self,'mesh_audit_async',False) and use_robokit)
+        if use_robokit:detail=self.robokit_cem.details(best,c,mesh_audit=not mesh_async)
         else:_,detail=self.evaluate(t[None],r[None],theta[None],c,True)
         audited_at=clock()
         if diagnostic['feasible'] and bool(detail['hard'][0]):
             diagnostic.update(feasible=False,final_audit_failed=True)
             diagnostic['output_selection']='current_candidate_failed_final_audit'
-        diagnostic['output_self_mesh_satisfied']=bool(detail['mesh_valid'][0] and not detail['hard_mesh'][0])
+        diagnostic['output_self_mesh_satisfied']=None if mesh_async else bool(detail['mesh_valid'][0] and not detail['hard_mesh'][0])
         if diagnostic['feasible']:
             self.previous=tuple(v.clone() for v in (t,r,theta));self.previous_timestamp=stamp
             self.previous_initial_joint=initial[2].clone()
@@ -464,9 +491,9 @@ class TactileRetarget:
             joint_names=[self.model.joint(i).name for i in range(6,26)],joint_positions_rad=qn[6:].tolist(),qpos=qn.tolist(),raw_qpos=qn.tolist(),wrist_position_m=t.cpu().tolist(),wrist_rotation=r.cpu().tolist(),
             link_positions_m=p.tolist(),link_rotations=rr.tolist(),taxel_positions_m=taxels.tolist(),taxel_normals=taxel_normals.tolist(),source_taxel_positions_m=points.tolist(),source_taxel_normals=normals.tolist(),source_joints_m=joints.tolist(),source_vertices_m=vertices.tolist(),
             contact_ready=bool(weights['ready'] and diagnostic['feasible']),contact_mask=weights['mask'].tolist() if weights['ready'] and diagnostic['feasible'] else [None]*460,contact_weights=weights['cloud'].tolist(),
-            collision=dict(source='CARD_capsules_and_object_SDF_with_native_mesh_diagnostics',dynamics=False,max_penetration_mm=float(detail['max_penetration_mm'][0]),
-                self_mesh=self.mesh_collision.report(detail['mesh_depth'][0],detail['mesh_valid'][0]),self_hard_limit_mm=None,mesh_diagnostic_limit_mm=self.settings.self_penetration_mm,mesh_role='diagnostic_only',
-                object_max_penetration_mm=float(detail['object_max_penetration_mm'][0]),mesh_hard_rejected=False,mesh_diagnostic_exceeded=bool(detail['hard_mesh'][0]),
+            collision=dict(source='CARD_capsules_and_object_SDF_with_native_mesh_diagnostics',dynamics=False,max_penetration_mm=None if mesh_async else float(detail['max_penetration_mm'][0]),
+                self_mesh=None if mesh_async else self.mesh_collision.report(detail['mesh_depth'][0],detail['mesh_valid'][0]),self_hard_limit_mm=None,mesh_diagnostic_limit_mm=self.settings.self_penetration_mm,mesh_role='diagnostic_only',
+                object_max_penetration_mm=float(detail['object_max_penetration_mm'][0]),mesh_hard_rejected=False,mesh_diagnostic_exceeded=None if mesh_async else bool(detail['hard_mesh'][0]),
                 object_hard_gate_enabled=False,palm_hard_gate_enabled=False,
                 min_palm_gap_mm=float(detail['min_palm_gap_mm'][0]),palm_hard_rejected=bool(detail['hard_palm'][0]),pair_hard_rejected=bool(detail['hard_pair'][0]),object_hard_rejected=bool(detail['hard_object'][0])),
             quality=dict(active_taxels=int(weights['mask'].sum()),active_patches=int(weights['active'].sum()),active_anchors=len(anchors),contact_rmse_mm=float(np.sqrt(np.mean(np.square(errors)))) if errors else None,

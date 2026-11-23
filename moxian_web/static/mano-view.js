@@ -5,7 +5,6 @@ import {createTaxels,updateTaxels} from './taxel-view.js';
 const canvas=document.getElementById('manoCanvas');
 let renderer,scene,camera,controls,mesh,lines,topology,version,loading=false,error=null,current=null,active=false,binding=false,targetMarkers=[],targetLinks,contactDots;
 let surface;
-let predictionSnapshot=null,predictionReceivedAt=0;
 let displayedModel,displayedContact,receivedAt=0,frameKey=null,drawSignature=null,geometryUpdates=0,renderSize='';
 const modelVersion=m=>m.geometry_version+':'+m.binding_version+':'+m.coordinate_frame+':'+(m.sensor_mounting?.flat_reference_id||'unregistered');
 const finitePoints=a=>ArrayBuffer.isView(a)?a.length>0&&a.length%3===0&&a.every(Number.isFinite):Array.isArray(a)&&a.length>0&&a.every(p=>Array.isArray(p)&&p.length===3&&p.every(Number.isFinite));
@@ -52,7 +51,7 @@ async function loadTopology(wanted){
     surface?.dispose();surface=nextSurface;mesh=nextMesh;scene.add(mesh);topology=t;version=wanted;
     if(lines){scene.remove(lines);lines.geometry.dispose();lines.material.dispose();}
     lines=nextLines;scene.add(lines);
-    displayedModel=null;predictionSnapshot=null;frameKey=null;drawSignature=null;if(current)update(current,active);
+    displayedModel=null;frameKey=null;drawSignature=null;if(current)update(current,active);
   }catch(e){window.manoRenderError=e.message;}finally{loading=false;}
 }
 function render(){
@@ -98,28 +97,11 @@ function update(state,visible){
  if(!(canPresent||holding)){window.updateCartHullOverlay?.(scene,null,basis);render();return;}
  if(!mesh||!topology)return;
  const contact=(canPresent||snapshot)?displayedContact:null;
- const prediction=state?.contact_prediction;
- const predictionEnabled=!!document.getElementById('predictionOverlay')?.checked;
- if(predictionEnabled&&prediction?.ready===true&&prediction.vertex_probability?.length===778&&prediction.hand_side===m.hand_side&&prediction.binding_version===m.binding_version&&Math.abs(prediction.timestamp_ms-m.timestamp_ms)<=250&&prediction.timestamp_ms!==predictionSnapshot?.timestamp_ms){
-  const previous=predictionSnapshot?.binding_version===prediction.binding_version?predictionSnapshot.vertex_probability:null;
-  predictionSnapshot={...prediction,vertex_probability:prediction.vertex_probability.map((p,i)=>{p=Number.isFinite(p)?Math.max(0,Math.min(1,p)):0;return previous?previous[i]*.7+p*.3:p;})};predictionReceivedAt=now;
- }
- const overlay=predictionEnabled&&predictionSnapshot?.binding_version===m.binding_version&&now-predictionReceivedAt<500;
- const heat=overlay?predictionSnapshot:null;
  window.updateCartHullOverlay?.(scene,canPresent&&m.cart_hull?.timestamp_ms===m.timestamp_ms?m.cart_hull:null,basis);
- const signature=JSON.stringify([key,window.cartHullVisible,contact?.ready===true,contact?.ready===true?contact.cell_contact:null,document.getElementById('manoWire').checked,showTargets,overlay,overlay?heat.timestamp_ms:null]);
+ const signature=JSON.stringify([key,window.cartHullVisible,contact?.ready===true,contact?.ready===true?contact.cell_contact:null,document.getElementById('manoWire').checked,showTargets]);
  if(signature===drawSignature){if(activated)render();return;}
  drawSignature=signature;
  const positions=mesh.geometry.attributes.position;
- if(mesh.material){
-  if(overlay){
-   if(!mesh.geometry.attributes.color)mesh.geometry.setAttribute('color',new THREE.Float32BufferAttribute(778*3,3));
-   const colors=mesh.geometry.attributes.color;
-   const neutral=new THREE.Color('#d4ba96'),warm=new THREE.Color('#e6a23c');
-   heat.vertex_probability.forEach((p,i)=>colors.setXYZ(i,neutral.r+(warm.r-neutral.r)*p,neutral.g+(warm.g-neutral.g)*p,neutral.b+(warm.b-neutral.b)*p));colors.needsUpdate=true;
-  }
-  if(mesh.material.vertexColors!==overlay){mesh.material.vertexColors=overlay;mesh.material.color.set(overlay?'#ffffff':'#d4ba96');mesh.material.needsUpdate=true;}
- }
  const curved=newFrame?surface.update(m.vertices_m):surface.positions;
  if(newFrame){for(let i=0;i<curved.length;i+=3)positions.setXYZ(i/3,curved[i+1],curved[i],-curved[i+2]);positions.needsUpdate=true;mesh.geometry.computeVertexNormals();geometryUpdates++;}
  updateTaxels(contactDots,curved,surface.topology,contact,basis);
@@ -153,5 +135,5 @@ document.getElementById('manoWire').addEventListener('change',()=>update(current
 window.addEventListener('resize',render);
 if(window.currentMoxianState)update(window.currentMoxianState,document.getElementById('poseMode').value==='mano');
 
-window.debugManoView=()=>({active,version,loading,frameKey,geometryUpdates,hasMesh:!!mesh,surface:surface?.stats,targets:targetMarkers.filter(t=>t.visible).length,taxels:contactDots?.userData,taxelSphereCount:contactDots?.contactSpheres?.count||0,meshColor:mesh?.material?.color?.getHexString?.(),predictionOverlay:mesh?.material?.vertexColors===true,taxelPositions:contactDots?.geometry.attributes.position?Array.from(contactDots.geometry.attributes.position.array):[],taxelColors:contactDots?.geometry.attributes.color?Array.from(contactDots.geometry.attributes.color.array):[],visible:mesh?.visible,positionCount:mesh?.geometry.attributes.position.count,draw:renderer?.info.render,box:mesh?.geometry.boundingBox,camera:camera?.position,target:controls?.target,canvas:[canvas.width,canvas.height],error});
+window.debugManoView=()=>({active,version,loading,frameKey,geometryUpdates,hasMesh:!!mesh,surface:surface?.stats,targets:targetMarkers.filter(t=>t.visible).length,taxels:contactDots?.userData,taxelSphereCount:contactDots?.contactSpheres?.count||0,meshColor:mesh?.material?.color?.getHexString?.(),taxelPositions:contactDots?.geometry.attributes.position?Array.from(contactDots.geometry.attributes.position.array):[],taxelColors:contactDots?.geometry.attributes.color?Array.from(contactDots.geometry.attributes.color.array):[],visible:mesh?.visible,positionCount:mesh?.geometry.attributes.position.count,draw:renderer?.info.render,box:mesh?.geometry.boundingBox,camera:camera?.position,target:controls?.target,canvas:[canvas.width,canvas.height],error});
 window.debugCurvedSurface=()=>({positions:surface?.positions,topology:surface?.topology,source:surface?.source,recipes:surface?.recipes,mapHit:(f,b)=>surface.mapHit(f,b),stats:surface?.stats});

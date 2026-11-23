@@ -9,12 +9,14 @@ import time
 import numpy as np
 import torch
 from .cart_data import load_sessions,preprocess,manifest,preprocessing_current,implementation_identity as geometry_identity,file_hash
-from .cart_network import CartNetwork,LEVELS
+from .cart_network import CartNetwork
+from .cart_wrist import (FloatingCartHand,CartWristNetwork,FloatingWristObjective,
+    VERSION as WRIST_OBJECTIVE,wrist_config,state_velocity)
 from .cart_emf_observations import batch_future,pack_future
 from .cart_collision import CollisionModel,SDFLearner,frozen
-from .cart_objective import CartHand,CartObjective,policy_settings
-from .cart_protocol import PROTOCOL,ARCHITECTURES,FINGERS,POLICY_OUTPUT,POLICY_INPUT,POLICY_TRANSITION
-from .cart_fast import DEFAULT_BATCH_SIZE,PreparedBatch,ObservationStore,prepare_windows,group_normalizers,choose_parallel_batch
+from .cart_objective import CartHand
+from .cart_protocol import PROTOCOL,ARCHITECTURES,FINGERS,POLICY_OUTPUT,POLICY_INPUT,POLICY_TRANSITION,OBJECTIVES,V9_OBJECTIVE
+from .cart_fast import DEFAULT_BATCH_SIZE,PreparedBatch,ObservationStore,prepare_windows,choose_parallel_batch
 from .cart_contact_field import CONTACT_FIELD_VERSION
 from .cart_initialization import prepare_ik,attach_ik,perturb_initial_states,IK_VERSION,DEFAULT_INITIAL_NOISE_RAD
 from .cart_tracking import CartTracking
@@ -36,25 +38,19 @@ def implementation_identity():
         pretrained_sdf=file_hash(Path(__file__).with_name('cart_pretrained_sdf.py')),
         emf_policy_inputs=file_hash(Path(__file__).with_name('cart_emf_observations.py')),
         q_collision=file_hash(Path(__file__).with_name('cart_q_collision.py')),
-        policy_reward=file_hash(Path(__file__).with_name('cart_reward.py')),
+        floating_wrist=file_hash(Path(__file__).with_name('cart_wrist.py')),
         initialization=file_hash(Path(__file__).with_name('cart_initialization.py')),
         card_cost={name:file_hash(Path(__file__).parents[1]/name) for name in
             ('moxian_web/cart_card_cost.py','moxian_web/cart_card_neural_surface.py','moxian_web/cart_card_self_contact.py','retarget/baseline/card/retarget.py',
              'retarget/baseline/card/math.py','retarget/baseline/card/geometry.py')})
 
 
-def make_objective(hand,collision,kind='multiscale_exp_card_v1'):
-    if kind=='card_raw_neural_self_contact_v3':
-        from .cart_card_self_contact import SelfContactCardCostObjective
-        return SelfContactCardCostObjective(hand,collision)
-    if kind=='card_raw_neural_surface_v2':
-        from .cart_card_neural_surface import NeuralCardCostObjective
-        return NeuralCardCostObjective(hand,collision)
-    if kind in ('card_raw_neural_collision_v1','card_raw_neural_surface_v2'):
-        from .cart_card_cost import CardCostObjective
-        return CardCostObjective(hand,collision)
-    if kind!='multiscale_exp_card_v1':raise ValueError('Unknown CART policy objective')
-    return CartObjective(hand,policy_settings(),collision)
+def make_objective(hand,collision,kind=WRIST_OBJECTIVE):
+    if kind==WRIST_OBJECTIVE:return FloatingWristObjective(hand,collision)
+    if kind==V9_OBJECTIVE:
+        from .cart_card_self_contact import ActuatedSelfContactCardCostObjective
+        return ActuatedSelfContactCardCostObjective(hand,collision)
+    raise ValueError('CART supports only the v9 fixed-wrist and floating-wrist objectives')
 
 
 class RolloutTrajectory:
@@ -74,7 +70,7 @@ class RolloutTrajectory:
         if collision is None:raise ValueError('Collect rollout requires collision model')
         states=torch.cat(self.predictions).detach();frames=objective.hand.frames(states)
         rows=[row for step in self.pending for row in step[1]]
-        collision.collect_queries(states,rows,frames,sample_budget=512*len(self.pending))
+        collision.collect_queries(states[...,:20],rows,frames,sample_budget=512*len(self.pending))
         if hasattr(objective,'collect_geometry_queries'):
             objective.collect_geometry_queries(states,rows,frames)
 
@@ -93,10 +89,8 @@ class RolloutTrajectory:
                 references=torch.cat([x[2] for x in self.pending])
                 acceleration=torch.cat([torch.zeros_like(x[0]) if x[3] is None else x[3] for x in self.pending])
                 previous=[row for step in self.pending for row in step[4]]
-                weights=self.normalizers if self.normalizers is not None else group_normalizers(self.batch)
-                row_weights=[weights[t] for t in range(length) for _ in self.batch]
                 loss,parts,metrics=objective.batch(states,rows,references,acceleration=acceleration,
-                    previous_rows=previous,audit=audit,normalizers=row_weights,collect_metrics=collect_metrics)
+                    previous_rows=previous,audit=audit,normalizers=None,collect_metrics=collect_metrics)
                 # Only the monitor excludes the first frame; its acceleration
                 # loss contribution stays zero in the T-frame average.
                 if length>1:parts['acceleration']=parts['acceleration']*length/(length-1)
@@ -126,8 +120,9 @@ def predict_trajectory(model,objective,batch,normalizers=None,*,batch_observatio
     if any(initialized) and not all(initialized):raise ValueError('训练窗口不能混合 IK 与中性姿态初始化')
     if all(initialized):
         q=torch.stack([w['initial_q'].to(device) if isinstance(w['initial_q'],torch.Tensor) else objective.hand.tensor(w['initial_q']) for w in batch]).detach().clone()
+        q=model.initial_state(q)
     elif prepared:
-        q=neutral(objective.hand)[None].expand(len(batch),-1).clone()
+        q=model.initial_state(neutral(objective.hand)[None].expand(len(batch),-1).clone())
         with torch.no_grad():
             for j in range(max(offsets)):
                 candidate=model.apply_delta(q,model(q,**inputs_at([min(j,start) for start in offsets])))
@@ -136,7 +131,7 @@ def predict_trajectory(model,objective,batch,normalizers=None,*,batch_observatio
     else:
         initial=[]
         for w,start in zip(batch,offsets):
-            one=neutral(objective.hand)[None]
+            one=model.initial_state(neutral(objective.hand)[None])
             with torch.no_grad():
                 for j in range(start):one=model.apply_delta(one,model(one,**batch_future([w],[j],device)))
             initial.append(one[0])
@@ -163,8 +158,13 @@ def predict_trajectory(model,objective,batch,normalizers=None,*,batch_observatio
             delta=model.decode_observation_context(q,tuple(x[start:stop] for x in encoded))
         else:delta=model(q,**inputs)
         next_q=model.apply_delta(q,delta)
-        dt=inputs['future_dt'][:,0];velocity=(next_q-q)/dt[:,None]
-        acceleration=(velocity-(q-older_q)/old_dt[:,None])/(.5*(dt+old_dt))[:,None] if older_q is not None else None
+        dt=inputs['future_dt'][:,0]
+        if next_q.shape[-1]==26:
+            velocity=state_velocity(next_q,q,dt)
+            acceleration=(velocity-state_velocity(q,older_q,old_dt))/(.5*(dt+old_dt))[:,None] if older_q is not None else None
+        else:
+            velocity=(next_q-q)/dt[:,None]
+            acceleration=(velocity-(q-older_q)/old_dt[:,None])/(.5*(dt+old_dt))[:,None] if older_q is not None else None
         pending.append((next_q,rows,q,acceleration,previous))
         older_q,q,old_dt=q,next_q,dt
     weights=batch.normalizers if prepared and batch.normalizers is not None else normalizers
@@ -214,7 +214,7 @@ def policy_update(model,objective,learner,optimizer,batch,parallel_batch_size,ch
     if not batch or len(batch)>parallel_batch_size:
         raise ValueError('一次更新必须装入一个真实并行 batch，禁止跨显存分块累积梯度')
     device=objective.hand.device;batch=perturb_initial_states(batch,objective.hand,initial_noise_rad)
-    normalizers=group_normalizers(batch)
+    normalizers=None
     chunk=PreparedBatch(batch,device,normalizers) if all('store' in w for w in batch) else batch
     def sync():
         if str(device).startswith('cuda'):torch.cuda.synchronize(device)
@@ -276,7 +276,15 @@ def quality_summary(metrics):
     active=[m for m in metrics if m['contact_count']]
     keep=[m for m in metrics if m.get('contact_keep_count',0)]
     self_contacts=[m for m in metrics if m.get('self_contact_count',0)]
-    return dict(frames=len(metrics),contact_frames=len(active),
+    def subset_p95(key,count):
+        samples=[scalar(m[key][0])*1000 for m in resolved if m.get(count,0)>0 and key in m]
+        return float(np.percentile(samples,95)) if samples else None
+    actuated=[m for m in metrics if m.get('actuated_contact_count',0)>0]
+    return dict(palm_gap_p95_mm=subset_p95('palm_gap_m','palm_contact_count'),
+        finger_contact_gap_p95_mm=subset_p95('finger_gap_m','finger_contact_count'),
+        actuated_contact_gap_p95_mm=subset_p95('actuated_gap_m','actuated_contact_count'),
+        actuated_contact_satisfied_rate=float(np.mean([bool(m['actuated_contact_satisfied'][0]) for m in actuated])) if actuated else None,
+        frames=len(metrics),contact_frames=len(active),
         invalid_query_frames=len(metrics)-len(resolved),
         unresolved_contact_frames=sum(int(m.get('unresolved_contact_count',[0])[0])>0 for m in metrics),
         contact_satisfied_rate=float(np.mean([bool(m['feasible'][0]) for m in active])) if active else None,
@@ -294,10 +302,28 @@ def quality_summary(metrics):
 
 
 def motion_summary(samples):
+    wrist_velocity=[];wrist_acceleration=[];prior_state=None;prior_velocity=None;prior_dt=None
+    for stamp,state,segment in samples:
+        if state is None or len(state)!=26:
+            prior_state=None;prior_velocity=None;prior_dt=None;continue
+        if prior_state is not None and segment==prior_state[2] and 0<stamp-prior_state[0]<=250:
+            dt=(stamp-prior_state[0])/1000
+            velocity=state_velocity(torch.as_tensor(state)[None],torch.as_tensor(prior_state[1])[None],torch.tensor([dt]))[0,20:].numpy()
+            wrist_velocity.append(velocity)
+            if prior_velocity is not None:wrist_acceleration.append((velocity-prior_velocity)/(.5*(dt+prior_dt)))
+            prior_velocity=velocity;prior_dt=dt
+        else:prior_velocity=None;prior_dt=None
+        prior_state=(stamp,state,segment)
+    wrist_report={}
+    for name,values in (('velocity',wrist_velocity),('acceleration',wrist_acceleration)):
+        if values:
+            values=np.asarray(values)
+            wrist_report['wrist_translation_'+name+'_rms_'+('mm_s' if name=='velocity' else 'mm_s2')]=float(np.sqrt(np.mean(np.sum(values[:,:3]**2,-1)))*1000)
+            wrist_report['wrist_angular_'+name+'_rms_'+('deg_s' if name=='velocity' else 'deg_s2')]=float(np.rad2deg(np.sqrt(np.mean(np.sum(values[:,3:]**2,-1)))))
     previous=None;old_velocity=None;old_dt=None;velocities=[];accelerations=[]
     for stamp,q,segment in samples:
         if q is None:previous=None;old_velocity=None;old_dt=None;continue
-        q=np.asarray(q)
+        q=np.asarray(q)[:20]
         if previous is not None and segment==previous[2] and 0<stamp-previous[0]<=250:
             dt=(stamp-previous[0])/1000;velocity=(q-previous[1])/dt;velocities.extend(velocity.tolist())
             if old_velocity is not None:accelerations.extend(((velocity-old_velocity)/(.5*(dt+old_dt))).tolist())
@@ -305,7 +331,7 @@ def motion_summary(samples):
         else:old_velocity=None;old_dt=None
         previous=(stamp,q,segment)
     return dict(joint_velocity_rms_rad_s=float(np.sqrt(np.mean(np.square(velocities)))) if velocities else None,
-        joint_acceleration_rms_rad_s2=float(np.sqrt(np.mean(np.square(accelerations)))) if accelerations else None)
+        joint_acceleration_rms_rad_s2=float(np.sqrt(np.mean(np.square(accelerations)))) if accelerations else None,**wrist_report)
 
 
 def acceptance(quality,sdf,*,contact_field_required=True,penetration_limit_mm=.5):
@@ -347,7 +373,7 @@ def full_session(model,objective,sessions,check=lambda:None):
                     if q is None:
                         if rows[i].get('ik_valid') is not True:
                             segment+=1;continue
-                        q=objective.hand.tensor(rows[i]['ik_q_rad'])[None]
+                        q=model.initial_state(objective.hand.tensor(rows[i]['ik_q_rad'])[None])
                     window=dict(store=store,indices=list(range(i,i+11)))
                     inputs=PreparedBatch([window],objective.hand.device).future_inputs([0]);inputs['validate']=False
                     start=time.perf_counter();next_q=model.apply_delta(q,model(q,**inputs))
@@ -355,7 +381,9 @@ def full_session(model,objective,sessions,check=lambda:None):
                     row=rows[i+1]
                     _,_,quality=objective.batch(next_q,[row],q,previous_rows=[rows[i]],audit=True)
                     qualities.extend(quality);q=next_q
-                    values=q[0].cpu().numpy();predictions.append(dict(dataset=meta['id'],timestamp_ms=row['timestamp_ms'],q=values.tolist()))
+                    values=q[0].cpu().numpy();predictions.append(dict(dataset=meta['id'],timestamp_ms=row['timestamp_ms'],q=values[:20].tolist(),
+                        **(dict(state=values.tolist(),wrist_translation_m=values[20:23].tolist(),
+                            wrist_rotation_vector_rad=values[23:26].tolist()) if len(values)==26 else {})))
                     samples.append((row['timestamp_ms'],values,(meta['id'],segment)))
     finally:collision.auditing=old
     return dict(quality_summary(qualities),**motion_summary(samples)),predictions,times
@@ -365,22 +393,23 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
           smoke=False,architecture='attention',resume=False,warmup_steps=None,device=None,micro_batch_size=0,initialize_from=None,
           initial_noise_rad=DEFAULT_INITIAL_NOISE_RAD,attention_precision='auto',validation_interval=10,validation_window_budget=32,
           initialize_geometry_from=None,wandb_project=None,wandb_entity=None,wandb_base_url=None,wandb_mode='online',window_stride=0,
-          initialize_sdf_from=None,policy_objective='multiscale_exp_card_v1',policy_loss_scale=0.,initialize_contact_from=None,optimizer_kind='adamw',
-          initialize_q_collision_from=None,transfer_policy_optimizer=True,initialize_checkpoint='resume'):
-    if architecture not in ARCHITECTURES:raise ValueError('architecture must be attention or fsq')
+          initialize_sdf_from=None,policy_objective=WRIST_OBJECTIVE,policy_loss_scale=1.e8,initialize_contact_from=None,optimizer_kind='muon_sgd',
+          initialize_q_collision_from=None,transfer_policy_optimizer=True,initialize_checkpoint='resume',fresh_sdf_spec=None):
+    if architecture not in ARCHITECTURES:raise ValueError('Only attention CART is supported')
+    if policy_objective not in OBJECTIVES:raise ValueError('Only v9 and floating-wrist CART objectives are supported')
     from .geort_service import safe_id
     run_id=safe_id(run_id)
     if initialize_from:initialize_from=safe_id(initialize_from)
     if initialize_geometry_from:initialize_geometry_from=safe_id(initialize_geometry_from)
     if sum(map(bool,(resume,initialize_from,initialize_geometry_from)))>1:raise ValueError('恢复、策略初始化与仅几何初始化不能同时指定')
     if initialize_sdf_from and (resume or initialize_from):raise ValueError('Neural SDF 导入用于新策略；恢复时从 checkpoint 自动还原')
+    if fresh_sdf_spec is not None and any((resume,initialize_from,initialize_geometry_from,initialize_sdf_from,initialize_contact_from,initialize_q_collision_from)):
+        raise ValueError('Fresh geometry architecture cannot be combined with checkpoint initialization')
     scaling=policy_cost_scaling_spec(policy_loss_scale)
     if optimizer_kind not in ('adamw','muon_sgd'):raise ValueError('Unknown optimizer')
     if initialize_checkpoint not in ('resume','best'):raise ValueError('Unknown initializer checkpoint')
     if initialize_checkpoint=='best' and (not initialize_from or transfer_policy_optimizer):
         raise ValueError('Best-weight initialization requires initialize_from and a fresh policy optimizer')
-    if policy_loss_scale and policy_objective not in ('card_raw_neural_collision_v1','card_raw_neural_surface_v2','card_raw_neural_self_contact_v3'):
-        raise ValueError('CARD cost normalization requires a CARD objective')
     if initialize_contact_from and (resume or initialize_from or initialize_geometry_from):
         raise ValueError('Independent contact initialization requires a fresh policy/geometry optimizer')
     root=Path(root);folder=root/'models'/run_id
@@ -429,35 +458,41 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         train_windows=windows(sessions,length,window_stride);validation_windows=windows(validation,length)
         if not train_windows or not validation_windows:raise ValueError('训练与验证各需至少连续 length+10 帧真实观测，不跨断流边界')
         device=device or ('cuda:0' if torch.cuda.is_available() else 'cpu')
-        hand=CartHand(device);collision=CollisionModel(hand);objective=make_objective(hand,collision,policy_objective)
+        hand=(FloatingCartHand if policy_objective==WRIST_OBJECTIVE else CartHand)(device)
+        collision=CollisionModel(hand);objective=make_objective(hand,collision,policy_objective)
         objective.policy_loss_scale=policy_loss_scale
         card_reports=[]
-        if policy_objective in ('card_raw_neural_collision_v1','card_raw_neural_surface_v2','card_raw_neural_self_contact_v3'):
+        if policy_objective in OBJECTIVES:
             from .cart_card_cost import attach_card_targets
             target_devices=[torch.device(device)] if str(device).startswith('cuda') else []
             with torch.random.fork_rng(devices=target_devices):
                 card_reports=attach_card_targets(root,sessions+validation,device,check,progress)
         mean,scale=position_statistics(sessions)
-        model=CartNetwork(hand.low,hand.high,architecture,position_mean=mean,position_scale=scale).to(device)
-        sdf_spec={'kind':'link_sdf_v1'}
+        model=(CartWristNetwork if policy_objective==WRIST_OBJECTIVE else CartNetwork)(hand.low,hand.high,architecture,position_mean=mean,position_scale=scale).to(device)
+        from .cart_pretrained_sdf import fresh_geometry_spec
+        sdf_spec=fresh_geometry_spec(hand)
         # Construct replacement geometry after policy initialization, preserving
         # the same seed and initial attention policy in the comparison run.
         from .cart_pretrained_sdf import load_pretrained,restore_geometry
         devices=[torch.device(device)] if str(device).startswith('cuda') else []
         with torch.random.fork_rng(devices=devices):
-            if initialize_sdf_from:
+            if fresh_sdf_spec is not None:
+                import copy
+                sdf_spec=copy.deepcopy(fresh_sdf_spec)
+                collision.model=restore_geometry(hand,sdf_spec)
+            elif initialize_sdf_from:
                 collision.model,sdf_spec=load_pretrained(hand,initialize_sdf_from)
             elif resume or initialize_from or initialize_geometry_from:
                 origin_folder=folder if resume else root/'models'/(initialize_from or initialize_geometry_from)
                 sdf_spec=json.loads((origin_folder/'config.json').read_text()).get('sdf_backend',sdf_spec)
-                if sdf_spec['kind']!='link_sdf_v1':collision.model=restore_geometry(hand,sdf_spec)
+                collision.model=restore_geometry(hand,sdf_spec)
             if initialize_contact_from:
                 contact_state=torch.load(initialize_contact_from,map_location='cpu',weights_only=True)
                 if not hasattr(collision.model,'load_contact_state'):raise ValueError('Contact initialization requires pretrained articulated SDF')
                 collision.model.load_contact_state(contact_state)
                 if not all(torch.isfinite(p).all() for p in collision.model.parameters()):raise ValueError('Nonfinite initialized geometry')
         if initialize_q_collision_from:
-            if resume or policy_objective not in ('card_raw_neural_surface_v2','card_raw_neural_self_contact_v3'):raise ValueError('Q collision import requires a new neural CARD run')
+            if resume or policy_objective not in OBJECTIVES:raise ValueError('Q collision import requires a new neural CARD run')
             if not hasattr(collision.model,'at_frames'):raise ValueError('Q collision policy requires the articulated (q, wrist point, link) SDF')
             from .cart_q_collision import attach_field
             saved_q=torch.load(initialize_q_collision_from,map_location='cpu',weights_only=True)
@@ -486,7 +521,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         config=dict(protocol=PROTOCOL,architecture=ARCHITECTURES[architecture],architecture_name=architecture,
             decoder=dict(layout='independent_finger_mlps_v1',fingers=list(FINGERS),joints_per_finger=4,hidden=[256,256]),
             geometry=implementation_identity(),run_id=run_id,source=source,source_binding_version=next(iter(bindings)),
-            robot=hand.robot.spec,output_domain=hand.domain,levels=list(LEVELS),position_mean=mean.tolist(),position_scale=scale.tolist(),
+            robot=hand.robot.spec,output_domain=hand.domain,position_mean=mean.tolist(),position_scale=scale.tolist(),
             train_ids=train_ids,validation_ids=validation_ids,epochs=epochs,seed=seed,batch_size=batch_size,sequence_length=length,
             lookahead=10,optimizer='Muon+SGD' if optimizer_kind=='muon_sgd' else 'AdamW',
             optimizer_kind=optimizer_kind,learning_rate=5.e-4 if optimizer_kind=='muon_sgd' else 1.e-4,objective=objective.settings.payload(),
@@ -508,6 +543,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             gradient_accumulation=False,parallel_batch_size=parallel_size,
             window_stride=window_stride or max(1,length//2),training_windows=len(train_windows),
             sdf_backend=sdf_spec,
+            geometry_initialization='fresh_random_architecture' if fresh_sdf_spec is not None else 'default_or_checkpoint',
             attention_precision_request=requested_precision,policy_attention_precision=attention_precision,geometry_precision='float32',
             observation_checkpointing=model.checkpoint_observations,
             geometry_activation_recomputation=str(device).startswith('cuda'),
@@ -517,22 +553,28 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             initialize_geometry_from=initialize_geometry_from,
             tracking=dict(project=wandb_project,entity=wandb_entity,base_url=wandb_base_url,mode=wandb_mode),
             loss_execution='time_batched_fk_contact',
-            contact_field=CONTACT_FIELD_VERSION,contact_selection='learned_directional_field_soft_pair',
+            contact_field=CONTACT_FIELD_VERSION,contact_selection='learned_nearest_pad_field_zero_direction',
             state_initialization=IK_VERSION,initial_noise_rad=initial_noise_rad,ik_datasets=ik_reports,
             full_session_initialization='current_frame_ik_then_closed_loop')
         if card_reports:
-            config.update(card_targets=card_reports,contact_selection='CARD_exact_native_pad_CoP',
-                loss_execution='time_batched_CARD_raw_energy',contact_field_used_by_policy=False)
-        if policy_objective in ('card_raw_neural_surface_v2','card_raw_neural_self_contact_v3'):
+            config.update(card_targets=card_reports,loss_execution='time_batched_CARD_raw_energy')
+        if policy_objective in OBJECTIVES:
             config.update(contact_selection='learned_nearest_pad_field_zero_direction',
                 contact_field_used_by_policy=True,surface_teacher='native_pad_nearest_only_for_supervision_and_audit')
-        if policy_objective=='card_raw_neural_self_contact_v3':
+        if policy_objective=='card_raw_neural_self_contact_v4_actuated':
+            config['fixed_wrist_palm_policy']=dict(version=1,policy_terms='actuated_regions_only',
+                palm='raw_physical_diagnostics_only',raw_acceptance_unchanged=True)
+        if policy_objective in OBJECTIVES:
             config.update(self_contact=dict(source='directionally_resolved_source_mesh_penetration_pairs',
                 closure='wpinch_squared_times_pair_gap_mm_squared',normal='CARD_opposing_pad_normals',
                 query='learned_pad_projection_of_common_source_contact_midpoint',
                 collision='intended_finger_group_zero_clearance_with_penetration_energy',
                 clearance_scope='finger_pair_group; noncontact groups retain 6mm',penetration_cap_mm=5.,
                 teacher_only_nearest_search=True))
+        if policy_objective==WRIST_OBJECTIVE:
+            config.update(wrist_config())
+            config['objective']['fixed_wrist']=False
+            config['decoder']['wrist_head']=dict(coordinates=6,hidden=[256,256],layout='separate_wrist_mlp')
         epoch_start=0;resume_cursor=0;order=None;sums={};batches=0;loss_samples=0;best=float('inf');best_epoch=None
         def state(epoch,next_batch,order):
             return dict(model=model.state_dict(),collision=collision.model.state_dict(),policy_optimizer=optimizer.state_dict(),
@@ -582,9 +624,9 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 origin=json.loads((source_folder/'config.json').read_text())
                 required=('robot','output_domain','source','source_binding_version','sdf_capacity','sdf_batch_size')
                 if initialize_from:
-                    required+=('protocol','policy_input','policy_transition','policy_output','levels','position_mean','position_scale','train_ids','validation_ids','datasets','architecture','decoder')
-                if initialize_from and origin.get('policy_output')!=POLICY_OUTPUT:
-                    raise ValueError('绝对 q 权重不能用作 delta q 策略；可用 initialize_geometry_from 仅迁移几何模型')
+                    required+=('protocol','policy_input','policy_transition','policy_output','position_mean','position_scale','train_ids','validation_ids','datasets','architecture','decoder')
+                if initialize_from and origin.get('policy_output')!=config['policy_output']:
+                    raise ValueError('初始化策略输出与当前版本不匹配；可仅迁移兼容的几何网络')
                 if any(config[k]!=origin[k] for k in required):raise ValueError('初始化 checkpoint 的架构、数据、坐标或碰撞模型配置不匹配')
                 initial=torch.load(source_folder/('resume.pth' if (source_folder/'resume.pth').exists() else 'warmup.pth'),map_location='cpu',weights_only=True)
                 if initialize_checkpoint=='best':
@@ -606,14 +648,6 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                         else:
                             collision.model.load_state_dict(initial['collision']);learner.load_state_dict(initial['sdf_learner'],load_optimizer=initialize_checkpoint!='best')
                     first_warmup=min(learner.steps,warmup_steps)
-                elif 'contact_field' not in origin:
-                    if initialize_sdf_from:raise ValueError('Neural SDF 比较需要已有连续接触头，或不指定几何 checkpoint 并完成接触热启动')
-                    # Explicit new-run transfer only. The new contact head and
-                    # geometry optimizer/replay need their complete warmup.
-                    mismatch=collision.model.load_state_dict(initial['collision'],strict=False)
-                    expected={k for k in collision.model.state_dict() if k.startswith('contact_field.')}
-                    if set(mismatch.missing_keys)!=expected or mismatch.unexpected_keys:
-                        raise ValueError('旧碰撞模型结构不兼容，不能初始化连续接触场')
                 else:raise ValueError('初始化来源的连续接触场版本不匹配')
             save_checkpoint(folder/'warmup.pth',dict(state(0,0,None),warmup_next=first_warmup))
             warmup(first_warmup)
@@ -648,7 +682,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 with torch.no_grad():
                     for start in range(0,len(validation_batch),parallel_size):
                         check();batch=validation_batch[start:start+parallel_size]
-                        normalizers=group_normalizers(batch)
+                        normalizers=None
                         prepared=PreparedBatch(batch,device,normalizers)
                         value,_,metrics,_=rollout(model,objective,prepared,audit=True)
                         validation_sum+=float(value)*len(batch);validation_count+=len(batch);quality.extend(metrics)
@@ -673,7 +707,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         model.load_state_dict(checkpoint['model']);collision.model.load_state_dict(checkpoint['collision'])
         progress('full_session_validation')
         report,poses,timings=full_session(model,objective,validation,check)
-        sdf_report=learner.validate(*holdout);reasons=acceptance(report,sdf_report,contact_field_required=policy_objective!='card_raw_neural_collision_v1',
+        sdf_report=learner.validate(*holdout);reasons=acceptance(report,sdf_report,contact_field_required=True,
             penetration_limit_mm=objective.settings.penetration_limit_m*1000)
         atomic_json(folder/'evaluation.json',dict(metrics=report,sdf_validation=sdf_report,rejection_reasons=reasons,
             inference_ms=dict(mean=float(np.mean(timings)),p95=float(np.percentile(timings,95)))))
@@ -710,6 +744,8 @@ class Predictor:
     def __init__(self,folder,device='cpu',allow_smoke=False):
         self.folder=Path(folder);self.device=device
         self.config=json.loads((self.folder/'config.json').read_text());status=json.loads((self.folder/'status.json').read_text())
+        if self.config.get('floating_wrist'):
+            raise ValueError('Floating-wrist weights require a wrist-aware arm runtime; use full_session for offline validation')
         from .cart_deployment import validate_package
         self.deployment=validate_package(self.folder,allow_smoke=allow_smoke)
         if not allow_smoke and self.config['profile']!='full':raise ValueError('测试模型不能启用')
@@ -717,11 +753,11 @@ class Predictor:
         self.hand=CartHand(device);self.robot=self.hand.robot
         if self.robot.spec!=self.config['robot'] or self.hand.domain!=self.config['output_domain']:raise ValueError('CART 机器人／关节域不匹配')
         domain=self.config['output_domain']
-        self.model=CartNetwork(domain['lower'],domain['upper'],self.config['architecture_name'],self.config['levels'],
-            self.config['position_mean'],self.config['position_scale']).to(device)
+        self.model=CartNetwork(domain['lower'],domain['upper'],self.config['architecture_name'],
+            position_mean=self.config['position_mean'],position_scale=self.config['position_scale']).to(device)
         self.model.set_attention_precision(self.config.get('policy_attention_precision','float32'))
         from .cart_pretrained_sdf import restore_geometry
-        self.collision=CollisionModel(self.hand,restore_geometry(self.hand,self.config.get('sdf_backend',{'kind':'link_sdf_v1'})))
+        self.collision=CollisionModel(self.hand,restore_geometry(self.hand,self.config['sdf_backend']))
         checkpoint=torch.load(self.folder/'last.pth',map_location=device,weights_only=True)
         self.model.load_state_dict(checkpoint['model']);self.model.eval()
         self.collision.model.load_state_dict(checkpoint['collision']);self.collision.model.eval()
@@ -768,9 +804,9 @@ def evaluate(root,model_id,dataset_ids,check=lambda:None,allow_smoke=False):
     if train_groups&{m.get('session_id',m['id']) for m,_,_ in sessions}:raise ValueError('验证与训练属于同一采集会话')
     if any(json.loads((root/'recordings'/m['id']/'topology.json').read_text())['binding_version']!=predictor.config['source_binding_version'] for m,_,_ in sessions):
         raise ValueError('验证数据触觉材料绑定与模型不匹配')
-    kind=predictor.config.get('objective_version','multiscale_exp_card_v1')
+    kind=predictor.config['objective_version']
     objective=make_objective(predictor.hand,predictor.collision,kind)
-    if kind in ('card_raw_neural_collision_v1','card_raw_neural_surface_v2','card_raw_neural_self_contact_v3'):
+    if kind in OBJECTIVES:
         from .cart_card_cost import attach_card_targets
         attach_card_targets(root,sessions,predictor.hand.device,check)
     metrics,poses,times=full_session(predictor.model,objective,sessions,check)
@@ -779,7 +815,7 @@ def evaluate(root,model_id,dataset_ids,check=lambda:None,allow_smoke=False):
         torch.manual_seed(714);sdf=learner.validate(*predictor.collision.oracle.random_queries(4096))
     result=dict(protocol=PROTOCOL,model=model_id,datasets=dataset_ids,metrics=metrics,sdf_validation=sdf,
         inference_ms=dict(mean=float(np.mean(times)),p95=float(np.percentile(times,95))) if times else None,
-        rejection_reasons=acceptance(metrics,sdf,contact_field_required=kind!='card_raw_neural_collision_v1',
+        rejection_reasons=acceptance(metrics,sdf,contact_field_required=True,
             penetration_limit_mm=objective.settings.penetration_limit_m*1000),online_search=False,hard_contact_guarantee=False,
         paired_robot_ground_truth=False,tube_required=False)
     atomic_json(root/'models'/model_id/'evaluation.json',result);atomic_json(root/'models'/model_id/'evaluation_motion.json',poses)

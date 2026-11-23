@@ -32,7 +32,7 @@
   const m=w.cart?.metrics;
   el('cartBufferStatus').textContent=w.cart?.buffering?`等待未来观测 ${w.cart.buffered_frames}/11 帧`:w.cart?.buffer_delay_ms!==undefined?`观测时间 ${w.cart.observation_timestamp_ms.toFixed(1)} ms · 实际缓冲 ${w.cart.buffer_delay_ms.toFixed(1)} ms`:'';
   const audit=w.cart?.audit;
-  el('cartContactStatus').textContent=m?`${w.cart.experimental?'实验模型 · 原验收未通过 · ':''}${w.cart.self_contact_trained===false?'旧权重未训练对指闭合 · ':''}${w.cart.audit_async?`异步诊断 · 源帧距今 ${audit?.age_ms?.toFixed(0)||'—'} ms`:'同帧独立诊断'} · 间隙 ${m.max_gap_mm.toFixed(2)} mm · 穿透 ${m.max_penetration_mm.toFixed(2)} mm · 骨轴误差 ${m.bone_direction_deg.toFixed(1)}° · ${!m.required?'无活动接触':audit?.feasible?'接触达标':'接触未达标'}`:(w.cart?.audit_error||'等待独立几何诊断');
+  el('cartContactStatus').textContent=m?`${w.cart.experimental?'实验模型 · 尚未通过几何验收 · ':''}${w.cart.audit_async?`异步诊断 · 源帧距今 ${audit?.age_ms?.toFixed(0)||'—'} ms`:'同帧独立诊断'} · 间隙 ${m.max_gap_mm.toFixed(2)} mm · 穿透 ${m.max_penetration_mm.toFixed(2)} mm · 骨轴误差 ${m.bone_direction_deg.toFixed(1)}° · ${!m.required?'无活动接触':audit?.feasible?'接触达标':'接触未达标'}`:(w.cart?.audit_error||'等待独立几何诊断');
   if(w.playback?.active&&c.replay_active){el('cartSeek').max=Math.max(0,w.playback.frames-1);el('cartSeek').value=w.playback.index;}
  }
  async function action(command,data={}){
@@ -56,7 +56,7 @@
    const [records,models]=await Promise.all(responses.map(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'读取失败');return d.items||[];}));
    recordings=records;
    options(el('cartDatasets'),records,r=>`${r.split==='validation'?'验证':'训练'} · ${r.label||r.id} · ${r.frames}帧 ${r.complete?'已保存':'保存中'}${r.ik?` · IK 已缓存 ${r.ik.valid_frames}/${r.frames}帧`:''}${r.preprocessing?.protocol==='cart_diff_ik_v6'?' · IK／触点观测已准备':' · 需准备观测与 IK'}`);
-   options(el('cartModels'),models,m=>`${m.id} · ${m.experimental?'实验模型 · 验收未通过':m.status}${m.best_epoch?` · epoch ${m.best_epoch}`:''}`);
+   options(el('cartModels'),models,m=>`${m.id} · ${m.experimental?'实验模型 · 尚未通过几何验收':m.status}${m.best_epoch?` · epoch ${m.best_epoch}`:''}`);
    el('cartRecordings').replaceChildren(...records.map(r=>{const li=document.createElement('li'),a=document.createElement('a');a.href='/api/cart/recording?id='+encodeURIComponent(r.id);a.textContent=`${r.label||r.id} · 接触数据`;li.appendChild(a);if(r.capture_geometry?.status==='completed'){const geometry=document.createElement('a');geometry.href='/api/cart/geometry?id='+encodeURIComponent(r.id);geometry.textContent=' · Wrist 三维点完整记录';li.appendChild(geometry);}if(r.ik){const ik=document.createElement('a');ik.href='/api/cart/ik?id='+encodeURIComponent(r.id);ik.textContent=' · IK 轨迹缓存 NPZ';li.appendChild(ik);}return li;}));lastRefresh=Date.now();render();
   }catch(error){el('cartError').textContent=error.message;}finally{refreshing=false;}
  }
@@ -75,7 +75,7 @@
  el('cartRecordStart').onclick=()=>action('cart_record_start',{split:el('cartSplit').value,label:el('cartLabel').value});
  el('cartRecordStop').onclick=()=>action('cart_record_stop');el('cartRefresh').onclick=refresh;
  el('cartPreprocess').onclick=()=>action('cart_preprocess',{datasets:selected()});
- el('cartTrain').onclick=()=>action('cart_train',{datasets:selected(),epochs:Number(el('cartEpochs').value),architecture:el('cartArchitecture').value||'attention',batch_size:Number(el('cartBatchSize').value)||0,initial_noise_rad:Number(el('cartInitialNoise').value)});
+ el('cartTrain').onclick=()=>action('cart_train',{datasets:selected(),epochs:Number(el('cartEpochs').value),architecture:el('cartArchitecture').value||'attention',policy_objective:el('cartObjective').value,batch_size:Number(el('cartBatchSize').value)||0,initial_noise_rad:Number(el('cartInitialNoise').value)});
  el('cartCancel').onclick=()=>action('cart_cancel');
  el('cartSelect').onclick=async()=>{const result=await action('cart_model_select',{model:el('cartModels').value});if(result){window.wujiRequestedSolver='cart';el('wujiSolver').value='cart';}};
  el('cartEvaluate').onclick=()=>action('cart_evaluate',{model:el('cartModels').value,datasets:selected()});

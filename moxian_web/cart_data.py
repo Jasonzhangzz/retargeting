@@ -32,7 +32,7 @@ def implementation_identity():
     deps=('retarget/env/grasp/pose_gpu.py','retarget/baseline/card/collision.py',
           'retarget/baseline/geort/adapter.py','retarget/baseline/geort/pose_domain.py',
           'moxian_web/wuji_surface.py','moxian_web/tactile_surface.py','moxian_web/qnbot_surface.py',
-          'moxian_web/hand_anatomy.py','moxian_web/wuji_contact_source.py','moxian_web/cart_losses.py',
+          'moxian_web/hand_anatomy.py','moxian_web/wuji_contact_source.py','moxian_web/cart_mesh_audit.py',
           'retarget/baseline/wuji_retargeting/upstream/retarget_reference/preprocess.py',
           'retarget/baseline/wuji_retargeting/upstream/retarget_reference/objectives.py')
     return dict(protocol=PROTOCOL,contact=CONTACT_POLICY,

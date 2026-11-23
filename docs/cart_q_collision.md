@@ -32,7 +32,7 @@ articulated SDF converts them to its native fixed-wrist frame and evaluates
 observed point and q. Bone orientation uses exact FK and CARD's cosine cost;
 contact position/normal/continuity use the learned nearest-pad field.
 
-The complete policy cost remains `C / (C + 1e6)`, in `[0, 1)`. Raw CARD parts
+The complete policy cost remains `C / (C + 1e8)`, in `[0, 1)`. Raw CARD parts
 remain separate diagnostics. Policy, geometry and configuration-field matrix
 parameters use Muon, with momentum SGD for embeddings and vectors.
 
