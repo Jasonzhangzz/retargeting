@@ -1,0 +1,23 @@
+\section{Related Work}
+\label{sec:related}
+
+\nbf{Kinematic retargeting}
+DexPilot~\citep{dexpilot} established the \emph{fingertip-vector cost} used by most dexterous teleoperation systems since, including AnyTeleop and \texttt{dex-retargeting}~\citep{anyteleop}, learned pose imitators~\citep{telekinesis, geort}, and VR and exoskeleton interfaces~\citep{opentelevision, bunnyvisionpro, ace, doglove}. All these approaches retarget hand configuration to hand configuration. Two recent geometric retargeting methods, TopoRetarget~\citep{toporetarget} and Morphometric Imitation~\citep{morphometric}, go beyond fingertip matching, although their optimization still relies on an object reference. Neither had released code at the time of submission, so we cannot compare against them. \ours keeps the optimization view but optimizes contact locations, push directions, and forces.
+%We consider these works as concurrent and note but their code was not open-sourced at the time of submission. 
+
+\nbf{Contact-based retargeting}
+Contact Transfer~\citep{lakshmipathy2022contacttransfer} and its sequel~\citep{contactretarget} transfer contact areas instead of joint angles. Concurrent work anchors retargeting on contact structure, under the same name~\citep{contactanchored} or in the object frame~\citep{hoiretarget}, or on demonstrated forces~\citep{reforce, atar2026contact}. Each needs an object model, a simulator, or a learned tracker. \ours needs none, and adds a push direction and a force to every contact.
+
+\nbf{Dynamic retargeting}
+A complementary line transfers demonstrations through simulation with the object in the loop~\citep{maniptrans, dextrack, quasisim, pgdm, objdex, omnigrasp, dexmachina}, optimizes robot and object trajectories jointly~\citep{omniretarget}, or rewards contact wrenches computed on the object~\citep{chord}. These methods capture contact dynamics in simulation but need an object model and a simulator per task. \ours needs neither, since its contact force targets are obtained directly in the real world.
+
+\nbf{Learning from human data}
+Many pipelines recover hand and object pose from video or wearable capture devices and retarget kinematically for imitation or RL~\citep{dexmv, dexvip, videodex, doasido, dexcap, h2o, omnih2o, humanplus}. Concurrent ones preserve contact, but anchored on a reconstructed object~\citep{sun2026egocpt, ren2026c2dex, mao2026omnihoi, niu2026egoaero}. Hardware interfaces~\citep{aloha, umi, airexo, dexumi} make collection cheaper but tie the human to a device built per robot. Human contact and force encode grasp function~\citep{contactpose, grab, tactileglove, contactgrasp} and improve contact-rich learning~\citep{forcemimic, acp, forcesight, ftf}, yet retargeting rarely preserves them, which is the gap \ours closes.
+
+\nbf{Dexterous hand controllers}
+Tactile and force feedback improve multifingered control, from contact-event grasp controllers~\citep{romano2011} and tactile-driven policies~\citep{tdex, vitac3d} to tactile servoing and grasp-force regulation~\citep{tactileservo, graspadapt, slipgrip}. These controllers regulate forces chosen by a policy or a heuristic. \ours outputs tactile targets from a demonstration, so a robot hand can replay it open-loop.
+
+\nbf{Contact and force from vision}
+Dense hand contact has been predicted from hand--object geometry~\citep{grady2021contactopt} and from images~\citep{haco}, and concurrently from video together with pressure~\citep{jeon2026hope, moon2026rlhnd} or force~\citep{ilic2026egophi}. Forces have also been fitted to the tracked object's wrench~\citep{pham2015force, pham2018}. \ours consumes any contact source and synthesizes forces from grasp balance without an object model.
+
+%===============================================================================

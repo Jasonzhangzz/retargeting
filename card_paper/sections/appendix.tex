@@ -1,0 +1,390 @@
+
+\section{Unifying Vision, Glove, and Motion-Capture Demonstrations}
+\label{app:data_unification}
+
+\nbf{Data sources}
+\emph{Vision:} A monocular phone video is tracked in the world frame with HaWoR~\citep{hawor}, while per-vertex hand--object contact is predicted by Vid-HACO (\cref{sec:method:vidhaco,sec:exp:vidhaco}). Hand segmentation and metric scale are obtained using off-the-shelf models~\citep{sam2, depthanything}.
+\emph{Tactile glove:} A 744-taxel pressure grid provides measured contact and pressure, with each taxel registered to a personalized MANO mesh, and a wrist-mounted tracker provides hand motion.
+\emph{Motion capture with tactile glove:} The same tactile glove is worn under OptiTrack markers, so the glove supplies the contact and pressure while the markers provide drift-free wrist motion, together with a tracked object mesh used only for evaluation. GRAB~\citep{grab} and ARCTIC~\citep{arctic} are incorporated through their native annotations and loaders.
+
+\nbf{From sensor measurements to \fca}
+All three sources are converted into the same \fca representation. Each source delivers, per frame and link, a set of contacting MANO vertices $v$ with a weight $w_v$: the registered taxel pressure for the glove and motion-capture sources, and $w_v = 1$ for video, where Vid-HACO outputs a binary contact mask, so every contacting vertex counts equally. GRAB provides contact from hand--object proximity in place of pressure. The center of pressure $c_f$ follows in three steps. (i)~The contacting vertices are expressed in the link's 2-D pad chart, with the bone as the $x$ axis and the pad normal as $z$, and reduced to the weighted centroid $(\bar{x}_f, \bar{y}_f) = \sum_v w_v (x_v, y_v) / \sum_v w_v$. (ii)~The $(\bar{x}_f, \bar{y}_f)$ track is smoothed over time with a centered 11-frame moving average, which adds no lag and, because it acts on the chart, keeps the point on the pad. (iii)~The smoothed point is mapped back to 3-D and snapped onto the MANO surface, giving $c_f$. The contact direction $\hat{d}_f$ is the weighted mean of the contacting vertices' outward surface normals, oriented toward the object, and the raw force magnitude is the total weight $\sum_v w_v$ of the patch. Because video and GRAB do not measure force, we estimate their forces using a whole-clip grasp-balance procedure that finds the smallest smooth force correction driving the net wrench of each grasp toward zero. The same balance principle underlies force estimation from video, where contact forces are fitted to the tracked object's Newton--Euler equations~\citep{pham2015force, pham2018}; without an object model, we instead balance the net wrench of the contacts themselves. Finally, short contact blinks are removed, contact onsets within each grasp are synchronized, and video-derived contacts are given a short temporal pre-roll.
+
+
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figs/fig_init_vs_shipped.pdf}
+    \caption{\textbf{Initializer vs.\ solution} on six video clips (hanger, can, cup, cards, marker, bowl): the geometric initializer $q^{\mathrm{init}}$ (left of each pair) seats the hand near the \fcas. The contact solve (right) closes the last millimeters. Orange spheres are the \fcas.}
+    \label{fig:init}
+\end{figure}
+
+
+
+
+
+\section{Additional Vid-HACO Details and Analysis}
+\label{app:vidhaco}
+The model and baseline comparison are presented in \cref{sec:method:vidhaco,sec:exp:vidhaco,tab:contact}. Here we provide the training-data breakdown and additional evaluation details.
+
+\subsection{Training Data and Implementation}
+
+\nbf{Data composition} \Cref{tab:vidhaco_data} lists the 12 training datasets and their splits. Of the 1.55M training frames, 71\% come from HOT3D and ARCTIC's allocentric views, which HACO does not use. Labels are defined on the right-hand MANO mesh.
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{\textbf{Vid-HACO training data.} Contact: what the hand touches. View: egocentric, third-person (exo, including ARCTIC's eight allocentric cameras), or web images.}
+% source: train/val counts = HACO_RELEASE ViT-L 12ds run log, reproduced by /data/haco12ds/README.md sec. 2 (val counts as in the HACO evaluations; Vid-HACO's logged val has HOI4D 12,014 and EPIC-Contact 237)
+\label{tab:vidhaco_data}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lllrr@{}}
+\toprule
+Dataset & Contact & View & Train & Val. \\
+\midrule
+HOT3D~\citep{hot3d} & object & ego & 643{,}980 & 71{,}792 \\
+ARCTIC~\citep{arctic}, allocentric & object & exo & 459{,}867 & 51{,}186 \\
+ARCTIC~\citep{arctic}, egocentric & object & ego & 168{,}343 & 18{,}707 \\
+HOI4D~\citep{hoi4d} & object & ego & 106{,}278 & 11{,}995 \\
+DECAF~\citep{decaf} & face & exo & 58{,}829 & 6{,}493 \\
+Hi4D~\citep{hi4d} & body & exo & 49{,}902 & 5{,}306 \\
+InterHand2.6M~\citep{interhand} & hand & exo & 33{,}439 & 3{,}731 \\
+H2O~\citep{h2ohands} & object & ego & 30{,}117 & 3{,}350 \\
+EPIC-Contact~\citep{epiccontact} & object & ego & 2{,}035 & 233 \\
+MOW~\citep{mow} & object & web & 307 & 43 \\
+PROX~\citep{prox} & scene & exo & 157 & 21 \\
+HIC~\citep{hic} & hand, object & exo & 99 & 16 \\
+\midrule
+Total & & & 1{,}553{,}353 & 172{,}873 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\nbf{Implementation} The encoder, decoder, and two prediction heads in \cref{sec:method:vidhaco} have 411M parameters in total. The probability threshold of 0.52 is shared with HACO.
+
+\subsection{Evaluation Details and False Contacts}
+\label{app:contact}
+
+% \nbf{Matched-data baseline} HACO-R uses HACO's architecture and training recipe on our 12-dataset split, at a comparable budget (85\% of Vid-HACO's training samples). It controls for the change in training data in \cref{tab:contact}.
+
+\nbf{Benchmarks and metrics} The validation split (172.9k frames) measures in-distribution accuracy. HRDexDB~\citep{hrdexdb}, which no model saw in training, measures generalization: 434 egocentric videos of a hand grasping 94 objects (111.9k frames), with ground truth from the same 10\,mm rule. All models see the same hand crops and are thresholded at 0.52. Vertex precision, recall, and F1 are pooled over all vertices of all frames, so contact predicted on a contact-free frame lowers precision. AP is threshold-free, and frame F1 scores whether a frame is in contact at all.
+
+\nbf{Fewer false contacts} Both HACO models over-predict contact, trading 11 points of precision for 3 to 5 points of recall on HRDexDB. Their class-balanced sampling removes nearly every contact-free frame from training, so they flag contact on every frame and score exactly the trivial always-in-contact frame F1, where Vid-HACO reaches 98.3 and 95.3. \textbf{This matters downstream: \ours turns contacting vertices into \fcas, so contact hallucinated during a reach pulls fingers onto empty space.}
+
+
+
+\section{Geometric initialization}
+\label{app:init}
+\label{app:skel-init}
+
+The initializer computes $q^{\mathrm{init}} = (t^{\mathrm{init}}, \omega^{\mathrm{init}}, \theta^{\mathrm{init}})$ from the human skeleton alone, in closed form, once per frame. No optimizer runs inside it. Let $g_0, \ldots, g_{20}$ be the MANO keypoints ($g_0$ the wrist, then MCP, PIP, DIP and TIP of each finger), let $\mathcal{B}$ be the set of hand bones, bone $k$ running from keypoint $i_k$ to $j_k$ with unit direction $\hat{e}^{\mathrm{H}}_k = (g_{j_k} - g_{i_k}) / \|g_{j_k} - g_{i_k}\|$, and let $\hat{e}_k(q)$ be the direction of the corresponding robot link, as in \cref{eq:style}. Let $\mathcal{P}$ be the pairs of adjacent bones $(k, l)$ along one finger, meeting at a joint, with the palm segment $g_0 \to g_{\mathrm{MCP}}$ as the first bone of every chain.
+
+\nbf{Flexion} The robot's finger joints are hinges, so the angle between two adjacent robot links \emph{is} the hinge angle between them. Matching relative bone directions between adjacent bones therefore has a closed-form solution at every flexion hinge $j(k,l)$ of the index, middle, ring and pinky,
+\begin{equation}
+\label{eq:init-flex}
+\theta^{\mathrm{init}}_{j(k,l)} = -\arccos\big(\hat{e}^{\mathrm{H}}_k \cdot \hat{e}^{\mathrm{H}}_l\big), \qquad (k,l) \in \mathcal{P},
+\end{equation}
+with the sign of the robot's flexion convention. The human bend is copied exactly. An attenuated copy compounds along the chain into a link-direction error (\cref{app:ablation}).
+
+\nbf{Abduction} The component \cref{eq:init-flex} discards is the spread in the palm plane. With $\Pi$ the projection onto that plane, the abduction hinge of finger $i$ receives the signed angle between its proximal bone and the middle finger's, positive toward the thumb,
+\begin{equation}
+\label{eq:init-spread}
+\theta^{\mathrm{init}}_{\mathrm{AA},i} = \angle\big(\Pi\,\hat{e}^{\mathrm{H}}_{\mathrm{prox},i},\ \Pi\,\hat{e}^{\mathrm{H}}_{\mathrm{prox},\mathrm{mid}}\big).
+\end{equation}
+
+\nbf{Wrist rotation} The palm frame $W = [\hat{f},\ \hat{a},\ \hat{f} \times \hat{a}]$ has $\hat{f}$ pointing from the wrist to the middle knuckle and $\hat{a}$ from the index to the pinky knuckle, made orthogonal to $\hat{f}$. $W^{\mathrm{H}}$ is built from the keypoints each frame and $W^{\mathrm{R}}$ once from the robot at rest, from its hand centre and the same three knuckles:
+\begin{equation}
+\label{eq:init-wrist}
+R^{\mathrm{init}} = W^{\mathrm{H}}\,(W^{\mathrm{R}})^{\top}, \qquad \omega^{\mathrm{init}} = \log R^{\mathrm{init}}.
+\end{equation}
+Finger errors cannot rotate the hand.
+
+\nbf{Thumb} The thumb admits neither \cref{eq:init-flex} nor \cref{eq:init-spread}: the human spreads it by about $50^\circ$ at the base where the robot's abduction hinge allows $20^\circ$, and the two chains' axes differ. Its five joints are instead an affine function of the human thumb geometry expressed in the palm frame,
+\begin{equation}
+\label{eq:init-thumb}
+\begin{aligned}
+\theta^{\mathrm{init}}_{\mathrm{thumb}} &= A\,x + b, \\
+x &= (R^{\mathrm{init}})^{\top}\big[\hat{e}^{\mathrm{H}}_{\mathrm{CMC}\to\mathrm{MCP}},\ \hat{e}^{\mathrm{H}}_{\mathrm{MCP}\to\mathrm{IP}}, \\
+&\qquad\qquad\quad\ \hat{e}^{\mathrm{H}}_{\mathrm{IP}\to\mathrm{TIP}},\ \hat{n}^{\mathrm{H}}_{\mathrm{thumb}}\big] \in \mathbb{R}^{12},
+\end{aligned}
+\end{equation}
+with $\hat{n}^{\mathrm{H}}_{\mathrm{thumb}}$ the MANO thumb-pad normal of \cref{eq:style}. The constants $A \in \mathbb{R}^{5\times 12}$ and $b \in \mathbb{R}^5$ are fitted once, by ridge regression over 720 frames of 20 video clips, to the minimizer of the weighted least squares $\sum_k w_k^2 \|\hat{e}_k(\theta) - \hat{e}^{\mathrm{H}}_k\|^2 + w_{\mathrm{n}}^2 \|\hat{b}(\theta) - \hat{n}^{\mathrm{H}}_{\mathrm{thumb}}\|^2$ over the thumb joints within their limits (bone directions weighted $0.5$, $0.7$, $1.0$ from base to tip, pad normal $1.0$). On clips held out of the fit the map reproduces that minimizer to within half a degree. The per-frame least squares it replaces cost $6$\,ms, the map $0.03$\,ms.
+
+\nbf{Wrist translation} With $a_i(\theta)$ the robot's pad apex of finger $i$ in the wrist frame, as in \cref{eq:style}, the translation seats the centroid of the copied fingertips on the centroid of the human fingertips,
+\begin{equation}
+\label{eq:init-seat}
+t^{\mathrm{init}} = \frac{1}{5}\sum_{i=1}^{5} g_{\mathrm{TIP}_i} \;-\; R^{\mathrm{init}}\,\frac{1}{5}\sum_{i=1}^{5} a_i(\theta^{\mathrm{init}}),
+\end{equation}
+and $\theta^{\mathrm{init}}$ is clipped to the joint limits. The wrist keypoint is deliberately not used for position: the robot's fingers are about $40$\,mm longer than the human's, so matching fingertips rather than wrists places the robot palm $25$--$36$\,mm behind the human palm on the video clips, which is what lets the pads start near the \fcas. A rigid fit of rotation and translation to the five fingertips was tried and rejected, since five near-coplanar points determine a rotation poorly.
+
+The initializer is deterministic, so a steady source gives a steady start, and it costs under a millisecond per frame. It enters the solve only as half of the sampler's warm start. None of the cost groups is evaluated inside it, and the style group scores the same quantities---pad apex, pad normal, link direction---in task space during the solve. \Cref{fig:init} shows the initializer beside the solved pose. We also tested the converse designs: a per-finger least squares on the style terms as the initializer places fingertips closer but contorts the chains, and the final solve is worse on every contact metric. The initializer's joint copy used as the free-finger reward in place of the style group cannot place fingertips and loses contact rate. The division of labour between a direction-exact initializer and a task-space style reward is therefore kept.
+
+
+\section{Additional \ours implementation details}
+\label{app:details}
+
+\nbf{Cross-embodiment semantic maps} A semantic map lists, for every human region of \cref{fig:regions}, the robot body that receives its \fcas and the face of that body that grasps. Nothing else changes between embodiments: the same anchors, cost groups, and weights (\cref{tab:solver}) drive every hand. \Cref{fig:semantic_map} shows the four maps we instantiate. SHARPA Wave and Wuji Hand~2 are five-fingered hands with three links per finger, so their maps are one-to-one: each of the 15 finger regions goes to the robot link of the same name (distal region to fingertip pad, middle to middle link, proximal to proximal link) and the palm to the palm body, and SHARPA additionally receives the pinky base on its metacarpal body. The Unitree Dex3-1 has three fingers, so its map is many-to-one: the human thumb maps to its thumb and the index to its index, while the middle, ring, and pinky regions all map to its third finger. Distal and middle regions land on the matching tip and middle pads, and when several of the grouped fingers touch at once their anchors are merged into one by a force-weighted centroid. The parallel-jaw gripper has two pads: the thumb maps to one jaw and the four fingers to the other, with the distal, middle, and proximal regions landing on the tip, middle, and base zones of the jaw, so the within-link location is still carried. Human regions without a counterpart, such as the palm on the Dex3-1 and on the gripper, carry no \fca.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figs/fig_semantic_map.pdf}
+    \caption{\textbf{Semantic maps.} The human hand (left of each pair) and the robot it is mapped to, colored by semantic region: the same color marks a human region and the robot link that receives its contacts. Skin marks human regions the embodiment has no link for, and grey marks unmapped robot bodies. SHARPA Wave and Wuji Hand~2 take the 15 finger regions and the palm one-to-one, and SHARPA also the pinky base. The Unitree Dex3-1 folds middle, ring, and pinky onto its third finger, and the parallel-jaw gripper assigns the thumb to one jaw and the four fingers to the other.}
+    \label{fig:semantic_map}
+\end{figure*}
+
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.7\linewidth]{figs/fig_semantic_regions_callout.pdf}
+    \caption{\textbf{Semantic regions.} The 18 regions shared by every source and robot, three per finger, the palm, the upper palm, and the pinky base, each with its region center of pressure.}
+    \label{fig:regions}
+\end{figure}
+
+\nbf{Cost groups in full} The style group of \cref{sec:method:retarget} reads
+\begin{equation}
+\label{eq:style}
+\begin{aligned}
+E_{\mathrm{style}}(q) ={}& w_{\mathrm{tip}}^2 \sum_{i=1}^{5} \big\| a_i(q) - a_i^{\mathrm{H}} \big\|^2 \\
+&+ w_{\mathrm{n}}^2 \sum_{i=1}^{5} \big( 1 - \hat{b}_i(q) \cdot \hat{n}_i^{\mathrm{H}} \big) \\
+&+ w_{\mathrm{b}}^2 \sum_{\ell} \big( 1 - \hat{e}_\ell(q) \cdot \hat{e}_\ell^{\mathrm{H}} \big),
+\end{aligned}
+\end{equation}
+where $a_i(q)$ is the pad apex of finger $i$ and $a_i^{\mathrm{H}}$ the palmar apex of the matching MANO fingertip, $\hat{b}_i(q)$ the pad's belly axis and $\hat{n}_i^{\mathrm{H}}$ the MANO pad normal, and $\hat{e}_\ell$, $\hat{e}_\ell^{\mathrm{H}}$ the long axes of finger region $\ell$ on robot and human. The smoothness and collision groups are
+\begin{equation}
+\label{eq:smooth}
+E_{\mathrm{smooth}}(q) = w_{\theta}^2 \big\| \theta - \theta^{-} \big\|^2 + w_{t}^2 \big\| t - t^{-} \big\|^2 + w_{\omega}^2 \big\| \omega \ominus \omega^{-} \big\|^2,
+\end{equation}
+\begin{equation}
+\label{eq:collision}
+\begin{aligned}
+E_{\mathrm{collision}}(q) ={}& w_{\mathrm{self}}^2 \sum_{(i,j)} \max\!\big(0,\, m - h_{ij}(q)\big)^2 \\
+&+ w_{\mathrm{obj}}^2 \sum_{s} \max\!\big(0,\, \delta_s(q) - \epsilon\big)^2 ,
+\end{aligned}
+\end{equation}
+with $\ominus$ the rotation difference in the axis--angle chart nearest $\omega^{-}$, $h_{ij}(q)$ the capsule--capsule gap of finger pair $(i,j)$ with soft margin $m$, and $\delta_s(q)$ the penetration depth of hand-surface sample $s$ with allowance $\epsilon$. The two hard tests reject a candidate when $\max_s \delta_s(q) > \delta_{\max}$ or the palm--finger gap falls below $m$. Finger--finger pairs keep only the soft margin, since a valid tripod legitimately overlaps two fingertip capsules.
+
+\nbf{Pseudo-object} The video and glove sources have no object mesh, so the object field of \cref{eq:collision} is built from the demonstration itself (\cref{fig:pseudoobject}). The positions $c_f$ of the active \fcas of every frame, palm excluded, are mapped into that frame's wrist frame and accumulated over the clip, and their convex hull is the \emph{pseudo-object} whose signed-distance field supplies $\delta_s(q)$. The hull covers only the contacted part of the object, a wedge of the can in \cref{fig:pseudoobject}, which is exactly the region the fingers must stay out of. Since the \fcas sit on the object surface, the demonstrating hand wraps the hull with little penetration. GRAB clips are solved the same way: the pseudo-object is the collision field and the GRAB mesh is used only for evaluation. Our own motion-capture clips, whose object is tracked live during capture, use the tracked mesh with the larger barrier weight of \cref{tab:solver}.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figs/fig_pseudoobject.pdf}
+    \caption{\textbf{Pseudo-object for video.} Left to right: the \fcas of every frame of a video clip, mapped into the wrist frame and accumulated (registered contact cloud); their convex hull, the pseudo-object that serves as the collision field; the MANO hand at the peak-contact frame grasping the translucent hull; and the input video at the same frame. The first three panels are drawn in the camera frame of that frame, so their orientation matches the video.}
+    \label{fig:pseudoobject}
+\end{figure*}
+
+\nbf{Sampler} At iteration $i$ the sampler draws $N$ candidates $q_j = \bar{q}^{(i)} + \xi_j$, $\xi_j \sim \mathcal{N}(0, \mathrm{diag}(\sigma_i^2))$, keeps the elite set $\mathcal{E}_i$ of the lowest-cost $5\%$, and updates
+\begin{equation}
+\label{eq:mppi}
+\begin{aligned}
+\bar{q}^{(i+1)} &= \sum_{j \in \mathcal{E}_i} \frac{\exp(-\tilde{E}_j / \eta)}{\sum_{k \in \mathcal{E}_i} \exp(-\tilde{E}_k / \eta)}\, q_j, \\
+\sigma_i &= \beta^{\,i} \sigma_0,\qquad \beta = \gamma^{1/K},
+\end{aligned}
+\end{equation}
+where $\tilde{E}_j$ is the cost standardized over the elite set, so a uniform rescaling of all weights leaves the update unchanged, and the per-DoF noise anneals from $\sigma_0$ to $\gamma\sigma_0$ over $K$ iterations. The warm start is $\bar{q}^{(0)} = \tfrac{1}{2} q^{-} + \tfrac{1}{2} q^{\mathrm{init}}$. The incumbent is always re-evaluated and the best candidate seen is returned.
+
+\nbf{Solver settings} \cref{tab:solver} lists the weights of \cref{eq:contact,eq:style,eq:smooth,eq:collision} and the sampler settings. One configuration serves the video, glove, and motion-capture sources.
+
+\begin{table*}[t]
+\centering\footnotesize
+\caption{\textbf{Solver settings} shared by the video, glove, and motion-capture sources. Weights multiply the residual before squaring, as written in \cref{eq:contact,eq:style,eq:smooth,eq:collision}. Residual units differ across groups, so weights are not comparable by magnitude.}
+\label{tab:solver}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Group & Term & Symbol & Value \\
+\midrule
+Contact & reach and cone, \cref{eq:contact} & $w_{\mathrm{c}}$ & 40 \\
+ & direction price & $\lambda,\ r$ & 2,\ 10\,mm \\
+ & correspondence blend & $\alpha_f$ & 0.15 (distal, middle), 0 (proximal) \\
+ & contact stability & $w_{\mathrm{fix}}$ & 2.5 \\
+ & force weighting & $\rho_f$ & $1 + \tfrac{1}{2} F_f / F_{\max} \in [1, 1.5]$ \\
+\midrule
+Style & fingertip apex & $w_{\mathrm{tip}}$ & 3 \\
+ & pad normal & $w_{\mathrm{n}}$ & 60 \\
+ & bone direction & $w_{\mathrm{b}}$ & 20 \\
+\midrule
+Smoothness & joints & $w_{\theta}$ & 0.1 \\
+ & wrist translation & $w_{t}$ & $\sqrt{5^2 + 10^2}$\textsuperscript{$\dagger$} \\
+ & wrist rotation & $w_{\omega}$ & 10 \\
+\midrule
+Collision & self-collision weight, margin & $w_{\mathrm{self}},\ m$ & 1.5,\ 6\,mm \\
+ & object barrier weight, allowance & $w_{\mathrm{obj}},\ \epsilon$ & 3.5 (pseudo-object), 14 (motion capture, tracked mesh),\ 2\,mm \\
+ & hard penetration floor & $\delta_{\max}$ & 3\,mm \\
+\midrule
+Sampler & candidates, iterations & $N,\ K$ & 1024,\ 16 \\
+ & elite fraction, temperature & ---,\ $\eta$ & 5\%,\ 0.1 \\
+ & initial noise (translation, rotation, joints) & $\sigma_0$ & 2\,mm,\ 0.016\,rad,\ 0.05\,rad \\
+ & final noise scale & $\gamma$ & 0.2 \\
+ & velocity caps (joints, translation) & --- & 0.25\,rad,\ 20\,mm per frame \\
+ & warm start & $\bar{q}^{(0)}$ & $\tfrac{1}{2} q^{-} + \tfrac{1}{2} q^{\mathrm{init}}$ \\
+\midrule
+Post-processing & Savitzky--Golay window, order & --- & 15 frames,\ 3 \\
+\bottomrule
+\end{tabular}
+\par\smallskip\raggedright\footnotesize\textsuperscript{$\dagger$}The implementation applies a weight of 5 to the translation step and a weight of 10 to the full 6-DoF base step. The latter also supplies $w_{\omega}$.
+\end{table*}
+
+
+\section{Ablations}
+\label{app:ablation}
+
+All ablations use 20 of the monocular-video recordings of \cref{tab:contact_quality} with the \fcas exactly as released by the upstream HACO pipeline, whose conservative gating leaves 4{,}297 anchor-frames. Rates are pooled over anchor-frames, Gap is the per-clip median and Pen.\ the per-clip maximum penetration, averaged over clips, and the full method is the mean of two sampler seeds (spread at most 1.1 points on rates, 0.1\,mm on distances).
+
+\nbf{Initializer and barrier} \Cref{tab:ablation} removes the geometric initializer so the sampler starts from the previous frame alone, reverts to the earlier initializer (flexion copied at a gain of 0.7 with a per-frame least-squares thumb), and removes the soft penetration barrier. The initializer matters more than any single reward term. Without it the sampler still finds the \fcas on half the frames, but its worst misses grow to 3\,cm and penetration to 6\,mm: the warm start carries the fingertip information the sampler's small noise cannot recover. The earlier initializer lands 13 points below the current one. Its attenuated copy compounds along the chain to a $20^\circ$ link error, whereas the exact copy leaves $8^\circ$. The barrier costs 5.5 points of contact and keeps the deepest incursion at 4\,mm rather than 6.
+
+\begin{table*}[t]
+    \centering
+    \caption{\textbf{Initializer and penetration barrier} on the 20-clip video bed. Rates in percent, Gap median and Pen.\ maximum in mm. Best in bold.}
+    % source: output/fh_cc_fh/search/FH3b_ablation_table.txt (2026-10-06): full = FH_rankclosest_lam2 + FH2_full_s1; no init = FH3_noinit (TART_NO_BONE_INIT=1); previous init = FH3_oldinit (TART_FLEX_GAIN=0.7, TART_THUMB_FIT=lsq); no barrier = FH3_nopen (non_penetration 0)
+    \label{tab:ablation}
+    \footnotesize
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabular}{lccccc}
+    \toprule
+    Variant & Contact $\uparrow$ & Region\,$|$\,contact $\uparrow$ & In-cone $\uparrow$ & Gap (mm) $\downarrow$ & Pen.\ (mm) $\downarrow$ \\
+    \midrule
+    \ours\ (full) & \textbf{64.7} & 97.4 & \textbf{82.2} & \textbf{2.0} & 4.2 \\
+    $-$ geometric initializer & 52.3 & \textbf{98.8} & 79.0 & 2.5 & 6.0 \\
+    previous initializer (gain 0.7) & 51.7 & 97.2 & 81.4 & 2.3 & \textbf{3.4} \\
+    $-$ penetration barrier & 59.2 & 97.6 & 81.5 & \textbf{2.0} & 6.0 \\
+    \bottomrule
+    \end{tabular}
+\end{table*}
+
+\nbf{Contact terms} \Cref{tab:contact_ablation} switches the ingredients of the contact group \cref{eq:contact} on and off and removes the style group \cref{eq:style}. Every variant keeps the anti-slip term, the force weights, the smoothness and collision groups, the initializer, and the sampler budget of \cref{tab:solver}, and the contact point is always the nearest pad sample. \emph{Reach only} sets $\alpha_f{=}0$ and $\lambda{=}0$, a pure pull of the nearest sample onto the \fca. \emph{No correspondence} restores the cone but keeps $\alpha_f{=}0$. \emph{Correspondence only} is the opposite corner, $\alpha_f{=}1$ and $\lambda{=}0$. \emph{No cone} is the full method with $\lambda{=}0$, and \emph{no style} the full method with $w_{\mathrm{tip}}{=}w_{\mathrm{n}}{=}w_{\mathrm{b}}{=}0$.
+
+Three things follow. The friction-cone term buys direction and pays for it in contact: every variant without it sits at 53--58\% in-cone, every variant with it at 80--82\%, but since the cone can only act by rotating the finger, the rotated pad reaches 4 points fewer \fcas (69.1 without the cone vs.\ 64.7 with it). We accept that trade, because a contact that cannot carry the demonstrated push is not the contact the human made. The correspondence term buys contact in either regime: adding $p^{\mathrm{H}}_f$ at $\alpha_f{=}0.15$ raises the contact rate from 58.4 to 64.7 with the cone and from 62.7 to 69.1 without it, while letting it own the position entirely ($\alpha_f{=}1$) over-constrains the pad (50.4 and 59.1), so the blend must stay small. The style group costs 5 points on the anchored links (59.9 vs.\ 64.7) but is what shapes the free fingers.
+
+\begin{table*}[t]
+\centering\small
+\caption{\textbf{Contact-term ablation} on the 20-clip video bed. $\alpha_f$ is the correspondence blend and $\lambda$ the friction-cone weight of \cref{eq:contact}, and $E_{\mathrm{style}}$ is the style group \cref{eq:style}. Gap median and Pen.\ maximum in mm. The contact point is the nearest pad sample throughout. Best in bold.}
+% source: output/fh_cc_fh/search/FH3b_ablation_table.txt (2026-10-06, current initializer, nearest-sample default): full = FH_rankclosest_lam2 + FH2_full_s1; no corr = FH2_nocorr; corr+cone = FH2_corr_cone; no style = FH2_nostyle; alpha 0.5 = FH2_m50; reach only / corr only / no cone = FH3b_reach_only / FH3b_corr_only / FH3b_nocone (contact_fsel_score_lam 0 so the cone is truly off); selector row = FH3_selector_ref
+\label{tab:contact_ablation}
+\footnotesize
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+Variant & Setting & Contact $\uparrow$ & Region\,$|$\,contact $\uparrow$ & In-cone $\uparrow$ & Gap $\downarrow$ & Pen.\ $\downarrow$ \\
+\midrule
+\ours\ (full) & $\alpha_f{=}0.15,\ \lambda{=}2$ & 64.7 & 97.4 & \textbf{82.2} & 2.0 & 4.2 \\
+\midrule
+Reach only & $\alpha_f{=}0,\ \lambda{=}0$ & 62.7 & 98.1 & 57.5 & 1.7 & 4.4 \\
+No correspondence & $\alpha_f{=}0,\ \lambda{=}2$ & 58.4 & \textbf{98.5} & 81.3 & 2.1 & 4.5 \\
+Correspondence only & $\alpha_f{=}1,\ \lambda{=}0$ & 59.1 & 97.6 & 53.3 & 1.9 & 4.2 \\
+Correspondence $+$ cone & $\alpha_f{=}1,\ \lambda{=}2$ & 50.4 & 97.8 & 80.3 & 2.5 & \textbf{4.0} \\
+No cone & $\alpha_f{=}0.15,\ \lambda{=}0$ & \textbf{69.1} & 97.3 & 54.6 & \textbf{1.5} & 4.2 \\
+No style & $E_{\mathrm{style}} \equiv 0$ & 59.9 & 96.9 & 80.1 & 2.1 & 4.1 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+
+
+
+\section{Tactile tracking controller}
+\label{app:tracker}
+
+\nbf{Formulation} \Cref{fig:tracker_diagram} and \cref{eq:controller} in the main text define the loop, one per finger $f$ at $100$\,Hz, with the kinematic path in blue and the force path in orange; the contact state machine below is not drawn. The SHARPA Wave measures the contact wrench at each fingertip, from which we take the pad's surface-normal force $F^{\mathrm{meas}}_f$, clamped at zero so a dropped frame reads as free space, and the force error $e_f = F^{\mathrm{des}}_f - F^{\mathrm{meas}}_f$ is low-passed at $10$\,Hz to $\bar{e}_f$. The admittance is a rate-limited integrator with a small proportional term,
+\begin{equation}
+\label{eq:admittance}
+\dot{\kappa}^{\mathrm{I}}_f = \mathrm{clip}\big(k_i\,\bar{e}_f,\, \pm\dot{\kappa}_{\max}\big), \qquad
+\kappa_f = \mathrm{clip}\big(\kappa^{\mathrm{I}}_f + k_p\,\bar{e}_f,\, 0,\, 1\big),
+\end{equation}
+with $k_i = 1.0$ curl\,/\,(N$\cdot$s), $k_p = 0.05$ curl\,/\,N, $\dot{\kappa}_{\max} = 6\,\mathrm{s}^{-1}$, and $k_{\mathrm{ff}} = 0.3$ in \cref{eq:controller}. The rate limit and the clamp supply both the anti-slam approach limit and anti-windup, and the proportional term sits outside the integrator state so it cannot wind up. The curl deflects only the finger's flexion joints, along the fixed unit synergy $\hat{\psi}_f$, toward closure; the Jacobian in $\tau_{\mathrm{ff}}$ is evaluated at $q^{\mathrm{cmd}}$. Five independent loops run on the $22$-DoF hand, and the gains are dimensionless in curl, so they carry between simulation and hardware unchanged.
+
+\nbf{Contact state machine} Following the contact-event grasp controllers of Romano et al.~\citep{romano2011}, the contact state machine enters on $0.05$\,N confirmed for one frame and exits below $0.01$\,N sustained for $0.6$\,s. During that wait the integrator freezes rather than continuing to integrate the full set-point, which is what prevents a finger from crushing shut on a momentary sensor dropout. On declared loss the applied curl relaxes toward the retargeted trajectory with a $1.0$\,s time constant, and a re-touch resumes from the decayed curl rather than from the pre-loss integrator. The feedforward torque uses $k_{\mathrm{ff}} = 0.3$, is armed only on confirmed contact, and is scaled uniformly---not clipped per element, which would distort the torque distribution across a finger's joints---to $\lVert\tau_{\mathrm{ff}}\rVert_\infty \le 0.15$\,N$\cdot$m. The curl deflection is capped at $0.10$\,rad per joint beyond the retargeted target and desired forces at $10$\,N per finger.
+
+\nbf{Friction identification} The feedforward torque only reaches the fingertip if joint friction is known, so we identified it before the experiments. Joint friction is compensated as a per-joint, per-direction Coulomb-plus-viscous model with a stiction breakaway threshold, fit from constant-velocity sweeps and breakaway ramps in simulation on the hand's own model and validated against its ground-truth friction parameters. It is evaluated on commanded rather than measured velocity.
+
+\nbf{Arm} The arm tracks the retargeted wrist by differential inverse kinematics, smoothed with a zero-phase Savitzky--Golay filter (7-frame window, order 2) under a $90^\circ$/s per-joint velocity ceiling, then interpolated to a $500$\,Hz stream.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.8\linewidth]{figs/fig_tactile_tracker.pdf}
+    \caption{\textbf{Force tracking on the SHARPA Wave.} (a) The index finger follows a $0$--$4$\,N periodic contact force target against a fixed object: the measured force reaches the peaks within a few tenths of a newton and lags the target by about $0.2$\,s. The floor near $0.5$\,N is the preload the state machine keeps while in contact. (b) A three-finger grasp with step targets during mustard bottle pick-up replay (thumb $9.7$\,N, middle $7$\,N, index $2.6$\,N): the forces rise to their set-points within a second of the step, the thumb overshoots while the object settles, and release returns every finger to zero within about a second.}
+    \label{fig:force_tracking}
+\end{figure*}
+
+\nbf{Results} \Cref{fig:force_tracking} shows the closed-loop force tracking on a fixed object and in a three-finger grasp. The task-level effect of the loop is the replay study in \cref{sec:exp:real,fig:tactile_ablation}, which compares identical retargeted trajectories with and without the tracker.
+
+\section{Metric definitions}
+\label{app:metrics}
+
+\nbf{Evaluation metrics} We keep the notation of \cref{sec:method:uhcr}: $\mathcal{A}$ is the set of \emph{anchor-frames} --- one \fca $C_f = (c_f, \hat{d}_f, F_f)$ of one frame --- and $N_{\mathrm{a}} = |\mathcal{A}|$ their number. For an anchor-frame $a \in \mathcal{A}$ with assigned link $f$, $M_f$ is the link's visual geometry in its body frame, $\mathcal{S}^{\mathrm{pal}}_f \subset \mathcal{S}_f$ the pad samples on its palmar face, and $s^{*}_f$ the sample nearest the \fca. Every method is graded against the identical stored \fcas, so only the hand pose varies between columns. We use the following five metrics:
+\begin{itemize}
+    \item \textbf{Contact rate:} A contact is considered \emph{established} when the \fca lies inside the assigned link, or lies within $\delta_{\mathrm{c}} = 2$\,mm of its surface and is reached with the palmar face of the pad. CR is the fraction of anchor-frames whose contact is established:
+    \begin{equation}
+    \begin{aligned}
+    \chi_a &\;=\; \mathbf{1}\!\left[c_f\in M_f\right] \;\vee\; \mathbf{1}\!\left[\operatorname{dist}\!\left(c_f,\partial M_f\right)\le\delta_{\mathrm{c}}\right] \\
+    &\qquad\cdot\mathbf{1}\!\left[s^{*}_f \in \mathcal{S}^{\mathrm{pal}}_f\right],\\
+    \mathrm{CR} &\;=\; \frac{1}{N_{\mathrm{a}}}\sum_{a\in\mathcal{A}}\chi_a.
+    \end{aligned}
+    \label{eq:established}
+    \end{equation}
+    \item \textbf{Correct region:} A contact is only considered in the correct region when the contact is established, and the palmar pad nearest the anchor over the whole hand belongs to the demonstrated finger. RR is the fraction of anchor-frames in the correct region.
+    \item \textbf{In-cone:} A contact is only considered in-cone when the contact is established, and the contact normal $\hat{n}(s^{*}_f(q))$ lies within the $45^\circ$ friction cone centered on the demonstrated push direction $\hat{d}_f$. The dot product is signed, so a normal facing away from the push fails. IC is the fraction of in-cone anchor-frames:
+    \begin{equation}
+    \mathrm{IC}=\frac{1}{N_{\mathrm{a}}}\sum_{a\in\mathcal{A}}\chi_a\,\mathbf{1}\!\left[\hat{n}(s^{*}_f(q))\cdot\hat{d}_f\ge\cos 45^\circ\right].
+    \end{equation}
+    \item \textbf{Contact gap:} The gap of an anchor-frame is the distance from the \fca to the assigned link's surface, in mm:
+    \begin{equation}
+    \mathrm{Gap}_a=\operatorname{dist}\!\left(c_f,\partial M_f\right).
+    \end{equation}
+    \item \textbf{Penetration:} The penetration of a frame is the deepest incursion of the hand surface into the object, in mm, with $\delta_s$ the signed incursion of hand-surface sample $s$ into the object's signed-distance field:
+    \begin{equation}
+    \mathrm{Pen}=\max_s\,\delta_s(q).
+    \end{equation}
+    It is reported only where a ground-truth tracked object mesh exists (GRAB, motion capture); the video and glove clips carry no object ground truth.
+\end{itemize}
+
+\section{Contact fidelity by demonstration source}
+\label{app:by_source}
+
+\Cref{tab:by_source} splits the clips of \cref{tab:contact_quality} by how the contact signal was obtained: measured taxel pressure on the glove, contact inferred by Vid-HACO on video, proximity-thresholded contact on our motion capture, and GRAB, whose contact comes from the ground-truth meshes. \ours follows the quality of the contact signal: it is strongest where contact is measured (89.1\% contact, 52.2\% in-cone, 1.5\,mm gap on the glove), then on tracked motion capture (76.1\%), weaker on video (61.4\%), where Vid-HACO infers the contact and a wrong label places the robot pad on empty space, and weakest on GRAB (43.1\%), whose proximity labels carry no pressure and no true center of pressure. The kinematic baselines stay at 1--10\% on every source and move the other way, best on video (7.6--9.7\%) and worst on the glove (1.3--1.8\%), which is what methods that track keypoints should do: they gain nothing from a better contact signal. The geometric initializer, \ours's own deterministic warm start, already exceeds every baseline on every source (12.2--43.2\%): a human-isomorphic pose places centers of pressure inside the link far more reliably than fitting scaled fingertip targets does.
+
+\begin{table*}[t]
+    \centering
+    \small
+    \setlength{\tabcolsep}{6pt}
+    \caption{\textbf{Contact fidelity by source.} The clips of \cref{tab:contact_quality} grouped by contact signal. Rates in percent, pooled over anchor-frames; millimeter rows are the median over clips of the per-clip median. Penetration is reported only where a tracked object mesh exists. \textbf{Bold}: best per source and metric.}
+    % source: metric_results.txt sec. 2 "RESULTS -- BY SOURCE" (paper_metrics/out/{unified_all,grab_all}.csv, 2026-10-05); the Fingertip IK column is omitted as in Tab. 1
+    \label{tab:by_source}
+    \begin{tabular}{lccccc}
+        \toprule
+        & \ours & DexPilot & AnyTeleop-K & AnyTeleop-P & \ours \\
+        & & \citep{dexpilot} & \citep{anyteleop} & \citep{anyteleop} & (init only) \\
+        \midrule
+        \multicolumn{6}{l}{\emph{Tactile glove, measured pressure (18 clips, 5{,}464 anchor-frames)}} \\
+        \quad Contact rate (\%) $\uparrow$ & \textbf{89.1} & 1.8 & 1.3 & 1.3 & 43.2 \\
+        \quad Correct region (\%) $\uparrow$ & \textbf{87.8} & 1.8 & 1.3 & 1.3 & 43.2 \\
+        \quad In-cone (\%) $\uparrow$ & \textbf{52.2} & 0.5 & 0.4 & 0.4 & 6.8 \\
+        \quad Gap (mm) $\downarrow$ & \textbf{1.54} & 30.59 & 30.25 & 29.16 & 8.54 \\
+        \midrule
+        \multicolumn{6}{l}{\emph{Monocular video, inferred contact (20 clips, 5{,}259 anchor-frames)}} \\
+        \quad Contact rate (\%) $\uparrow$ & \textbf{61.4} & 9.7 & 8.3 & 7.6 & 20.5 \\
+        \quad Correct region (\%) $\uparrow$ & \textbf{60.1} & 9.5 & 8.0 & 7.5 & 19.2 \\
+        \quad In-cone (\%) $\uparrow$ & \textbf{35.2} & 4.2 & 4.7 & 5.0 & -- \\
+        \quad Gap (mm) $\downarrow$ & \textbf{2.40} & 9.99 & 10.80 & 13.19 & 5.76 \\
+        \midrule
+        \multicolumn{6}{l}{\emph{Motion capture, proximity contact (48 clips, 40{,}254 anchor-frames)}} \\
+        \quad Contact rate (\%) $\uparrow$ & \textbf{76.1} & 4.0 & 3.6 & 3.8 & 12.2 \\
+        \quad Correct region (\%) $\uparrow$ & \textbf{75.5} & 4.0 & 3.6 & 3.5 & 12.1 \\
+        \quad In-cone (\%) $\uparrow$ & \textbf{45.1} & 1.2 & 1.1 & 2.6 & -- \\
+        \quad Gap (mm) $\downarrow$ & \textbf{1.36} & 15.35 & 14.83 & 22.41 & 9.43 \\
+        \midrule
+        \multicolumn{6}{l}{\emph{GRAB, mesh-derived contact (100 clips, 99{,}969 anchor-frames)}} \\
+        \quad Contact rate (\%) $\uparrow$ & \textbf{43.1} & 4.9 & 4.9 & 4.6 & 19.6 \\
+        \quad Correct region (\%) $\uparrow$ & \textbf{40.6} & 4.8 & 4.9 & 4.5 & 17.8 \\
+        \quad In-cone (\%) $\uparrow$ & \textbf{16.2} & 1.7 & 1.7 & 1.7 & 3.8 \\
+        \quad Gap (mm) $\downarrow$ & \textbf{3.56} & 20.90 & 20.45 & 20.66 & 13.78 \\
+        \quad Penetration (mm) $\downarrow$ & \textbf{7.96} & 12.71 & 12.79 & 13.02 & 11.15 \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+\section{\ours--physics}
+\label{app:physics}
+
+\nbf{Setup} SPIDER~\citep{spider} retargets in two stages. A kinematic stage fits the robot fingertips to the MANO keypoints by inverse kinematics and synthesizes contact targets from a replay of those keypoints; a physics stage rolls the hand and the object forward in MuJoCo with a sampling-based model-predictive controller that tracks the kinematic reference and rewards contact. \ours-physics keeps the physics stage and its budget (256 samples and 8 iterations per 2\,s segment, early-abort gate off so that every rollout covers the whole demonstration) and changes three things. (1)~The sampler is initialized with, and tracks, the \ours trajectory of \cref{sec:method:retarget} in place of the fingertip-IK reference; the object track and the resampling, padding, and smoothing of SPIDER's kinematic stage are kept, so both arms follow the identical object reference. (2)~SPIDER's fingertip contact term is replaced by our contact objective $E_{\mathrm{contact}}(q)$ of \cref{eq:contact}: the squared distance of each contacting pad to its contact force target enters the reward with weight 10 and the $45^\circ$ friction-cone term on the demonstrated push with weight 2, relative to SPIDER's tracking terms; the anti-slip term is omitted. (3)~The \fca come from our pipeline (\cref{app:data_unification}) with the geometric contact rule used for GRAB, a contact probability of $1 - d/9\,\mathrm{mm}$ at hand--object distance $d$, thresholded at $0.5$. SPIDER needs the object mesh and pose track to run at all, so the anchors add no information the baseline lacks.
+
+\nbf{Data} 48 motion-capture demonstrations from our TableMocap sessions, including glove-instrumented grasps of a mustard bottle, each with a tracked object mesh (two seeds per arm), and 50 GRAB clips cut to the stored contact window plus 0.5\,s on either side (one seed).
+
+\nbf{Scoring} SPIDER's own criterion, a final object pose within 10\,cm and $90^\circ$ of the reference, is met by rollouts that never touch an object that returns near its start, so we score each run post hoc from its trajectory. A run succeeds when it covers the whole demonstration, the object travels at least half the demonstrated distance and, if the demonstration lifts it by 5\,cm or more, rises by at least 3\,cm and half the demonstrated lift, and the peak object position error stays below 15\,cm. A task is solved when at least one seed succeeds; runs with invalid physics do not count. \Cref{tab:physics} reports task success. Per run, \ours-physics succeeds on 51\% of the motion-capture runs against 39\% for SPIDER and on 43\% of the GRAB runs against 10\%, with median peak object errors of 106 vs.\ 138\,mm and 120 vs.\ 274\,mm. The rollouts show the mechanism: the IK reference forms thumb--finger opposition only after the object has started to move, so the sampler must find the grasp on its own, whereas the \ours reference encloses the object at the demonstrated contact onset and the sampler only has to squeeze.

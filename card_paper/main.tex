@@ -1,0 +1,135 @@
+% CVPR 2027 paper, built on the official author kit: https://github.com/cvpr-org/author-kit
+
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+%%%%%%%%% PAPER TYPE  - PLEASE UPDATE FOR FINAL VERSION
+% \usepackage{cvpr}              % To produce the CAMERA-READY version
+% \usepackage[review]{cvpr}      % To produce the REVIEW version
+\usepackage[pagenumbers]{cvpr} % To force page numbers, e.g. for an arXiv version
+
+% Import additional packages in the preamble file, before hyperref
+\input{macros}
+\usepackage{cuted}  % strip environment for the two-column teaser
+\captionsetup{labelfont=bf}
+% cvpr.sty allows 99%-float pages, which strands the Experiments floats in the
+% references; cap them so floats stay interleaved with the text.
+\renewcommand{\dbltopfraction}{0.80}
+\renewcommand{\topfraction}{0.85}
+
+% It is strongly recommended to use hyperref, especially for the review version.
+% hyperref with option pagebackref eases the reviewers' job.
+\definecolor{cvprblue}{rgb}{0.21,0.49,0.74}
+\usepackage[pagebackref,breaklinks,colorlinks,allcolors=cvprblue]{hyperref}
+
+%%%%%%%%% PAPER ID  - PLEASE UPDATE
+\def\paperID{*****} % *** Enter the Paper ID here
+\def\confName{CVPR}
+\def\confYear{2027}
+
+%%%%%%%%% TITLE
+\title{\emoji{joker}CARD: Contact-Anchored Retargeting for Dexterous Manipulation}
+
+%%%%%%%%% AUTHORS - PLEASE UPDATE
+% NOTE: authors are shown only in the camera-ready version (\usepackage{cvpr});
+% the review version prints "Anonymous CVPR submission" automatically.
+\author{Cunxi Dai$^{1,2}$ \quad Botao He$^{3,2\ast}$ \quad Francois R Hogan$^{2\ast}$ \quad Wei Pan$^{2\ast}$ \quad Rao Fu$^{4,2}$ \quad Wen-Han Hsieh$^{1}$ \\[2pt]
+Ruoshi Liu$^{3,2}$ \quad Jitendra Malik$^{4,2}$ \quad Guanya Shi$^{1,2\dagger}$ \quad Akash Sharma$^{2\dagger}$ \\[6pt]
+{\normalsize $^{1}$Carnegie Mellon University \quad $^{2}$Amazon Frontier AI \& Robotics (FAR)} \\[1pt]
+{\normalsize $^{3}$University of Maryland, College Park \quad $^{4}$UC Berkeley} \\[2pt]
+{\normalsize $^{\ast}$Core contributor \quad $^{\dagger}$Equal advising} \\[2pt]
+{\normalsize Project page: \url{https://card-retargeting.github.io/}}
+}
+\newcommand{\ours}{\texttt{CARD}\xspace}
+\newcommand{\fca}{\emph{contact force targets}\xspace}
+\newcommand{\fcas}{\emph{contact force target}\xspace}
+\newcommand{\akash}[1]{{\color{magenta}[Akash: #1]}}
+\newcommand{\todo}[1]{{\color{magenta}[TODO: #1]}}
+\newcommand{\fh}[1]{{\color{blue}[FH: #1]}}
+% Fig. 1 caption pointers take the colour of the matching block title on the Fig. 1 board
+\definecolor{figleft}{HTML}{E8731F}
+\definecolor{figcenter}{HTML}{27996A}
+\definecolor{figright}{HTML}{0E8FA3}
+\definecolor{figbottom}{HTML}{E5342A}
+
+\begin{document}
+\maketitle
+
+%===============================================================================
+% Two-column teaser (official kit pattern: cuted strip + \captionof)
+\begin{strip}
+    \centering
+    \vspace{-1.5em}
+    \includegraphics[width=0.9\linewidth]{figs/fig_main_v6_1_hardware_zoom_nobox.pdf}
+    \vspace{4pt}
+    \captionsetup{hypcap=false}
+    \captionof{figure}{
+    \textbf{\ours is a unified human-to-robot, multi-embodiment tactile retargeting framework.} Demonstrations from monocular video, tactile gloves, or motion capture with a tactile glove (\textcolor{figleft}{left}) map into a unified hand--contact representation that \ours retargets to robot joint commands and \fca  (\textcolor{figcenter}{center}). Our approach can retarget to different embodiments by changing only the semantic mapping (\textcolor{figright}{right}). Finally, a tactile-tracking controller replays open-loop on hardware (\textcolor{figbottom}{bottom}) while tracking the desired \fca, requiring no object model or simulator.}
+    %\textbf{\ours is an any-input, multi-embodiment tactile retargeting framework.} Humans provide demonstrations on monocular video, with a tactile glove, or under motion capture (left). Each source transforms into our unified hand--contact representation with contact anchors, a center of pressure, a push direction, and a force. \ours then ensures that matching robot \fca are inside the friction cone of the push direction (center). These anchors also support other hands through a semantic mapping alone (right). Finally, a tactile tracking controller replays the demonstrated forces open-loop on hardware (bottom). No object model or simulator is required.}
+    \captionsetup{hypcap=true}
+    \label{fig:teaser}
+\end{strip}
+
+%===============================================================================
+
+\begin{abstract}
+
+%Humans are naturally dexterous, retargeting natural human demonstrations offers a scalable alternative to robot-specific data collection, yet existing methods either preserve only kinematics or require object models and simulation to recover contact dynamics. Towards fast and accurate scalable human data retargeting, we introduce CARD....
+
+Humans are dexterous, but traditional data collection paradigms such as teleoperation, kinesthetic teaching, and wearable exoskeletons force humans to act through the robot embodiment, bottlenecking their dexterity. Retargeting can avoid this. However, existing methods purely translate kinematics and ignore the \emph{real-world} contact dynamics essential for task success. We present \ours: Contact-Anchored Retargeting for Dexterous Manipulation, a simulator and object-free framework that retargets human demonstrations to robot actions by explicitly preserving \fca. \ours unifies human data sources including video, motion capture, and tactile gloves via a shared hand--contact representation and generates explicit \fca in addition to kinematics. To maintain these contact targets during hardware open-loop replay, \ours also introduces a tactile tracking controller. %maintains the demonstrated contact targets during open-loop replay. 
+For video which does not contain an explicit tactile source, we present \emph{Vid-HACO}, our video-to-contact model that sets a new state of the art. Across our video, glove, motion-capture data and the GRAB dataset, \ours maintains contact on $43$--$78\%$ of contact frames, while kinematic and object-aware retargeting methods maintain contact on $<10\%$ and $22.5\%$ of the frames respectively. %\ours maintains contact on $43\%$ of frames against $<5\%$ for kinematic retargeting, and $22.5\%$ for retargeting methods needing object information. 
+%, improving held-out contact F1 by 3.9 and AP by 17.9 over the previous model. 
+Further, integrating our formulation into physics-based retargeting improves strict task success from 12\% to 32\% on GRAB~\cite{grab}. Finally, we show that our tactile tracker is critical to reproduce demonstrated forces during hardware replay. These results establish that contact preservation via \ours is a scalable interface for transferring human dexterity to robots.
+
+
+% and it raises success from 4 to 25 of 30 trials.
+
+
+
+
+% Humans are naturally dexterous, but forcing them to act through the robot embodiment bottlenecks the nuances that make them skilled. The current data collection paradigms, such as teleoperation, kinesthetic teaching and wearable exoskeletons face this hardware hurdle, while existing retargeting methods ignore the contact dynamics essential for dexterous manipulation. We present \ours: Contact-Anchored Retargeting for Dexterous Manipulation, a simulator-free and object-free framework that transfers human demonstrations to robot actions by explicitly preserving \emph{functional tactile forces}. \ours maps heterogeneous human data sources such as monocular video, motion capture, and tactile gloves, through a unified hand--contact representation to produce kinematic and functional tactile targets. \ours then tracks these targets using a novel real-wold \emph{tactile tracking controller} enabling faithful replay of highly dexterous human demonstrations on the robot embodiment without task-specific object models or simulation. Across diverse manipulation tasks, including interactions with rigid, articulated, and deformable objects, we show that contact provides a scalable interface for transferring human dexterity to robots. \todo{headline result}
+
+%To evaluate action fidelity, we directly replay retargeted trajectories on real robot hands using a tactile tracking controller that holds the demonstrated contact forces. This combination enables faithful execution of highly dexterous human demonstrations without task-specific object models or simulation. 
+
+%We present \ours: Contact-anchored retargeting for dexterous manipulation, that allows humans to collect demonstrations freely without the embodiment gap. While prior retargeting work, transfers human demonstrations to robot actions kinematically, \ours retargets human demonstrations to robot actions by preserving \emph{functional tactile forces}.
+
+% To effectively use human data for robot manipulation, we should let humans be humans. Collecting manipulation data through robot tele-operation, robot exoskeletons (UMI) and kinesthetic teaching require humans to act like robots through a bottleneck that considers kinematics but ignores contact dynamics and forces. We present \ours: Contact-Anchored Retargeting for Dexterous Manipulation that retargets to tactile force targets at the end effector in addition to robot kinematic targets. \ours then tracks these targets using a novel real-world \emph{tactile tracking controller}, which together with the retargeting mechanism can replay unprecedented dexterous human demonstrations open-loop. \ours is scalable and generalizable. Because it is an object-free method, \ours can handle deformable, articulated or bendable objects quite easily. Finally, our  and  a unified hand-contact representation that allows retargeting from diverse sources such as monocular-video, tactile gloves and motion-capture data. We compare our tactile retargeting and tracking framework in various benchmarks to ...... put headline result \akash{@Jimmy} 
+
+
+% Human demonstrations are a scalable source of dexterous manipulation data, but existing collection methods constrain humans to act through robot embodiments, limiting dexterity while overlooking the contacts that determine task functionality. We argue that humans should manipulate naturally, and that retargeting should explicitly preserve functional contact. We present \ours, Contact-Anchored Retargeting for Dexterous Manipulation: a simulator-free and object-free framework that transfers human demonstrations to robot actions by preserving contact targets. 
+
+
+\end{abstract}
+
+% \epigraph{Contact is the heart of robotic manipulation. To understand manipulation, you must understand contact.}{Matt Mason}  % needs \usepackage{epigraph}
+
+\input{sections/introduction}
+\input{sections/related_work}
+\input{sections/method}
+\input{sections/experiments}
+\input{sections/conclusion}
+
+% Acknowledgments are not allowed in the review version; add them for camera-ready.
+% \section*{Acknowledgments}
+
+%===============================================================================
+
+% References follow the main text directly (no page break).
+{
+    \small
+    \bibliographystyle{ieeenat_fullname}
+    \bibliography{references}
+}
+
+%===============================================================================
+% Supplementary material. WARNING: delete these pages from the main-paper submission.
+
+\clearpage
+\setcounter{page}{1}
+\maketitlesupplementary
+\appendix
+\crefalias{section}{appendix}
+\crefalias{subsection}{appendix}
+
+\input{sections/appendix}
+
+\end{document}

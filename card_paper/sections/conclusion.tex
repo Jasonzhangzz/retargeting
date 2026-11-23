@@ -1,0 +1,22 @@
+% \section{Limitations}
+% \label{sec:limitations}
+% \ours\ inherits the limits of its sources: the retargeted quality is only as good as that of the demonstration. Retargeting is offline, the full solver runs on one high-DoF hand, and open-loop replay cannot recover from a large object displacement, which calls for closing the loop with policies trained on \ours\ data.
+% \section{Conclusion}
+% \label{sec:conclusion}
+% \ours\ treats contact, not kinematics, as the priority to preserve when transferring human demonstrations to robot hands. Video, gloves, and motion capture provides per-region contact force anchors. A sampling solver places the robot's pads on them inside the friction cone of the demonstrated push, a tactile controller holds the forces on hardware, and a new embodiment needs only a semantic map.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented CARD, a simulator- and object-free retargeting framework that preserves task-critical contacts and forces across diverse human demonstration sources and robot embodiments. Combined with a tactile tracking controller, CARD enables faithful open-loop hardware replay across rigid, articulated, and deformable objects. Our results demonstrate substantial gains in contact fidelity and task success, establishing contact preservation as a scalable interface for transferring human dexterity to robots.
+
+
+\nbf{Limitations and future work} Retargeting quality is bounded by the input demonstration, and open-loop replay cannot recover from a large object displacement. We will use \ours-generated data to train closed-loop sensorimotor policies that close this gap, and to scale human demonstrations into contact-preserving robot data.
+
+
+\section{Acknowledgement}
+The authors would like to thank Chaoyi Pan, Tingfan Wu, and Bipasha Sen for their insightful discussions and valuable feedback, and Xinyao Li and Bruno Chen for their assistance with the experiments. We also gratefully acknowledge the Amazon FAR group for their continued support throughout this work.
+
+
+\label{sec:conclusion}
+%===============================================================================

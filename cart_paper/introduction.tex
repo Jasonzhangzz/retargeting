@@ -1,0 +1,22 @@
+% !TeX root = main.tex
+\section{Introduction}
+\label{sec:introduction}
+
+\IEEEPARstart{D}{exterous} manipulation is central to everyday human activity. Vision--language--action (VLA) models are beginning to address manipulation with dexterous hands~\cite{wen2025dexvla}, creating demand for demonstrations that capture the contact patterns of human-like five-finger hands. For many parallel-jaw grasps, adjusting the gripper aperture is enough to close an unintended gap. A five-finger hand can contact an object with different combinations of fingertips, finger links, and palm regions. Retargeting must account for which regions make contact as well as how the fingers move. Even efficient kinematic methods can leave task-relevant contacts unrealized, making both teleoperation and the conversion of egocentric demonstrations into reliable robot actions more difficult.
+
+Transferring a manipulation skill across embodiments poses two coupled problems: identifying the contact anchors that matter for the task and adapting the robot's posture to realize them. Differences in hand size, shape, and kinematics make exact alignment of all human keypoints generally infeasible. A pose objective that treats all keypoints alike can sacrifice a contact needed to execute the task. The relevant anchors also change across skills and over the course of a demonstration.
+% Add Fig.~\ref{fig:contact-anchors} here once the CART contact-anchor figure is available.
+Preserving these anchors may require shifting the contact to a different point on the corresponding robot surface and allowing some deviation from the demonstrated posture. We therefore prioritize the contacts needed to reproduce the skill.
+
+Kinematic retargeting methods such as DexPilot, AnyTeleop, and GeoRT efficiently map human hand motion to robot configurations~\cite{handa2019dexpilot,qin2023anyteleop,yin2025geort}, but their kinematic objectives cannot ensure that the robot makes the intended contact with the object. Some methods import object meshes into a simulator and use reinforcement learning to reproduce manipulation skills~\cite{mandi2025dexmachina}. Building and tuning task-specific environments makes this approach difficult to scale across demonstrations, and object meshes are privileged information that may be unavailable during real-world operation. TouchBridge and CARD use contact information, including tactile measurements, to guide retargeting~\cite{zhang2026touchbridge,dai2026card}. Their results show the value of preserving demonstrated contacts, and tactile measurements provide a common representation across tasks without object models. Both frameworks use optimization to produce retargeted trajectories for offline data processing or replay. They address embodiment differences through contact alignment or semantic correspondences, leaving open how to predict robot-specific posture adjustments directly from a sequence of tactile observations.
+
+We propose the Contact-Aware Retargeting Network (CART) for transferring manipulation from tactile gloves to five-finger robot hands. CART conditions on the current robot configuration and uses cross-attention to fuse a short sequence of human fingertip poses and tactile signals. It predicts joint increments that promote contact preservation and temporal smoothness. A forward pass produces each update, supporting offline processing and buffered online retargeting.
+
+The contributions of this paper are summarized as follows:
+\begin{enumerate}
+    \item We introduce a contact-aware retargeting network that uses a shared pose and tactile representation and five finger-specific decoders to transfer manipulation skills without object geometry or pose observations.
+    \item We develop a training pipeline covering hand calibration, glove data collection, differentiable objective design, and policy training. In our setup, training uses about 5~min of recorded glove data and takes approximately 3~GPU-hours on a single NVIDIA A800.
+    \item We develop an arm retargeting procedure that adjusts the end-effector target pose using contact anchors and computes arm motion through efficient inverse kinematics.
+    % Add the corresponding task list, baseline results, and timing breakdown in Section~\ref{sec:experiments}.
+    \item We evaluate CART on prehensile and nonprehensile manipulation tasks, including in-hand manipulation. In these comparisons, CART maintains contact more reliably and produces smoother trajectories, with shorter inference times relative to the evaluated baselines.
+\end{enumerate}
