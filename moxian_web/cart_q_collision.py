@@ -14,21 +14,23 @@ VERSION='q_collision_sobolev_v3'
 GROUPS=[(a,a) for a in range(5)]+[(a,b) for a in range(5) for b in range(a+1,5)]
 
 
-def field_spec(hand):
+def field_spec(hand,group_sobolev=False):
     from .cart_pretrained_sdf import geometry_spec
-    return dict(kind=VERSION,geometry=geometry_spec(hand),width=256,margin_mm=6.,
+    spec=dict(kind=VERSION,geometry=geometry_spec(hand),width=256,margin_mm=6.,
         allowed=hand.collision.allowed_mask.tolist() if hasattr(hand.collision,'allowed_mask') else
             __import__('warp').to_torch(hand.collision.allowed).bool().cpu().tolist(),
         groups=[list(g) for g in GROUPS],teacher='native_8_material_samples_CARD_energy_and_54_samples_depth',
         cap='squared_5mm_hinge_of_L2_native_penetration_upper_bound_54_samples',
         derivative='analytic_FK_signed_distance_witness_Jacobian_supervision',
         escape='negative_gradient_of_predicted_CARD_clearance_energy_in_radians')
+    if group_sobolev:spec.update(kind='q_collision_group_sobolev_v4',group_sobolev=True)
+    return spec
 
 
 class QCollisionField(nn.Module):
     def __init__(self,hand,spec):
         super().__init__()
-        if spec!=field_spec(hand):raise ValueError('Q collision geometry/domain/exclusions differ')
+        if spec!=field_spec(hand,spec.get('group_sobolev',False)):raise ValueError('Q collision geometry/domain/exclusions differ')
         self.spec=spec
         self.register_buffer('lower',hand.low.clone());self.register_buffer('upper',hand.high.clone())
         ids=[];mask=[]
@@ -112,7 +114,7 @@ class QCollisionTeacher:
         with torch.no_grad():d,n=oracle.label(local,links);d=d.reshape(links.shape);n=n.reshape(local.shape)
         return d+((local-local.detach())*n).sum(-1),valid
 
-    def label(self,q):
+    def label(self,q,group_sobolev=False):
         with torch.enable_grad():
             x=q.detach().requires_grad_();frames=self.hand.frames(x)
             signed,valid=self.distances(self.oracle,frames)
@@ -123,6 +125,10 @@ class QCollisionTeacher:
             amplitude=(energy+1.e-8).sqrt()
             total_amp=(energy.sum(-1)+.01).sqrt()
             gradient=torch.autograd.grad(total_amp.sum(),x,retain_graph=True)[0]
+            extra={}
+            if group_sobolev:
+                probe=torch.randint(2,(len(x),15),device=x.device).mul(2).sub(1).to(x.dtype)
+                extra.update(group_probe=probe,group_gradient=torch.autograd.grad((amplitude*probe).sum(),x,retain_graph=True)[0].detach())
             # Coarser native audit has 54 material points/link rather than 8.
             # Its derivative includes BOTH moving links, not point-SDF error.
             signed,valid=self.distances(self.depth_oracle,frames)
@@ -136,10 +142,12 @@ class QCollisionTeacher:
             excess=penetration.square()
             cap_energy=x.new_zeros(len(x),15).scatter_add(1,self.depth_groups[None].expand(len(x),-1),excess)
             cap_amplitude=(cap_energy+1.e-8).sqrt()
-            cap_gradient=torch.autograd.grad((cap_energy.sum(-1)+.0001).sqrt().sum(),x)[0]
+            cap_gradient=torch.autograd.grad((cap_energy.sum(-1)+.0001).sqrt().sum(),x,retain_graph=group_sobolev)[0]
+            if group_sobolev:
+                extra['cap_group_gradient']=torch.autograd.grad((cap_amplitude*probe).sum(),x)[0].detach()
         return dict(q=x.detach(),amplitude=amplitude.detach(),depth_mm=depth_mm.detach(),
             depth_groups_mm=depth_groups.detach(),gradient=gradient.detach(),depth_gradient=depth_gradient.detach(),
-            cap_amplitude=cap_amplitude.detach(),cap_gradient=cap_gradient.detach())
+            cap_amplitude=cap_amplitude.detach(),cap_gradient=cap_gradient.detach(),**extra)
 
     @torch.no_grad()
     def values(self,frames,contact_groups=None):
@@ -162,13 +170,18 @@ class QCollisionLearner:
         from .cart_optim import MuonSGD
         self.collision=collision;self.model=collision.model.q_collision
         self.teacher=QCollisionTeacher(collision);self.capacity=capacity;self.batch_size=batch_size
-        self.optimizer=MuonSGD(self.model,lr=5.e-4,weight_decay=0.)
+        self.group_sobolev=self.model.spec.get('group_sobolev',False)
+        self.optimizer=MuonSGD(self.model,lr=1.e-3 if self.group_sobolev else 5.e-4,weight_decay=0.,
+            vector_lr_scale=.1 if self.group_sobolev else 1.)
         self.replay={k:torch.empty((capacity,n)) if n else torch.empty(capacity) for k,n in
             dict(q=20,amplitude=15,depth_mm=0,depth_groups_mm=15,gradient=20,depth_gradient=20,cap_amplitude=15,cap_gradient=20).items()}
         self.size=0;self.cursor=0;self.steps=0
+        if self.group_sobolev:
+            self.replay.update(group_probe=torch.empty(capacity,15),group_gradient=torch.empty(capacity,20),
+                cap_group_gradient=torch.empty(capacity,20))
 
     def add(self,q):
-        data=self.teacher.label(q)
+        data=self.teacher.label(q,group_sobolev=self.group_sobolev)
         n=min(len(q),self.capacity);ids=(torch.arange(n)+self.cursor)%self.capacity
         for k,v in data.items():self.replay[k][ids]=v[-n:].cpu()
         self.cursor=(self.cursor+n)%self.capacity;self.size=min(self.capacity,self.size+n)
@@ -182,6 +195,9 @@ class QCollisionLearner:
 
     def update(self):
         if not self.size:raise ValueError('Q collision replay is empty')
+        if self.group_sobolev:
+            from .cart_optim import scale_learning_rates
+            scale_learning_rates(self.optimizer,max(.0625,.5**(self.steps//5000)))
         ids=torch.randint(self.size,(min(self.batch_size,self.size),))
         t={k:v[ids].to(self.model.lower.device) for k,v in self.replay.items()}
         x=t['q'].requires_grad_();parts=self.model.components(x)
@@ -204,12 +220,18 @@ class QCollisionLearner:
         cap_active=t['cap_gradient'].norm(dim=-1)>1.e-3
         cap_direction=(1-F.cosine_similarity(cg[cap_active],t['cap_gradient'][cap_active])).mean() if cap_active.any() else fit*0
         loss=fit+depth_fit+grad_fit+.2*depth_grad_fit+.2*direction+cap_fit+cap_grad_fit+.5*cap_direction
+        group_fit=fit*0
+        if self.group_sobolev:
+            gg=torch.autograd.grad((amplitude*t['group_probe']).sum(),x,create_graph=True,retain_graph=True)[0]
+            gcg=torch.autograd.grad((parts[...,2]*t['group_probe']).sum(),x,create_graph=True)[0]
+            group_fit=F.smooth_l1_loss(gg/10,t['group_gradient']/10)+F.smooth_l1_loss(gcg/10,t['cap_group_gradient']/10)
+            loss=loss+group_fit+.5*direction+cap_direction
         self.optimizer.zero_grad();loss.backward()
         norm=torch.nn.utils.clip_grad_norm_(self.model.parameters(),10.,error_if_nonfinite=True)
         self.optimizer.step();self.steps+=1
         return {k:float(v.detach()) for k,v in dict(q_total=loss,q_value=fit,q_depth=depth_fit,
             q_jacobian=grad_fit,q_depth_jacobian=depth_grad_fit,q_direction=direction,q_depth_direction=depth_direction,
-            q_cap=cap_fit,q_cap_jacobian=cap_grad_fit,q_cap_direction=cap_direction,q_grad_norm=norm).items()}
+            q_cap=cap_fit,q_cap_jacobian=cap_grad_fit,q_cap_direction=cap_direction,q_group_jacobian=group_fit,q_grad_norm=norm).items()}
 
     def state_dict(self):
         return dict(replay={k:v[:self.size].clone() for k,v in self.replay.items()},size=self.size,

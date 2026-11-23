@@ -13,7 +13,7 @@ from .cart_network import CartNetwork
 from .cart_wrist import (FloatingCartHand,CartWristNetwork,FloatingWristObjective,
     VERSION as WRIST_OBJECTIVE,wrist_config,state_velocity)
 from .cart_emf_observations import batch_future,pack_future
-from .cart_collision import CollisionModel,SDFLearner,frozen
+from .cart_collision import CollisionModel,SDFLearner,frozen,geometry_rejection_reasons
 from .cart_objective import CartHand
 from .cart_protocol import PROTOCOL,ARCHITECTURES,FINGERS,POLICY_OUTPUT,POLICY_INPUT,POLICY_TRANSITION,OBJECTIVES,V9_OBJECTIVE
 from .cart_fast import DEFAULT_BATCH_SIZE,PreparedBatch,ObservationStore,prepare_windows,choose_parallel_batch
@@ -222,14 +222,16 @@ def policy_update(model,objective,learner,optimizer,batch,parallel_batch_size,ch
     started=time.perf_counter();times={}
     optimizer.zero_grad(set_to_none=True)
     check();trajectory=predict_trajectory(model,objective,chunk,normalizers)
-    trajectory.collect(objective)
+    if not getattr(learner,'policy_frozen',False):trajectory.collect(objective)
     if progress:progress('collect',1,1)
     sync()
     times['collect_s']=time.perf_counter()-started;started=time.perf_counter()
-    learner.collect()
-    for step in range(2):
-        check();sdf_losses=learner.update()
-        if progress:progress('geometry',step+1,2)
+    sdf_losses={}
+    if not getattr(learner,'policy_frozen',False):
+        learner.collect()
+        for step in range(2):
+            check();sdf_losses=learner.update()
+            if progress:progress('geometry',step+1,2)
     times['sdf_s']=time.perf_counter()-started;started=time.perf_counter()
     with frozen(objective.collision.model):
         check();loss,parts,_,_=trajectory.loss(objective,batch_losses=batch_losses,collect_metrics=False)
@@ -358,18 +360,18 @@ def acceptance(quality,sdf,*,contact_field_required=True,penetration_limit_mm=.5
 
 def full_session(model,objective,sessions,check=lambda:None):
     """Independent complete-session closed loop; only a short final tail is omitted."""
-    qualities=[];samples=[];predictions=[];times=[]
+    qualities=[];samples=[];predictions=[];times=[];costs=[]
     collision=objective.collision;old=collision.auditing;collision.auditing=True
     try:
         with torch.no_grad():
             for meta,rows,_ in sessions:
                 store=ObservationStore(rows,objective.hand.device)
-                q=None;segment=0
+                q=None;segment=0;old_velocity=None;old_dt=None
                 for i in range(max(0,len(rows)-10)):
                     check()
                     delta=np.diff(store.cpu_stamps[i:i+11])
                     if np.any(delta<=0) or np.any(delta>250) or any(row.get('stream_epoch')!=rows[i].get('stream_epoch') for row in rows[i:i+11]):
-                        q=None;segment+=1;continue
+                        q=None;segment+=1;old_velocity=None;old_dt=None;continue
                     if q is None:
                         if rows[i].get('ik_valid') is not True:
                             segment+=1;continue
@@ -379,14 +381,19 @@ def full_session(model,objective,sessions,check=lambda:None):
                     start=time.perf_counter();next_q=model.apply_delta(q,model(q,**inputs))
                     times.append((time.perf_counter()-start)*1000)
                     row=rows[i+1]
-                    _,_,quality=objective.batch(next_q,[row],q,previous_rows=[rows[i]],audit=True)
+                    dt=next_q.new_tensor([(row['timestamp_ms']-rows[i]['timestamp_ms'])/1000])
+                    velocity=state_velocity(next_q,q,dt) if next_q.shape[-1]==26 else (next_q-q)/dt[:,None]
+                    acceleration=torch.zeros_like(next_q) if old_velocity is None else (velocity-old_velocity)/(.5*(dt+old_dt))[:,None]
+                    cost,_,quality=objective.batch(next_q,[row],q,acceleration=acceleration,previous_rows=[rows[i]],audit=True)
+                    old_velocity=velocity;old_dt=dt
+                    costs.append(float(cost))
                     qualities.extend(quality);q=next_q
                     values=q[0].cpu().numpy();predictions.append(dict(dataset=meta['id'],timestamp_ms=row['timestamp_ms'],q=values[:20].tolist(),
                         **(dict(state=values.tolist(),wrist_translation_m=values[20:23].tolist(),
                             wrist_rotation_vector_rad=values[23:26].tolist()) if len(values)==26 else {})))
                     samples.append((row['timestamp_ms'],values,(meta['id'],segment)))
     finally:collision.auditing=old
-    return dict(quality_summary(qualities),**motion_summary(samples)),predictions,times
+    return dict(quality_summary(qualities),objective_raw_mean=float(np.mean(costs)) if costs else None,**motion_summary(samples)),predictions,times
 
 
 def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DEFAULT_BATCH_SIZE,length=16,
@@ -518,6 +525,8 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         learner=SDFLearner(collision,capacity=4096 if smoke else 200000,batch_size=64 if smoke else 2048,optimizer_kind=optimizer_kind)
         warmup_steps=(4 if smoke else 2000) if warmup_steps is None else warmup_steps
         if isinstance(warmup_steps,bool) or not isinstance(warmup_steps,int) or warmup_steps<0:raise ValueError('无效 SDF 热启动步数')
+        gated=not smoke
+        geometry_budget=max(warmup_steps,30000) if gated else warmup_steps
         config=dict(protocol=PROTOCOL,architecture=ARCHITECTURES[architecture],architecture_name=architecture,
             decoder=dict(layout='independent_finger_mlps_v1',fingers=list(FINGERS),joints_per_finger=4,hidden=[256,256]),
             geometry=implementation_identity(),run_id=run_id,source=source,source_binding_version=next(iter(bindings)),
@@ -527,8 +536,11 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             optimizer_kind=optimizer_kind,learning_rate=5.e-4 if optimizer_kind=='muon_sgd' else 1.e-4,objective=objective.settings.payload(),
             profile='smoke_test' if smoke else 'full',online_search=False,contact_conditioning=architecture=='attention',
             datasets=[dict(id=m['id'],fingerprint=info['fingerprint']) for m,_,info in sessions+validation],
-            training='differentiable_bptt_online_mesh_sdf',sdf_warmup_steps=warmup_steps,sdf_updates_per_batch=2,
-            selection='minimum_true_mesh_validation_loss',sdf_capacity=learner.capacity,sdf_batch_size=learner.batch_size)
+            training='geometry_gated_differentiable_bptt',sdf_warmup_steps=warmup_steps,sdf_updates_per_batch=0 if gated else 2,
+            geometry_gate=dict(required=gated,maximum_updates=geometry_budget,validation_interval=500,
+                freeze_after_acceptance=gated,checks='distance_sign_spatial_gradient_projection_jacobian_q_escape'),
+            selection='minimum_complete_session_true_mesh_cost' if gated else 'minimum_true_mesh_validation_loss',
+            sdf_capacity=learner.capacity,sdf_batch_size=learner.batch_size)
         config.update(policy_loss_scaling=scaling,gradient_clip_norm=10.,
             initialize_q_collision_from=dict(name=Path(initialize_q_collision_from).name,sha256=file_hash(initialize_q_collision_from)) if initialize_q_collision_from else None,
             transfer_policy_optimizer=transfer_policy_optimizer,
@@ -543,7 +555,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             gradient_accumulation=False,parallel_batch_size=parallel_size,
             window_stride=window_stride or max(1,length//2),training_windows=len(train_windows),
             sdf_backend=sdf_spec,
-            geometry_initialization='fresh_random_architecture' if fresh_sdf_spec is not None else 'default_or_checkpoint',
+            geometry_initialization='fresh_random_architecture' if not any((resume,initialize_from,initialize_geometry_from,initialize_sdf_from,initialize_contact_from,initialize_q_collision_from)) else 'explicit_checkpoint',
             attention_precision_request=requested_precision,policy_attention_precision=attention_precision,geometry_precision='float32',
             observation_checkpointing=model.checkpoint_observations,
             geometry_activation_recomputation=str(device).startswith('cuda'),
@@ -585,13 +597,29 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 numpy_rng=rng.bit_generator.state,torch_rng=torch.get_rng_state(),
                 cuda_rng=torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [])
         def warmup(start):
-            for step in range(start,warmup_steps):
+            if gated and (folder/'geometry_acceptance.json').exists():
+                accepted=json.loads((folder/'geometry_acceptance.json').read_text())
+                current=learner.validate(*holdout)
+                if accepted.get('accepted') and not geometry_rejection_reasons(current):
+                    learner.policy_frozen=True;return
+            for step in range(start,geometry_budget):
                 check()
                 if step%4==0:learner.collect()
                 losses=learner.update()
-                if step%20==0 or step+1==warmup_steps:
+                if step%100==0 or step+1==geometry_budget:
                     save_checkpoint(folder/'warmup.pth',dict(state(0,0,None),warmup_next=step+1))
-                    progress('sdf_warmup',completed=step+1,total=warmup_steps,sdf_losses=losses)
+                    progress('sdf_warmup',completed=step+1,total=geometry_budget,sdf_losses=losses)
+                if gated and step+1>=warmup_steps and ((step+1)%500==0 or step+1==geometry_budget):
+                    report=learner.validate(*holdout);reasons=geometry_rejection_reasons(report)
+                    atomic_json(folder/'geometry_acceptance.json',dict(accepted=not reasons,update=step+1,
+                        metrics=report,rejection_reasons=reasons))
+                    progress('geometry_validation',completed=step+1,total=geometry_budget,sdf_validation=report,
+                        accepted=not reasons,rejection_reasons=reasons)
+                    if not reasons:
+                        save_checkpoint(folder/'geometry.pth',dict(collision=collision.model.state_dict(),sdf_validation=report,update=step+1))
+                        save_checkpoint(folder/'warmup.pth',dict(state(0,0,None),warmup_next=step+1))
+                        learner.policy_frozen=True;return
+            if gated:raise ValueError('Geometry validation failed; policy training was not started. See geometry_acceptance.json')
         if resume:
             saved=json.loads((folder/'config.json').read_text())
             # Initialization belongs to the run's history, not the resume call.
@@ -611,7 +639,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             if torch.cuda.is_available() and restored['cuda_rng']:torch.cuda.set_rng_state_all(restored['cuda_rng'])
             active=True
             tracking=CartTracking(folder,config,project=wandb_project,entity=wandb_entity,base_url=wandb_base_url,mode=wandb_mode,resume=True)
-            if 'warmup_next' in restored:warmup(restored['warmup_next'])
+            warmup(restored.get('warmup_next',learner.steps))
         else:
             atomic_json(folder/'config.json',config)
             tracking=CartTracking(folder,config,project=wandb_project,entity=wandb_entity,base_url=wandb_base_url,mode=wandb_mode)
@@ -691,13 +719,23 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 if not np.isfinite(validation_raw_cost):raise ValueError('真实几何验证 loss 非有限数值')
                 validation_loss=normalized_policy_cost(validation_raw_cost,policy_loss_scale)
                 sdf_report=learner.validate(*holdout)
+                if gated:
+                    failures=geometry_rejection_reasons(sdf_report)
+                    if failures:raise ValueError('Frozen geometry failed validation: '+', '.join(failures))
+                    progress('closed_loop_validation',epoch=epoch+1,epochs=epochs)
+                    loop_quality,loop_poses,_=full_session(model,objective,validation,check)
+                    atomic_json(folder/'closed_loop_validation.json',dict(epoch=epoch+1,metrics=loop_quality))
+                    atomic_json(folder/'validation_motion_latest.json',loop_poses)
+                    validation_raw_cost=loop_quality['objective_raw_mean']
+                    validation_loss=normalized_policy_cost(validation_raw_cost,policy_loss_scale)
                 if validation_loss<best:
                     best=validation_loss;best_epoch=epoch+1
                     save_checkpoint(folder/'last.pth',dict(model=model.state_dict(),collision=collision.model.state_dict(),epoch=epoch+1,validation_loss=best,sdf_validation=sdf_report))
                 progress('validation',epoch=epoch+1,epochs=epochs,validation_loss=validation_loss,best_validation_loss=best,
                     validation_raw_cost=validation_raw_cost,
                     best_validation_raw_cost=best*policy_loss_scale/(1-best) if policy_loss_scale else best,
-                    best_epoch=best_epoch,metrics=quality_summary(quality),sdf_validation=sdf_report)
+                    best_epoch=best_epoch,metrics=loop_quality if gated else quality_summary(quality),sdf_validation=sdf_report)
+                if gated:progress('closed_loop_metrics',epoch=epoch+1,metrics=loop_quality)
             else:
                 progress('epoch_complete',epoch=epoch+1,epochs=epochs,validation_performed=False,
                     next_validation_epoch=min(epochs,((epoch+1)//validation_interval+1)*validation_interval))

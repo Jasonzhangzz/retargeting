@@ -33,6 +33,12 @@ class CartTracking:
         if phase in ('retargeting','sdf_warmup'):
             payload.update({'geometry/'+key:float(value) for key,value in values['sdf_losses'].items()})
             payload['geometry/update']=values.get('sdf_updates',values.get('completed',0))
+        if phase=='geometry_validation':
+            payload.update({'geometry/validation_'+key:float(value) for key,value in values['sdf_validation'].items() if value is not None})
+            payload.update({'geometry/update':values['completed'],'geometry/accepted':int(values['accepted'])})
+        if phase=='closed_loop_metrics':
+            payload.update({'closed_loop/'+key:float(value) for key,value in values['metrics'].items() if value is not None})
+            payload['closed_loop/epoch']=values['epoch']
         if phase=='validation':
             payload.update({'validation/'+key:float(value) for key,value in values['metrics'].items() if value is not None})
             payload.update({'validation/sdf_'+key:float(value) for key,value in values['sdf_validation'].items() if value is not None})

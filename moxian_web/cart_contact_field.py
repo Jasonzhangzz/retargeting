@@ -8,6 +8,31 @@ from torch.nn import functional as F
 CONTACT_FIELD_VERSION = 'directional_surface_field_v1'
 
 
+@wp.kernel(enable_backward=False)
+def _projection_derivative(skins:wp.array(dtype=wp.uint64),solids:wp.array(dtype=wp.uint64),
+        points:wp.array(dtype=wp.vec3),links:wp.array(dtype=int),palmar:wp.array(dtype=int),
+        probes:wp.array(dtype=wp.vec3),derivatives:wp.array(dtype=wp.vec3),valid:wp.array(dtype=int)):
+    i=wp.tid();mesh=solids[links[i]]
+    if palmar[i]==1:mesh=skins[links[i]]
+    hit=wp.mesh_query_point_no_sign(mesh,points[i],2.)
+    if hit.result:
+        a=wp.mesh_eval_position(mesh,hit.face,1.,0.)
+        b=wp.mesh_eval_position(mesh,hit.face,0.,1.)
+        c=wp.mesh_eval_position(mesh,hit.face,0.,0.)
+        u=hit.u;v=hit.v;w=1.-u-v
+        du=int(u>1.e-5);dv=int(v>1.e-5);dw=int(w>1.e-5)
+        count=du+dv+dw;probe=probes[i];out=wp.vec3(0.)
+        if count==3:
+            n=wp.mesh_eval_face_normal(mesh,hit.face)
+            out=probe-n*wp.dot(n,probe)
+        elif count==2:
+            edge=b-a
+            if du==0:edge=c-b
+            elif dv==0:edge=c-a
+            out=edge*(wp.dot(edge,probe)/wp.max(wp.dot(edge,edge),1.e-20))
+        derivatives[i]=out;valid[i]=1
+
+
 class ContactField(nn.Module):
     """Predict a local surface displacement and outward normal, without selection.
 
@@ -16,10 +41,11 @@ class ContactField(nn.Module):
     A zero direction requests the ordinary nearest point, with no side retraction.
     Link embeddings are shared with the signed distance head.
     """
-    def __init__(self):
+    def __init__(self,width=128,depth=3):
         super().__init__()
-        self.network=nn.Sequential(nn.Linear(23,128),nn.Softplus(beta=10),
-            nn.Linear(128,128),nn.Softplus(beta=10),nn.Linear(128,128),nn.Softplus(beta=10),nn.Linear(128,6))
+        layers=[nn.Linear(23,width),nn.Softplus(beta=10)]
+        for _ in range(depth-1):layers.extend((nn.Linear(width,width),nn.Softplus(beta=10)))
+        self.network=nn.Sequential(*layers,nn.Linear(width,6))
 
     def forward(self,point,direction,palmar,embedding):
         direction=F.normalize(direction,dim=-1,eps=1.e-8)
@@ -103,6 +129,22 @@ class ContactTeacher:
             wp.from_torch(points,dtype=wp.vec3),wp.from_torch(directions,dtype=wp.vec3),
             wp.from_torch(links),wp.from_torch(palmar),hits,normals,valid],device=device)
         return wp.to_torch(hits).clone(),wp.to_torch(normals).clone(),wp.to_torch(valid).bool().clone()
+
+    @torch.no_grad()
+    def projection_derivative(self,points,links,palmar,probes):
+        """Exact local Jacobian on the central nearest feature, label-only.
+
+        Finite differences of a nonconvex surface can cross two different
+        nearest features with identical normals; they are not Jacobian labels.
+        """
+        n=len(points);device=self.hand.device
+        x=points.detach().to(device=device,dtype=torch.float32).contiguous()
+        probes=probes.detach().to(device=device,dtype=torch.float32).contiguous()
+        links=links.to(device=device,dtype=torch.int32).contiguous();palmar=palmar.to(device=device,dtype=torch.int32).contiguous()
+        values=wp.zeros(n,dtype=wp.vec3,device=device);valid=wp.zeros(n,dtype=int,device=device)
+        if n:wp.launch(_projection_derivative,n,inputs=[self.mesh_ids,self.hand.collision.mesh_ids,
+            wp.from_torch(x,dtype=wp.vec3),wp.from_torch(links),wp.from_torch(palmar),wp.from_torch(probes,dtype=wp.vec3),values,valid],device=device)
+        return wp.to_torch(values).clone(),wp.to_torch(valid).bool().clone()
 
     @torch.no_grad()
     def random_queries(self,oracle,n):

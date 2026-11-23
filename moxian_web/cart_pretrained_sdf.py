@@ -10,6 +10,23 @@ from .cart_data import file_hash
 from .cart_contact_field import ContactField
 
 KIND='configuration_sdf_v1'
+INTRINSIC_KIND='fk_intrinsic_sdf_v1'
+
+
+class IntrinsicDistance(nn.Module):
+    """One rigid surface field per semantic link, articulated by exact FK.
+
+    Learning an invariant local surface avoids asking an MLP to rediscover FK
+    from independently resampled joint configurations at every update.
+    """
+    def __init__(self):
+        super().__init__()
+        self.links=nn.Embedding(21,16)
+        self.network=nn.Sequential(nn.Linear(19,256),nn.Softplus(beta=10),
+            nn.Linear(256,256),nn.Softplus(beta=10),nn.Linear(256,256),nn.Softplus(beta=10),nn.Linear(256,1))
+
+    def forward(self,points,links):
+        return .05*self.network(torch.cat((points/.05,self.links(links.long())),-1)).squeeze(-1)
 
 
 class ConfigurationDistance(nn.Module):
@@ -121,17 +138,47 @@ class PretrainedSDF(nn.Module):
 def fresh_geometry_spec(hand):
     from .cart_q_collision import field_spec
     geometry=geometry_spec(hand)
-    return dict(kind=KIND,geometry=geometry,
-        model_config=dict(lower=hand.domain['lower'],upper=hand.domain['upper'],
-            joint_mask=geometry['joint_mask'],width=256,depth=4,embedding=16),
-        fine_tune_lr=1.e-5,q_collision=field_spec(hand),
-        query='actual_rollout_q_native_wrist_points',online_supervision='mesh_local_replay_random_configuration_augmentation')
+    return dict(kind=INTRINSIC_KIND,geometry=geometry,learning_rate=1.e-3,contact_width=256,contact_depth=4,
+        q_collision=field_spec(hand,group_sobolev=True),query='exact_differentiable_inverse_FK_then_intrinsic_link_field',
+        online_supervision='mesh_local_signed_distance_normal_and_contact_replay',
+        initialization='random_no_checkpoint')
+
+
+class IntrinsicSDF(nn.Module):
+    intrinsic=True
+    def __init__(self,hand,spec):
+        super().__init__()
+        if spec['geometry']!=geometry_spec(hand):raise ValueError('Incompatible intrinsic SDF geometry')
+        self.hand=hand;self.pretrained=IntrinsicDistance().to(hand.device)
+        # The attribute preserves optimizer grouping, but these weights are fresh.
+        self.pretrained_lr=spec['learning_rate']
+        self.links=nn.Embedding(21,16).to(hand.device)
+        self.contact_field=ContactField(width=spec['contact_width'],depth=spec['contact_depth']).to(hand.device)
+
+    def forward(self,local,links):return self.pretrained(local,links)
+
+    def training_distance(self,local,links,*,validation=False):return self(local,links)
+
+    def at_frames(self,local,links,poses,q,native_p,native_r):
+        # `local` already contains the differentiable inverse of the floating
+        # link pose. Applying native FK again would cancel the wrist derivative.
+        return self(local,links)
+
+    def contact(self,points,directions,links,palmar):
+        return self.contact_field(points,directions,palmar,self.links(links.long()))
+
+    def query(self,hand,q,points,links,frames=None):
+        p,r=(hand.frames(q) if frames is None else frames)[:2]
+        ids=torch.arange(len(q),device=q.device)[:,None]
+        links=links.expand(points.shape[:-1])
+        local=(r[ids,links].transpose(-1,-2)@(points-p[ids,links])[...,None]).squeeze(-1)
+        return self(local,links)
 
 
 def restore_geometry(hand,spec):
-    if spec.get('kind')!=KIND or not spec.get('q_collision'):
+    if spec.get('kind') not in (KIND,INTRINSIC_KIND) or not spec.get('q_collision'):
         raise ValueError('CART v9/wrist requires an articulated SDF and q-only self-collision field')
-    model=PretrainedSDF(hand,spec)
+    model=PretrainedSDF(hand,spec) if spec['kind']==KIND else IntrinsicSDF(hand,spec)
     from .cart_q_collision import QCollisionField
     model.q_collision=QCollisionField(hand,spec['q_collision'])
     return model

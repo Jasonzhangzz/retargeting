@@ -6,7 +6,7 @@ from torch import nn
 
 class MuonSGD:
     """Checkpointable composition with no Adam moments or Adam fallback."""
-    def __init__(self,model,lr=5.e-4,*,pretrained_lr=None,contact_lr=None,weight_decay=.01):
+    def __init__(self,model,lr=5.e-4,*,pretrained_lr=None,contact_lr=None,weight_decay=.01,vector_lr_scale=1.):
         if not hasattr(torch.optim,'Muon'):raise RuntimeError('This run requires torch.optim.Muon')
         embeddings={id(p) for module in model.modules() if isinstance(module,nn.Embedding) for p in module.parameters(recurse=False)}
         groups={'muon':{},'sgd':{}};self.assignment={}
@@ -14,6 +14,7 @@ class MuonSGD:
             if not p.requires_grad:continue
             rate=pretrained_lr if pretrained_lr is not None and name.startswith('pretrained.') else contact_lr if contact_lr is not None else lr
             kind='muon' if p.ndim==2 and id(p) not in embeddings else 'sgd'
+            if kind=='sgd':rate*=vector_lr_scale
             groups[kind].setdefault(float(rate),[]).append(p);self.assignment[name]=kind
         self.optimizers={}
         for kind,by_lr in groups.items():
