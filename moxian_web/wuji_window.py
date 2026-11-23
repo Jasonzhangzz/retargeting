@@ -10,8 +10,9 @@ def identity(frame):
 
 
 class SourceFrameWindow:
-    def __init__(self):
-        self.frames=deque(maxlen=HORIZON);self.lock=threading.Lock()
+    def __init__(self,horizon=HORIZON):
+        if type(horizon) is not int or horizon<1:raise ValueError('Invalid source window length')
+        self.frames=deque(maxlen=horizon);self.lock=threading.Lock()
 
     def clear(self):
         with self.lock:self.frames.clear()

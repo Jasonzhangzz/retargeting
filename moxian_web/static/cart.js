@@ -31,7 +31,8 @@
   el('cartLosses').textContent=job.losses||job.sdf_losses?JSON.stringify({losses:job.losses,geometry_losses:job.sdf_losses,validation:job.validation_loss,geometry_validation:job.sdf_validation,metrics:job.metrics,timings:job.timings},null,2):job.result?JSON.stringify(job.result,null,2):'';
   const m=w.cart?.metrics;
   el('cartBufferStatus').textContent=w.cart?.buffering?`等待未来观测 ${w.cart.buffered_frames}/11 帧`:w.cart?.buffer_delay_ms!==undefined?`观测时间 ${w.cart.observation_timestamp_ms.toFixed(1)} ms · 实际缓冲 ${w.cart.buffer_delay_ms.toFixed(1)} ms`:'';
-  el('cartContactStatus').textContent=m?`${w.cart.experimental?'实验模型 · 原验收未通过 · ':''}网络独立诊断 · 间隙 ${m.max_gap_mm.toFixed(2)} mm · 穿透 ${m.max_penetration_mm.toFixed(2)} mm · 骨轴误差 ${m.bone_direction_deg.toFixed(1)}° · ${w.contact_constraints_satisfied===null?'无活动接触':w.contact_constraints_satisfied?'接触达标':'接触未达标'}`:'';
+  const audit=w.cart?.audit;
+  el('cartContactStatus').textContent=m?`${w.cart.experimental?'实验模型 · 原验收未通过 · ':''}${w.cart.audit_async?`异步诊断 · 源帧距今 ${audit?.age_ms?.toFixed(0)||'—'} ms`:'同帧独立诊断'} · 间隙 ${m.max_gap_mm.toFixed(2)} mm · 穿透 ${m.max_penetration_mm.toFixed(2)} mm · 骨轴误差 ${m.bone_direction_deg.toFixed(1)}° · ${!m.required?'无活动接触':audit?.feasible?'接触达标':'接触未达标'}`:(w.cart?.audit_error||'等待独立几何诊断');
   if(w.playback?.active&&c.replay_active){el('cartSeek').max=Math.max(0,w.playback.frames-1);el('cartSeek').value=w.playback.index;}
  }
  async function action(command,data={}){

@@ -3,6 +3,7 @@ import json
 import time
 import uuid
 from pathlib import Path
+from collections import OrderedDict
 import numpy as np
 import torch
 from retarget.baseline.geort.runtime import GeoRTRetarget
@@ -11,7 +12,8 @@ from .cart_training import Predictor,neutral
 from .cart_data import SourceGeometry
 from .cart_protocol import PROTOCOL
 from .cart_network import FutureBuffer
-from .cart_contacts import overlay,transform_contacts
+from .cart_live import LiveAudit,policy_row
+from .wuji_transport import decode_source_frame
 from .cart_objective import CartObjective,policy_settings
 from .cart_initialization import RetargetSession
 
@@ -34,7 +36,7 @@ class CartRetarget(GeoRTRetarget):
         profile=json.loads((Path(model_path)/'source_profile.json').read_text())
         self.geometry=SourceGeometry(topology,profile,device)
         self.objective=CartObjective(self.cart_predictor.hand,policy_settings(),self.cart_predictor.collision)
-        self.buffer=FutureBuffer();self.external_sdf=None;self.reset()
+        self.buffer=FutureBuffer();self.external_sdf=None;self.audit=LiveAudit(self);self.reset()
 
     def topology(self):
         return dict(self.surface.topology(self.mapping),algorithm=PROTOCOL,training_mode=self.training_mode,
@@ -43,10 +45,13 @@ class CartRetarget(GeoRTRetarget):
 
     def predict(self,points):return self.last_q
 
+    def close(self):self.audit.close()
+
     def reset(self):
         self.buffer.reset();self.last_q=neutral(self.cart_predictor.hand).cpu().numpy()
         self.ik_session=RetargetSession.for_hand('WujiHand2','right');self.state_initialized=False
         self.session_id=uuid.uuid4().hex
+        self.observations=OrderedDict();self.prediction_stamp=None
 
     def step(self,frame):
         began=time.perf_counter()
@@ -57,10 +62,16 @@ class CartRetarget(GeoRTRetarget):
         if self.buffer.last_stamp is not None and (not 0<stamp-self.buffer.last_stamp<=250 or epoch!=self.buffer.epoch):
             self.reset()
         def observed(item):
-            v,j=np.asarray(item['vertices_m']),np.asarray(item['joints_m'])
-            row,_,_=self.geometry.frame(None,item['timestamp_ms'],item,raw=(v,j))
-            row['timestamp_ms']=item.get('recorded_timestamp_ms',item['timestamp_ms']);row['stream_epoch']=epoch
-            return (row['timestamp_ms'],(dict(item),row))
+            key=(item['timestamp_ms'],item.get('recorded_timestamp_ms'),epoch)
+            if key not in self.observations:
+                decoded=decode_source_frame({k:v for k,v in item.items() if k not in ('cart_future_frames','cart_received_window')})
+                if self.source.identity(decoded.get('serial'),decoded)!=self.expected or decoded.get('binding_version')!=self.source_topology['binding_version']:
+                    raise ValueError('CART future window crosses a source identity boundary')
+                if not decoded.get('calibrated') or decoded.get('preview'):raise ValueError('CART future source is not applied calibration')
+                row=policy_row(self.geometry,decoded)
+                self.observations[key]=(row['timestamp_ms'],(decoded,row))
+                while len(self.observations)>32:self.observations.popitem(last=False)
+            return self.observations[key]
         if 'cart_future_frames' in frame:
             # Offline replay reads saved true future data immediately, including
             # paused/seek views. It does not wait for ten playback callbacks.
@@ -91,36 +102,33 @@ class CartRetarget(GeoRTRetarget):
                 return dict(ready=False,display_available=False,status='waiting_ik',algorithm=PROTOCOL)
             self.state_initialized=True
         old_q=self.last_q.copy()
-        self.last_q=self.cart_predictor.predict_rows(old_q,window[0][0],future)
-        network_ms=(time.perf_counter()-began)*1000
+        current_stamp=self.prediction_stamp if frame.get('cart_received_window') and self.prediction_stamp is not None else window[0][0]
+        prepared_ms=(time.perf_counter()-began)*1000;network_start=time.perf_counter()
+        self.last_q=self.cart_predictor.predict_rows(old_q,current_stamp,future)
+        self.prediction_stamp=row['timestamp_ms']
+        network_ms=(time.perf_counter()-network_start)*1000
         result=super().step(target_frame)
-        with torch.no_grad():
-            collision=self.cart_predictor.collision;collision.auditing=True
-            try:
-                _,_,quality=self.objective.batch(self.cart_predictor.hand.tensor(self.last_q)[None],[row],
-                    self.cart_predictor.hand.tensor(old_q)[None],previous_rows=[previous],audit=True)
-            finally:collision.auditing=False
-        quality=quality[0]
-        joints=np.asarray(target_frame['joints_m']);root=joints[self.source.indices[0]]@self.source.mirror.T
-        contacts=transform_contacts(row['contacts'],self.source.basis,root,inverse=True)
-        source_overlay=overlay(contacts,timestamp_ms=target_frame['timestamp_ms'],geometry_version=target_frame['geometry_version'],processing_ms=row['processing_ms'])
-        robot_points=[]
-        for pa,pb in quality['points']:
-            robot_points.extend((p[0].cpu().numpy()@self.source.basis.T+root).tolist() for p in (pa,pb))
-        metrics=dict(required=quality['contact_count'],max_gap_mm=float(quality['max_gap_m'][0])*1000,
-            max_normal_deg=float(quality['max_normal_deg'][0]),bone_direction_deg=float(quality['bone_direction_deg'][0]),
-            max_penetration_mm=float(quality['max_penetration_m'][0])*1000)
-        result.update(cart_hull=source_overlay,
-            cart_robot_hull=dict(ready=True,contact_points_m=robot_points,patch_points_m=[],timestamp_ms=target_frame['timestamp_ms'],geometry_version=target_frame['geometry_version']),
-            cart=dict(metrics=metrics,buffering=False,observation_timestamp_ms=row['timestamp_ms'],
+        audit=self.audit.snapshot()
+        if 'cart_future_frames' in frame and not frame.get('cart_received_window'):
+            audit=self.audit.run(target_frame,row,self.last_q,old_q,self.session_id)
+            audit=dict(audit,age_ms=0.)
+        else:self.audit.submit(target_frame,row,self.last_q,old_q)
+        matching=bool(audit and audit['timestamp_ms']==target_frame['timestamp_ms'])
+        delay=window[-1][0]-row['timestamp_ms'] if frame.get('cart_received_window') else stamp-row['timestamp_ms'] if 'cart_future_frames' not in frame else 0.
+        result.update(cart_hull=audit['source_hull'] if matching else None,
+            cart_robot_hull=audit['robot_hull'] if matching else None,
+            cart=dict(metrics=audit['metrics'] if audit else None,audit=audit,audit_error=self.audit.error,
+                audit_async=bool(frame.get('cart_received_window') or 'cart_future_frames' not in frame),
+                buffering=False,observation_timestamp_ms=row['timestamp_ms'],
                 experimental=bool((self.cart_predictor.deployment or {}).get('experimental')),
                 acceptance_status=(self.cart_predictor.deployment or {}).get('acceptance_status','completed'),
-                buffer_delay_ms=0. if 'cart_future_frames' in frame else stamp-row['timestamp_ms'],self_contacts=len(contacts['self_pairs']),object_contacts=len(contacts['object_contacts']),
-                tactile_status=contacts['tactile_status'],online_search=False,hard_contact_guarantee=False),
+                self_contact_trained=self.cart_predictor.config.get('objective_version')=='card_raw_neural_self_contact_v3',
+                buffer_delay_ms=delay,window_source='received' if frame.get('cart_received_window') else 'replay' if 'cart_future_frames' in frame else 'processed',
+                self_contacts=audit['self_contacts'] if audit else None,object_contacts=audit['object_contacts'] if audit else None,
+                tactile_status=audit['tactile_status'] if audit else 'unknown',online_search=False,hard_contact_guarantee=False),
             recorded_timestamp_ms=target_frame.get('recorded_timestamp_ms'),contact_ready=False,
-            contact_anchors=contacts['object_contacts'],self_contact_pairs=contacts['self_pairs'],
-            contact_constraints_satisfied=bool(quality['feasible'][0]) if quality['contact_count'] else None,
-            solution_feasible=bool(quality['feasible'][0]),status='ready')
+            contact_constraints_satisfied=audit['feasible'] if matching and audit['metrics']['required'] else None,
+            solution_feasible=audit['feasible'] if matching else None,status='ready')
         result['quality'].update(processing_ms=(time.perf_counter()-began)*1000,network_ms=network_ms,
-                                 inference_only=True,audit_only=True)
+                                 preparation_ms=prepared_ms,inference_only=True,audit_only=True,audit_async=not matching)
         return result

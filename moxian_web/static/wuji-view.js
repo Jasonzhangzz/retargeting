@@ -261,7 +261,8 @@ function update(state,active){
    const i=m.userData.owner;m.visible=!!showRVQ;
    if(showRVQ){const r=w.rvq.link_rotations[i],p=w.rvq.link_positions_m[i];m.matrix.copy(B).multiply(new THREE.Matrix4().set(...r[0],p[0],...r[1],p[1],...r[2],p[2],0,0,0,1)).multiply(B);}
   });
-  anchorDots.forEach((dot,i)=>{dot.geometry.setAttribute('position',new THREE.Float32BufferAttribute((w.contact_anchors||[]).flatMap(a=>basis(i===0?a.position_m:a.robot_position_m)),3));dot.geometry.computeBoundingSphere();dot.visible=contactReady;});
+  const pairedAnchors=contactReady?(w.contact_anchors||[]).filter(a=>vectors([a.position_m,a.robot_position_m])):[];
+  anchorDots.forEach((dot,i)=>{dot.geometry.setAttribute('position',new THREE.Float32BufferAttribute(pairedAnchors.flatMap(a=>basis(i===0?a.position_m:a.robot_position_m)),3));dot.geometry.computeBoundingSphere();dot.visible=pairedAnchors.length>0;});
   const sourceLabel=topology?.surface_backend==='qnbot'?'Moxian glove':'MANO';
   document.querySelector('.wuji-left-label').textContent=w.source_hand_side==='left'?sourceLabel+' · 左手镜像':sourceLabel+' · 右手';
   dots[0].visible=true;dots[1].visible=!!model.mapping.ready;const contact={contact_ready:contactReady,contact_mask:w.contact_mask};
@@ -297,6 +298,7 @@ function update(state,active){
   render();
   displayedFrameKey=frameKey;
   displayedFrame=w;
+  window.wujiRenderError=null;
   window.wujiViewStats={solver_backend:backendOf(w),algorithm:w.algorithm,solver_session_id:w.solver_session_id,source_timestamp_ms:w.source_timestamp_ms,holding,update_ms:performance.now()-began,render_submission_latency_ms:Date.now()-w.source_timestamp_ms};
  }catch(e){document.getElementById('wujiStatus').textContent=e.message;window.wujiRenderError=e.message;}
 }

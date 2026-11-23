@@ -53,13 +53,19 @@ class QCollisionField(nn.Module):
         # 6 mm safety margin: clearance cost is nonzero before intersection.
         return torch.stack((20*F.softplus(raw[...,0]),5*F.softplus(raw[...,1]),5*F.softplus(raw[...,2])),dim=-1)
 
-    def forward(self,q):
+    def forward(self,q,contact_groups=None):
         values=[]
         for x in q.split(2048):
             recompute=x.is_cuda and torch.is_grad_enabled() and x.requires_grad and not any(p.requires_grad for p in self.parameters())
             values.append(checkpoint(self.components,x,use_reentrant=False,preserve_rng_state=False) if recompute else self.components(x))
         parts=torch.cat(values)
-        energy=parts[...,0].square().sum(-1)
+        energy=parts[...,0].square()
+        if contact_groups is not None:
+            # Intended finger pairs may touch: replace the 6mm clearance
+            # energy by their learned penetration energy. Never remove depth
+            # or the global 5mm cap, including for these contact groups.
+            energy=torch.where(contact_groups,parts[...,2].square(),energy)
+        energy=energy.sum(-1)
         depth=(torch.softmax(parts[...,1]/.05,-1)*parts[...,1]).sum(-1)/1000
         return energy,depth,parts[...,2].square().sum(-1)
 
@@ -136,12 +142,18 @@ class QCollisionTeacher:
             cap_amplitude=cap_amplitude.detach(),cap_gradient=cap_gradient.detach())
 
     @torch.no_grad()
-    def values(self,frames):
+    def values(self,frames,contact_groups=None):
         signed,valid=self.distances(self.oracle,frames)
-        energy=torch.where(valid,(6-signed*1000).clamp_min(0).square(),0.).sum(-1)
+        clearance=torch.where(valid,(6-signed*1000).clamp_min(0).square(),0.)
+        energy=clearance.sum(-1)
         signed,valid=self.distances(self.depth_oracle,frames)
         depth=torch.where(valid,(-signed).clamp_min(0),0.).amax(-1)
-        cap=torch.where(valid,(-signed*1000).clamp_min(0).square(),0.).sum(-1)
+        penetration=torch.where(valid,(-signed*1000).clamp_min(0).square(),0.)
+        cap=penetration.sum(-1)
+        if contact_groups is not None:
+            energy_groups=clearance.new_zeros(len(clearance),len(GROUPS)).scatter_add(1,self.groups[None].expand(len(clearance),-1),clearance)
+            cap_groups=penetration.new_zeros(len(penetration),len(GROUPS)).scatter_add(1,self.depth_groups[None].expand(len(penetration),-1),penetration)
+            energy=torch.where(contact_groups,cap_groups,energy_groups).sum(-1)
         return energy,depth,cap
 
 
@@ -260,10 +272,11 @@ def attach_field(collision,spec,state=None):
 def collision_cost(objective,q,rows,frames):
     """Q-only self collision; (q, wrist-point, link) SDF for active glove points."""
     c=objective.collision;s=objective.card
+    contact_groups=objective.contact_collision_groups(rows) if hasattr(objective,'contact_collision_groups') else None
     if c.auditing:
         if not hasattr(c,'q_audit_teacher'):c.q_audit_teacher=QCollisionTeacher(c)
-        energy,depth,cap=c.q_audit_teacher.values(frames)
-    else:energy,depth,cap=c.model.q_collision(q)
+        energy,depth,cap=c.q_audit_teacher.values(frames,contact_groups)
+    else:energy,depth,cap=c.model.q_collision(q,contact_groups)
     tactile,links,counts=c.oracle.flat_tactile_queries(frames,rows)
     ids=torch.arange(len(q),device=q.device).repeat_interleave(torch.as_tensor(counts,device=q.device))
     values=c.distance(tactile,links,configuration=q,pose_ids=ids[:,None].expand_as(links),frames=frames)

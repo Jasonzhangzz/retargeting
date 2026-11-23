@@ -82,3 +82,17 @@ q_next = predictor.predict_next(
 当前已部署 epoch 260。网页 CART 面板选择该模型和验证录制 `20261118T135558_05a2628d`，点击“回放所选一段”即可使用，不需要先替换当前实时标定或启用实时 CART。结束回放恢复先前求解器，GeoRT 与 CART 分别保存自己的模型路径。
 
 实时启用仍检查设备、手侧、源标定、材料绑定和关节域。模型训练标定与当前实时标定不一致时，显示明确错误；不会自动覆盖当前标定或跳过身份检查。
+
+## 对指闭合目标与实时缓冲
+
+`card_raw_neural_surface_v2` 的源几何检测虽然保存穿透产生的 `self_pairs`，训练目标的 `contact_self_closure` 始终为零。触觉 CoP 跟踪和碰撞惩罚不能替代两个机器人接触面的闭合约束。
+
+`card_raw_neural_self_contact_v3` 在原有 CARD 项上增加 `wpinch² × ||p_a-p_b||²_mm` 和相对法向项。接触 link 对来自原有源网格穿透与方向回退检测；共同源接触位置分别经两侧 learned pad field 投影，FK、接触点和法向均保留对 q 的梯度，原生三角面查询只用于标签和独立验收。新增投影查询也进入几何网络监督。
+
+q-only 碰撞网络按手指组输出势能；对已观测接触的手指组，用其穿透势能替换 6 mm 分离裕量势能，其他组保留原裕量。这个豁免范围是整个手指组，不是单个 link；所有组的穿透惩罚与 5 mm 全局上限惩罚仍保留。它们都是软损失，不能视为硬接触或无穿透保证。
+
+新训练使用 `--policy-objective card_raw_neural_self_contact_v3 --policy-loss-scale 100000000 --optimizer muon_sgd`，归一化仍作用于完整 batch 均值，范围为 `[0,1)`。尺度按新增 CARD 闭合项的量级调整，不改变各项相对权重。`--initialize-from RUN --initialize-checkpoint best --fresh-policy-optimizer` 从 `last.pth` 的最佳策略与几何权重开始，策略和几何优化器均重新初始化，复用已有几何 replay；这是新目标下的训练，不是原任务断点续训。
+
+实时 CART 的 11 帧窗口在输入接收线程维护，不再依赖求解吞吐率。策略输入只准备 EMF 和材料触觉点，已准备帧有界缓存；跳帧后的时间间隔从上一输出状态的真实时间戳计算。源接触搜索与原生 mesh 验收在后台约 2 Hz 执行，网页明确显示诊断帧时间和年龄，不将历史验收结果当作当前帧的可行性。离线回放仍同步验收同帧几何。
+
+原训练数据包含 2059 帧拇指接触，覆盖四种对指；原独立验证会话没有拇指接触标签。因此另外记录 `self_contact_gap_mean_mm`、`self_contact_gap_p95_mm` 和 `self_contact_satisfied_rate`，并保留缺少独立对指验证数据的限制，不把空样本集计为成功。

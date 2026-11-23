@@ -34,7 +34,7 @@ def main():
         if m.get('type')=='frame':m=pack_result_geometry(m)
         with emit_lock:stream.write(json.dumps(m,allow_nan=False,separators=(',',':'))+'\n');stream.flush()
     signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set())
-    frames=queue.Queue(maxsize=1);controls=queue.Queue(maxsize=32);recent=SourceFrameWindow()
+    frames=queue.Queue(maxsize=1);controls=queue.Queue(maxsize=32);recent=SourceFrameWindow();cart_recent=SourceFrameWindow(horizon=11)
     def reader():
         heartbeat=0.;previous_received=None;previous_stamp=None;epoch=0
         try:
@@ -47,6 +47,7 @@ def main():
                     m['frame']['input_stream_epoch']=str(m['frame'].get('input_stream_epoch',0))+':'+str(epoch)
                     m['frame']['input_received_wall_ms']=time.time()*1000
                     recent.append(m['frame'])
+                    cart_recent.append(m['frame'])
                     try:frames.get_nowait()
                     except queue.Empty:pass
                     frames.put_nowait(m['frame'])
@@ -59,18 +60,22 @@ def main():
     backend=args.solver;device='cuda:0' if torch.cuda.is_available() else 'cpu'
     model_paths={'geort':args.geort_model or None,'cart':args.cart_model or None}
     model_path=model_paths.get(backend);replay=None;solver=None;topology=None;rebuild=False;version=None;object_sdf=None;last_output_wall_ms=None
+    def release_solver():
+        nonlocal solver
+        if solver is not None and hasattr(solver,'close'):solver.close()
+        solver=None
     while not stop.is_set():
         try:m=controls.get_nowait()
         except queue.Empty:m=None
         if m:
             if m['type']=='topology':
                 topology=m['model'];new=(topology['geometry_version'],topology['binding_version'],topology.get('model_hash'))
-                if new!=version:solver=None;version=new;recent.clear()
+                if new!=version:release_solver();version=new;recent.clear();cart_recent.clear()
             else:
                 action=m.get('action');error=None
-                if action not in ('replay_pause',):recent.clear()
+                if action not in ('replay_pause',):recent.clear();cart_recent.clear()
                 if action=='model_set':
-                    model_path=(m.get('data') or {})['model_path'];backend=(m.get('data') or {}).get('solver','geort');solver=None
+                    model_path=(m.get('data') or {})['model_path'];backend=(m.get('data') or {}).get('solver','geort');release_solver()
                     model_paths[backend]=model_path
                 elif action=='cart_action_set':
                     error='CART 可微策略不使用动作类别条件'
@@ -78,10 +83,10 @@ def main():
                     try:
                         from retarget.baseline.geort.runtime import Replay
                         replay=Replay((m.get('data') or {})['folder'],device)
-                        topology=replay.topology;version=(topology['geometry_version'],topology['binding_version'],topology.get('model_hash'));solver=None
+                        topology=replay.topology;version=(topology['geometry_version'],topology['binding_version'],topology.get('model_hash'));release_solver()
                     except Exception as exc:error=str(exc)
                 elif action=='replay_stop':
-                    replay=None;solver=None;topology=None
+                    replay=None;release_solver();topology=None
                 elif action in ('replay_pause','replay_seek'):
                     if replay is None:error='尚未加载录制回放'
                     elif action=='replay_pause':replay.pause(bool((m.get('data') or {}).get('paused',True)))
@@ -89,17 +94,17 @@ def main():
                     if solver:solver.reset()
                 elif action=='object_set':
                     data=m.get('data') or {}
-                    try:object_sdf=TrackedMesh(data['vertices_m'],data['faces'],device,data.get('transform'));solver=None
+                    try:object_sdf=TrackedMesh(data['vertices_m'],data['faces'],device,data.get('transform'));release_solver()
                     except Exception as exc:error=str(exc)
-                elif action=='object_clear':object_sdf=None;solver=None
-                elif action=='rebuild':rebuild=True;solver=None
+                elif action=='object_clear':object_sdf=None;release_solver()
+                elif action=='rebuild':rebuild=True;release_solver()
                 elif action=='reset':
                     if solver:solver.reset()
                 elif action=='solver_set':
                     selected=(m.get('data') or {}).get('solver')
                     if selected not in SOLVERS:error='Unknown Wuji2 solver'
                     elif selected in model_paths and not model_paths[selected]:error='请先选择对应求解器的模型'
-                    else:backend=selected;model_path=model_paths.get(selected);solver=None
+                    else:backend=selected;model_path=model_paths.get(selected);release_solver()
                 else:error='Unknown WUJI2 control'
                 if error is None and action not in ('replay_pause','replay_seek'):emit({'type':'state','status':'initializing','ready':False,'solution_feasible':False,'display_available':False,
                     'requested_solver_backend':backend,'active_solver_backend':backend,'active_solver_session_id':None})
@@ -128,17 +133,28 @@ def main():
         else:
             try:frame=frames.get(timeout=.03)
             except queue.Empty:
-                window=recent.snapshot() if backend=='cem' else []
+                window=recent.snapshot() if backend=='cem' else cart_recent.snapshot() if backend=='cart' else []
                 if window and time.time()*1000-window[-1]['input_received_wall_ms']>250:
-                    recent.clear();solver.reset()
+                    recent.clear();cart_recent.clear();solver.reset()
                     emit({'type':'state','status':'buffering','ready':False,'display_available':False,
-                          'solution_feasible':False,'message':f'CARD 输入断流，等待连续当前帧和未来{FUTURE}帧',
-                          'buffering_frames':0,'required_frames':HORIZON})
+                          'solution_feasible':False,'message':f'{backend.upper()} 输入断流，等待连续真实未来帧',
+                          'buffering_frames':0,'required_frames':11 if backend=='cart' else HORIZON})
                 continue
         if (frame.get('geometry_version'),frame.get('binding_version'),frame.get('model_hash'))!=version:continue
         try:
             emit({'type':'state','status':'solving','processing_source_timestamp_ms':frame['timestamp_ms']})
-            frame=decode_source_frame(frame)
+            if backend=='cart' and not replay:
+                window=cart_recent.snapshot()
+                if len(window)!=11:
+                    emit({'type':'state','status':'buffering','ready':False,'display_available':False,'solver_backend':backend,
+                        'cart':dict(buffering=True,buffered_frames=len(window),required_frames=11,window_source='received')})
+                    continue
+                if (getattr(solver,'prediction_stamp',None) is not None and window[1]['timestamp_ms']<=solver.prediction_stamp
+                        and window[0].get('input_stream_epoch')==solver.buffer.epoch):continue
+                frame=dict(window[0],cart_future_frames=window[1:],cart_received_window=True,
+                    cart_latest_timestamp_ms=window[-1]['timestamp_ms'],
+                    cart_latest_received_wall_ms=window[-1]['input_received_wall_ms'])
+            else:frame=decode_source_frame(frame)
             if backend=='cem':
                 if replay:
                     frame=dict(frame,card_future_frames=[decode_source_frame(f) for f in replay.future_frames(frame,FUTURE)])
@@ -159,8 +175,8 @@ def main():
             annotation=rvq.infer(result,model)
             result['rvq']=annotation
             result['quality']['rvq_inference_ms']=annotation.get('inference_ms')
-            result['quality'].update(input_queue_ms=processing_started-frame['input_received_wall_ms'],
-                input_source_age_ms=processing_started-frame['timestamp_ms'])
+            result['quality'].update(input_queue_ms=processing_started-frame.get('cart_latest_received_wall_ms',frame['input_received_wall_ms']),
+                input_source_age_ms=processing_started-frame.get('cart_latest_timestamp_ms',frame['timestamp_ms']))
             published=time.time()*1000
             if backend=='cem':
                 result['inference_delay_ms']=published-result['live_source_timestamp_ms']
@@ -174,6 +190,7 @@ def main():
                 'active_algorithm':result['algorithm'],'active_solver_session_id':result['solver_session_id'],'error':None})
         except Exception as exc:
             traceback.print_exc();emit({'type':'state','status':'error','ready':False,'display_available':False,'error':str(exc)})
+    release_solver()
 
 
 if __name__=='__main__':

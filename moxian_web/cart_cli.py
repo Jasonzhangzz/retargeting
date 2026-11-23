@@ -53,6 +53,7 @@ def main():
             p.add_argument('--window-stride',type=int,default=0,help='Training window start spacing; 0 keeps length//2. Validation sampling is unchanged.')
             p.add_argument('--resume-run');p.add_argument('--sdf-warmup-steps',type=int)
             p.add_argument('--initialize-from',help='Initialize a new run from a compatible five-finger EMF policy checkpoint; not exact resume')
+            p.add_argument('--initialize-checkpoint',choices=('resume','best'),default='resume',help='Best uses last.pth policy/geometry with fresh optimizers; requires --fresh-policy-optimizer')
             p.add_argument('--initialize-geometry-from',help='Reuse geometry and its optimizer/replay; initialize a fresh delta policy')
             p.add_argument('--initialize-sdf-from',type=Path,help='Load a q-conditioned Neural SDF checkpoint; may combine with contact/replay initialization')
             p.add_argument('--initialize-contact-from',type=Path,help='Load only independently pretrained contact-head weights; keep policy and optimizer fresh')
@@ -64,7 +65,7 @@ def main():
             p.add_argument('--wandb-base-url',help='Self-hosted W&B origin, without /home')
             p.add_argument('--wandb-mode',choices=('online','offline'),default='online')
             p.add_argument('--initial-noise-rad',type=float,default=.1,help='Uniform IK reset noise in [-amplitude, amplitude]; 0 disables')
-            p.add_argument('--policy-objective',choices=('multiscale_exp_card_v1','card_raw_neural_collision_v1','card_raw_neural_surface_v2'),
+            p.add_argument('--policy-objective',choices=('multiscale_exp_card_v1','card_raw_neural_collision_v1','card_raw_neural_surface_v2','card_raw_neural_self_contact_v3'),
                 default='multiscale_exp_card_v1',help='Policy energy; CARD uses exact native pad contacts and Neural SDF collision')
         if name=='evaluate':p.add_argument('--model',required=True)
     cap=sub.add_parser('capture');cap.add_argument('--dataset',required=True);cap.add_argument('--follow',action='store_true');cap.add_argument('--device')
@@ -126,7 +127,7 @@ def run(args):
                 wandb_base_url=args.wandb_base_url,wandb_mode=args.wandb_mode,window_stride=args.window_stride,
                 initialize_sdf_from=args.initialize_sdf_from,policy_objective=args.policy_objective,
                 policy_loss_scale=args.policy_loss_scale,initialize_contact_from=args.initialize_contact_from,optimizer_kind=args.optimizer,
-                initialize_q_collision_from=args.initialize_q_collision_from,transfer_policy_optimizer=not args.fresh_policy_optimizer)))
+                initialize_q_collision_from=args.initialize_q_collision_from,transfer_policy_optimizer=not args.fresh_policy_optimizer,initialize_checkpoint=args.initialize_checkpoint)))
         else:
             from .cart_training import evaluate
             result=evaluate(args.root,safe_id(args.model),args.datasets,check=check)
