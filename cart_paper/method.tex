@@ -2,27 +2,27 @@
 \section{Method}
 \label{sec:method}
 
-We formulate retargeting as learning a sequence of robot joint updates that preserves demonstrated motion and contact relationships across hand embodiments. CART maps tactile-glove observations to the 20-DoF Wuji2 hand, conditioned on the current robot configuration. A calibrated human hand mesh defines the training targets, while differentiable robot geometry relates the predicted configurations to tracking, contact, and collision costs. Fig.~\ref{fig:cart-overview} summarizes the policy and its geometric supervision.
+We formulate retargeting as learning a sequence of robot configuration updates that preserves demonstrated motion and contact relationships across hand embodiments. CART predicts the 20 finger joints of the Wuji2 hand and a six-dimensional robot wrist pose relative to the observed human wrist. A calibrated human hand mesh defines the training targets, while differentiable robot geometry relates the predicted configurations to tracking, contact, and collision costs. Fig.~\ref{fig:cart-overview} summarizes the finger policy and its geometric supervision.
 
 \begin{figure*}[t]
     \centering
     \includegraphics[width=\textwidth]{figs/cart_overview.pdf}
-    \caption{CART policy and geometric supervision. Left, a shared observation encoder and five finger-specific decoders define a recurrent joint-update policy. Tracking, contact, smoothness, and collision costs supervise the predicted trajectory through differentiable geometry. Native-mesh labels at detached predictions train the geometry models separately. Right, synchronized glove observations and training targets derived from the calibrated hand surface. The photographs illustrate tactile-glove acquisition.}
+    \caption{CART finger policy and geometric supervision. Left, a shared observation encoder and five finger-specific decoders define recurrent joint updates; a separate wrist decoder extends the state as described in the text. Tracking, contact, smoothness, and collision costs supervise the predicted trajectory through pretrained differentiable geometry. Native-mesh labels supervise the geometry models separately. Right, synchronized glove observations and training targets derived from the calibrated hand surface. The photographs illustrate tactile-glove acquisition.}
     \label{fig:cart-overview}
 \end{figure*}
 
 \subsection{Retargeting Policy}
 \label{sec:cart-architecture}
 
-The policy combines a shared representation of the demonstration with finger-specific joint predictions. At step $t$, its inputs are the current robot joint angles $q_t$ and ten measured glove frames, from $t+1$ through $t+10$. Each frame contains five electromagnetic (EMF) fingertip receiver poses and the positions and binary contact states of 460 tactile elements (taxels). Spatial observations are expressed in a canonical hand frame, with rotations represented by their first two matrix columns. Relative timestamps describe the measurement intervals, and validity masks identify missing observations. This measured lookahead supports offline retargeting and buffered online execution.
+The policy combines a shared representation of the demonstration with finger-specific joint predictions. At step $t$, its inputs are the robot state $s_t=(q_t,u_t,\xi_t)$ and ten measured glove frames, from $t+1$ through $t+10$. Here $q_t\in\mathbb R^{20}$ contains finger joint angles, and $(u_t,\xi_t)\in\mathbb R^6$ parameterizes the relative wrist translation and rotation vector, with $Q_t=\exp([\xi_t]_\times)$. Each frame contains five electromagnetic (EMF) fingertip receiver poses and the positions and binary contact states of 460 tactile elements (taxels). Spatial observations are expressed in the fixed demonstrator-wrist frame, with measured rotations represented by their first two matrix columns. Relative timestamps describe the measurement intervals, and validity masks identify missing observations. This measured lookahead supports offline retargeting and buffered online execution.
 
-Cross-attention relates fingertip motion to the spatial distribution of touch. EMF and tactile observations are embedded as 128-dimensional tokens with frame, relative-time, and finger or taxel identity embeddings. Two four-head cross-attention blocks use EMF queries and tactile keys and values. Each block comprises masked scaled dot-product attention, a feed-forward layer, and residual connections. Joint-conditioned attention then pools these tokens into a shared context $z_t$. Five independent decoders $D_f$, each with two 256-unit hidden layers, map this context to four joint increments per finger. This shared context provides information about coordinated hand motion, while the separate decoders parameterize each finger's response. Concatenating $D_f(z_t)$ in thumb-to-little-finger order gives $\Delta\bar q_t$, bounded by $\tanh$. For joints normalized to $[-1,1]$, the state transition is
+Cross-attention relates fingertip motion to the spatial distribution of touch. EMF and tactile observations are embedded as 128-dimensional tokens with frame, relative-time, and finger or taxel identity embeddings. Two four-head cross-attention blocks use EMF queries and tactile keys and values. Each block comprises masked scaled dot-product attention, a feed-forward layer, and residual connections. State-conditioned attention then pools these tokens into a shared context $z_t$. Five independent decoders $D_f$, each with two 256-unit hidden layers, map this context to four joint increments per finger. This shared context provides information about coordinated hand motion, while the separate decoders parameterize each finger's response. Concatenating $D_f(z_t)$ in thumb-to-little-finger order gives $\Delta\bar q_t$, bounded by $\tanh$. For joints normalized to $[-1,1]$, the finger transition is
 \begin{equation}
     \bar q_{t+1} = \operatorname{clip}
     \bigl(\bar q_t + \Delta\bar q_t,\,-1,\,1\bigr).
     \label{eq:cart-state-update}
 \end{equation}
-For joint $j$ with limits $(l_j,u_j)$, $\bar q_{t,j}=2(q_{t,j}-l_j)/(u_j-l_j)-1$. Normalization expresses each increment relative to its joint range. The resulting state is converted to radians for forward kinematics and becomes the input to the next policy step. Thus the policy learns state-dependent corrections along its own predicted trajectory.
+For joint $j$ with limits $(l_j,u_j)$, $\bar q_{t,j}=2(q_{t,j}-l_j)/(u_j-l_j)-1$. Normalization expresses each increment relative to its joint range. A separate decoder with two 256-unit hidden layers predicts six bounded wrist increments. These are scaled componentwise by 5~mm for translation and 0.05~rad for the rotation vector, then added to $(u_t,\xi_t)$. The resulting components are clipped to $\pm0.1$~m and $\pm\pi$~rad, respectively. The full predicted state becomes the input to the next policy step. Demonstrated targets remain fixed when the robot wrist moves; a common rigid wrist motion therefore changes tracking and tactile alignment but leaves robot self-collision unchanged.
 
 \subsection{Demonstration Geometry}
 \label{sec:cart-hand-mesh}
@@ -41,9 +41,9 @@ The anchor $a_r$ and response-weighted normal $n_r$ provide geometric supervisio
 \subsection{Contact-Aware Trajectory Learning}
 \label{sec:cart-training}
 
-\textit{Trajectory supervision.} Training uses approximately 5~min of synchronized glove data containing free-form pinches, grasps, and object manipulation. Each contiguous window begins from an inverse-kinematics estimate and contains 16 recurrent policy updates. The transition from $q_t$ to $q_{t+1}$ receives the ten-frame observation window and is evaluated against the demonstrated geometry at $t+1$. Subsequent updates depend on the predicted robot states, so training evaluates the policy's induced motion over the window. The state-independent observation encoder can be evaluated across the rollout in parallel; joint-conditioned pooling and decoding preserve the recurrent state dependence.
+\textit{Trajectory supervision.} Training uses approximately 5~min of synchronized glove data containing free-form pinches, grasps, and object manipulation. Each contiguous window begins from an inverse-kinematics finger estimate and an identity relative wrist pose, and contains 16 recurrent policy updates. The transition from $s_t$ to $s_{t+1}$ receives the ten-frame observation window and is evaluated against the demonstrated geometry at $t+1$. Subsequent updates depend on the predicted robot states, so training evaluates the policy's induced motion over the window. The state-independent observation encoder can be evaluated across the rollout in parallel; state-conditioned pooling and decoding preserve the recurrent state dependence.
 
-\textit{Tracking and tactile alignment.} The tracking terms compare robot bone directions $\hat d_i$, fingertip positions $\hat v_f$, and distal-pad normals $\hat\nu_f$ with their demonstrated counterparts $d_i$, $v_f$, and $\nu_f$. Tactile alignment permits the contact location to vary over the corresponding robot pad. For link pose $(R_r(q),p_r(q))$, the demonstrated anchor defines the local query $x_r=R_r^\top(a_r-p_r)$. A learned pad projector returns a surface point $y_r$ and unit normal $m_r$, with a query bias toward the demonstrated longitudinal pad position where applicable. The predicted contact in the wrist frame is $\hat a_r=R_r y_r+p_r$ with normal $\hat n_r=R_r m_r$. Since the link pose enters both the query and its projection, alignment gradients account for the moving robot surface. The regional multiplier $\rho_r=1+0.5F_r/\max_j F_j$ weights tactile evidence relative to the strongest regional response, using a positive denominator floor. The active movable-finger regions form $\mathcal A_t$. Their consecutive-frame subset $\mathcal C_t$ contains contacts within the same uninterrupted stream. For these contacts, $\Delta y_{r,t}=y_{r,t}-y_{r,t-1}$ measures material-point drift, and $h_{r,t}$ measures the anchor-to-pad gap under the unbiased query $x_r$. The two continuity terms regularize contact motion and separation on the same link. Fixed-palm alignment and continuity have no dependence on the 20 finger joints and are excluded from policy optimization; their physical errors remain part of independent evaluation.
+\textit{Tracking and tactile alignment.} The tracking terms compare robot bone directions $\hat d_i$, fingertip positions $\hat v_f$, and distal-pad normals $\hat\nu_f$ with their demonstrated counterparts $d_i$, $v_f$, and $\nu_f$. Tactile alignment permits the contact location to vary over the corresponding robot pad. For link pose $(R_r(s),p_r(s))$, the demonstrated anchor defines the local query $x_r=R_r^\top(a_r-p_r)$. A learned pad projector returns a surface point $y_r$ and unit normal $m_r$, with a query bias toward the demonstrated longitudinal pad position where applicable. The predicted contact in the demonstrator-wrist frame is $\hat a_r=R_r y_r+p_r$ with normal $\hat n_r=R_r m_r$. Since the link pose enters both the query and its projection, alignment gradients account for the moving robot surface. The regional multiplier $\rho_r=1+0.5F_r/\max_j F_j$ weights tactile evidence relative to the strongest regional response, using a positive denominator floor. The active finger and palm regions form $\mathcal A_t$. Their consecutive-frame subset $\mathcal C_t$ contains contacts within the same uninterrupted stream. For these contacts, $\Delta y_{r,t}=y_{r,t}-y_{r,t-1}$ measures material-point drift, and $h_{r,t}$ measures the anchor-to-pad gap under the unbiased query $x_r$. The two continuity terms regularize contact motion and separation on the same link. Palm alignment and continuity also contribute to optimization because they depend on the predicted wrist pose.
 
 \textit{Self-contact preservation.} We interpret source-mesh self-penetration as intended contact between regions in $\mathcal P_t$. For each pair $(a,b)$, the midpoint of its two observed surface points defines a common query. Projecting this point onto both robot pads, without the longitudinal bias, gives wrist-frame positions $\hat a_a^{ab},\hat a_b^{ab}$ and unit normals $\hat n_a^{ab},\hat n_b^{ab}$. Their relative geometry is
 \begin{equation}
@@ -51,9 +51,14 @@ The anchor $a_r$ and response-weighted normal $n_r$ provide geometric supervisio
     \eta_{ab}=(\hat n_a^{ab})^\top\hat n_b^{ab}.
     \label{eq:cart-self-contact}
 \end{equation}
-Penalizing $\|g_{ab}\|_2^2$ encourages closure, while $1+\eta_{ab}$ encourages opposing surface normals. These bilateral terms complement tactile alignment by supervising the relation between two robot surfaces. The observed pair identities are fixed during differentiation, and both surfaces depend on $q$.
+Penalizing $\|g_{ab}\|_2^2$ encourages closure, while $1+\eta_{ab}$ encourages opposing surface normals. These bilateral terms complement tactile alignment by supervising the relation between two robot surfaces. The observed pair identities are fixed during differentiation, and both surfaces depend on $s$.
 
-\textit{Differentiable collision geometry.} Tactile penetration is evaluated by an articulated neural signed-distance field (SDF) at active glove points and specified robot links. Self-collision instead depends on the relative motion of robot surfaces. We represent this dependence with a smooth network of $q$, avoiding closest-feature selection in the policy gradient. For each group $g$, the network predicts nonnegative clearance and penetration amplitudes $A_g(q)$ and $P_g(q)$, together with depth estimates. Groups include individual fingers and their palm interactions, as well as unordered finger pairs. Native-mesh supervision defines $A_g^2$ as summed squared violations of a 6~mm clearance margin and $P_g^2$ as summed squared positive penetrations on denser audit samples. The resulting penetration norm bounds the maximum sampled depth; its learned estimate is an approximation. Let $\mathcal G_t$ denote the finger-pair groups associated with $\mathcal P_t$. The self-collision potential is
+\textit{Differentiable collision geometry.} Tactile penetration is evaluated at active glove points against all 21 robot links. Each rigid link has an intrinsic neural signed-distance field (SDF), evaluated after exact differentiable inverse forward kinematics:
+\begin{equation}
+    \hat d_\phi(x,s,l)=f_\phi\!\left(R_l(s)^\top[x-p_l(s)],l\right).
+    \label{eq:cart-intrinsic-sdf}
+\end{equation}
+The network learns link shape in local coordinates; joint and wrist derivatives follow through the link transform. Link identities are specified by the queries, without a nearest-link search in the policy gradient. Self-collision instead depends on the relative motion of robot surfaces. We represent this dependence with a smooth network of the 20 finger angles $q$. For each group $g$, the network predicts nonnegative clearance and penetration amplitudes $A_g(q)$ and $P_g(q)$, together with depth estimates. Groups include individual fingers and their palm interactions, as well as unordered finger pairs. Native-mesh supervision defines $A_g^2$ as summed squared violations of a 6~mm clearance margin and $P_g^2$ as summed squared positive penetrations on denser surface samples. The resulting penetration norm bounds the maximum sampled depth; its learned estimate is an approximation. Let $\mathcal G_t$ denote the finger-pair groups associated with $\mathcal P_t$. The self-collision potential is
 \begin{equation}
 \begin{aligned}
     \widehat E_{\rm self}(q_t,\mathcal G_t)
@@ -67,6 +72,24 @@ Penalizing $\|g_{ab}\|_2^2$ encourages closure, while $1+\eta_{ab}$ encourages o
 Here $\varepsilon=10^{-8}$ in squared millimeters stabilizes the norm. The potential preserves clearance for groups outside $\mathcal G_t$ and penalizes penetration within intended contact groups, allowing the demonstrated surfaces to approach. This distinction applies to the entire finger-pair group. Penetration costs remain active across all groups. Native geometry supervises values and joint derivatives, so the negative gradient of the weighted potential defines a joint-space escape direction. Closest-feature queries are used for geometry supervision and independent validation.
 
 Table~\ref{tab:cart-loss} collects the objective terms. Positions, SDF distances, and amplitudes use millimeters; joint differences use radians. The contact-normal coefficient is $\kappa_n=40^2\cdot2\cdot10^2$. With negative-inside signed distances $s_k$ and $[x]_+=\max(0,x)$, tactile penetration is $d_{\rm touch}=\max_k[-s_k]_+$. All active glove queries contribute to penetration costs, including palm taxels, and finger--palm collisions remain penalized. A 5~mm soft penalty acts separately on the self-penetration norm and maximum tactile penetration. Physical feasibility at this threshold is assessed independently using the native mesh.
+
+\textit{Wrist smoothness.} Let $\Delta t_t$ be the measured interval between consecutive frames. With $u_t$ expressed in millimeters, linear and spatial angular velocities are
+\begin{equation}
+    v_t=\frac{u_t-u_{t-1}}{\Delta t_t},\qquad
+    \omega_t=\frac{\log(Q_tQ_{t-1}^\top)^\vee}{\Delta t_t}.
+    \label{eq:cart-wrist-velocity}
+\end{equation}
+Their accelerations use the interval between velocity samples, $a_t=2(v_t-v_{t-1})/(\Delta t_t+\Delta t_{t-1})$ and $\alpha_t=2(\omega_t-\omega_{t-1})/(\Delta t_t+\Delta t_{t-1})$. Setting $\tau=1/120$~s, the wrist contribution is
+\begin{equation}
+\begin{aligned}
+    c_t^{\rm wrist}
+    ={}&125\bigl(\|\tau v_t\|_2^2+\|\tau^2 a_t\|_2^2\bigr)\\
+       &+10^2\bigl(\|\tau\omega_t\|_2^2
+                         +\|\tau^2\alpha_t\|_2^2\bigr).
+\end{aligned}
+    \label{eq:cart-wrist-smooth}
+\end{equation}
+These terms penalize wrist velocity and acceleration while respecting irregular measurement intervals. Acceleration is zero at the first update of a training window, where a preceding predicted velocity is unavailable.
 
 \begin{table}[t]
 \caption{Per-step training residuals and coefficients}
@@ -96,7 +119,7 @@ Penetration guard & \shortstack[l]{$[\widehat D(q_t)-5]_+^2$\\$\quad{}+[d_{\rm t
 \end{tabular}
 \end{table}
 
-The weighted per-step cost is $c_{b,t}=\sum_k\lambda_k\ell_{k,b,t}$. Self-contact terms are independent of the tactile response multiplier $\rho_r$. Empty contact sets contribute zero, with $d_{\rm touch}=0$ in the absence of tactile queries. Only the terms in Table~\ref{tab:cart-loss} contribute to optimization; diagnostic errors and contact counts are reported separately. For $N$ windows of 16 steps, the training objective normalizes the mean trajectory cost:
+The weighted per-step cost is $c_{b,t}=\sum_k\lambda_k\ell_{k,b,t}+c_{b,t}^{\rm wrist}$, combining Table~\ref{tab:cart-loss} with~\eqref{eq:cart-wrist-smooth}. Self-contact terms are independent of the tactile response multiplier $\rho_r$. Empty contact sets contribute zero, with $d_{\rm touch}=0$ in the absence of tactile queries. Diagnostic errors and contact counts are reported separately. For $N$ windows of 16 steps, the training objective normalizes the mean trajectory cost:
 \begin{equation}
     \mathcal L=\frac{C}{C+10^8},\qquad
     C=\frac{1}{16N}\sum_{b=1}^{N}\sum_{t=1}^{16}c_{b,t}.
@@ -104,20 +127,74 @@ The weighted per-step cost is $c_{b,t}=\sum_k\lambda_k\ell_{k,b,t}$. Self-contac
 \end{equation}
 The bounded objective lies in $[0,1)$ and retains the relative coefficients of the raw cost. For a fixed batch, $\mathrm d\mathcal L/\mathrm dC=10^8/(C+10^8)^2$; normalization therefore scales the complete gradient by a single positive factor.
 
-\textit{Learning through the trajectory.} The transition in~\eqref{eq:cart-state-update} defines a recurrent map $\bar q_{t+1}=F_\theta(\bar q_t,o_t)$ with observations $o_t$ and policy parameters $\theta$. Its sensitivity $S_t=\mathrm d\bar q_t/\mathrm d\theta$ starts from $S_0=0$ at the fixed window initialization and evolves as
+\textit{Geometry supervision.} The distance, pad-projection, and joint-space collision models are trained separately from the policy. Native meshes provide signed distances $d^*$, outward normals $n^*$, pad projections $\Pi^*$, and collision amplitudes. Let $H$ denote mean smooth-$L_1$ discrepancy and $D(a,b)=1-\cos(a,b)$. In link-local coordinates, define $g=\nabla_x f_\phi$ and
+\begin{equation}
+\begin{aligned}
+    L_d&=\mathbb E\!\left[w(d^*)H(f_\phi/\sigma,d^*/\sigma)\right],\\
+    L_{\rm sign}&=\mathbb E\!\left[\operatorname{softplus}
+                (-\operatorname{sign}(d^*)f_\phi/\sigma)\right],\\
+    L_{\rm dir}&=\mathbb E_{\rm near}D(g,n^*),\quad
+    L_{\nabla d}=\mathbb E_{\rm near}H(g,n^*),\\
+    L_{\rm eik}&=\mathbb E(\|g\|_2-1)^2.
+\end{aligned}
+    \label{eq:cart-distance-supervision}
+\end{equation}
+Here $\sigma=1$~mm, $w(d^*)=[1+(d^*/(10\,\mathrm{mm}))^2]^{-1}$, and the near-surface set satisfies $|d^*|<5$~mm. Sign supervision excludes $|d^*|\leq0.1$~mm. For the learned pad point $\Pi_\phi$ and unit normal $N_\phi$, supervision includes both output values and projection derivatives:
+\begin{equation}
+\begin{aligned}
+    L_\Pi&=\mathbb E H(\Pi_\phi/\sigma,\Pi^*/\sigma),\\
+    L_N&=\mathbb E D(N_\phi,n^*),\\
+    L_{J\Pi}&=\mathbb E_{x,v}H\!\left(
+       \frac{\Pi_\phi(x+hv)-\Pi_\phi(x-hv)}{2h},J_{\Pi^*}(x)v\right).
+\end{aligned}
+    \label{eq:cart-projection-supervision}
+\end{equation}
+The probe $v$ is a random unit vector and $h=0.05$~mm. The teacher Jacobian is computed within the selected closest feature: a tangent-plane projector for a triangle interior, a tangent-line projector for an edge, and zero for a vertex. Thus derivative labels do not use finite differences across changing mesh features. The combined distance and contact-field loss is
+\begin{equation}
+\begin{aligned}
+    L_{\rm geom}={}&L_d+0.1L_{\rm sign}+0.5L_{\rm dir}+0.1L_{\rm eik}\\
+                  &+L_\Pi+0.5L_N+0.5L_{\nabla d}+2L_{J\Pi}.
+\end{aligned}
+    \label{eq:cart-geometry-loss}
+\end{equation}
+
+The joint-space model also receives derivative supervision. Write $A=(A_g)_g$, $P=(P_g)_g$, and $z=(z_g)_g$ for its clearance amplitudes, penetration amplitudes, and depth estimates in millimeters. Its scalar depth estimate is $\tilde z=\sum_g\operatorname{softmax}(z/0.05)_g z_g$. Define $g_A=\nabla_q(\|A\|_2^2+0.01)^{1/2}$, $g_P=\nabla_q(\|P\|_2^2+10^{-4})^{1/2}$, and $g_z=\nabla_q\tilde z$. Superscript $*$ denotes native-mesh labels and their joint derivatives. For compactness, let $H_c(a,b)=H(a/c,b/c)$. The loss is
+\begin{equation}
+\begin{aligned}
+    L_q={}&H_5(A,A^*)+H_5(P,P^*)\\
+          &+H_{0.5}(z,z^*)+H_{0.5}(\tilde z,z_{\max}^*)\\
+          &+H_{10}(g_A,g_A^*)+H_{10}(g_P,g_P^*)\\
+          &+0.2H_{10}(g_z,g_z^*)+0.7D(g_A,g_A^*)\\
+          &+1.5D(g_P,g_P^*)+L_{\rm group}.
+\end{aligned}
+    \label{eq:cart-q-supervision}
+\end{equation}
+Terms are averaged over the training samples; directional terms use samples with nonzero teacher gradients. To constrain group-specific derivatives, a random sign vector $\zeta\in\{-1,+1\}^{15}$ defines
+\begin{equation}
+\begin{aligned}
+    L_{\rm group}=\mathbb E_\zeta\bigl[&H_{10}(\nabla_q(\zeta^\top A),
+                                      \nabla_q(\zeta^\top A^*))\\
+                                    +&H_{10}(\nabla_q(\zeta^\top P),
+                                      \nabla_q(\zeta^\top P^*))\bigr].
+\end{aligned}
+    \label{eq:cart-group-sobolev}
+\end{equation}
+This Sobolev supervision constrains gradient combinations that may be hidden when only a summed collision potential is fitted. The escape direction is obtained by differentiating the same weighted collision potential used by the policy, including its penetration guard.
+
+\textit{Learning through the trajectory.} The finger transition in~\eqref{eq:cart-state-update} and the wrist update define a recurrent map $s_{t+1}=F_\theta(s_t,o_t)$ with observations $o_t$ and policy parameters $\theta$. Its sensitivity $S_t=\mathrm ds_t/\mathrm d\theta$ starts from $S_0=0$ at the fixed window initialization and evolves as
 \begin{equation}
     S_{t+1}=\frac{\partial F_\theta}{\partial\theta}
-       +\frac{\partial F_\theta}{\partial\bar q_t}S_t.
+       +\frac{\partial F_\theta}{\partial s_t}S_t.
     \label{eq:cart-bptt}
 \end{equation}
-Backpropagation through time (BPTT) propagates later contact and collision costs through all 16 updates, including the dependence of continuity terms on consecutive configurations. The transition and learned geometry are differentiable almost everywhere. Clipping, hinge penalties, and the tactile-depth maximum are piecewise differentiable, with the residual state path preserved inside the joint bounds. Gradients are truncated at window boundaries.
+Backpropagation through time (BPTT) propagates later contact and collision costs through all 16 updates and all 26 state coordinates, including continuity and wrist-smoothness terms. The transition and learned geometry are differentiable almost everywhere. Clipping, hinge penalties, and the tactile-depth maximum are piecewise differentiable, with the residual state path preserved inside the configuration bounds. Gradients are truncated at window boundaries.
 
-Geometry supervision is generated at configurations visited by the policy. For each batch, detached predicted states provide native-mesh labels for two geometry optimizer steps. The geometry parameters are then held fixed during one BPTT policy update on the retained rollout. Differentiation through the geometry inputs still relates the contact and collision costs to the predicted joints. This alternation trains the shared encoder and all five decoders using geometric supervision at their current predicted configurations.
+Geometry pretraining precedes policy optimization. Replay covers uniformly sampled joint configurations and local surface queries, with native-mesh labels computed outside the policy graph. Held-out checks assess distance signs and spatial gradients, contact positions and projection Jacobians, and collision-gradient agreement. Joint-space escape steps are also evaluated against the native-mesh potential. Policy training begins only after these checks pass; failure within the geometry-training budget stops the run. The geometry parameters then remain fixed during BPTT, while differentiation through their inputs relates trajectory costs to the finger and wrist predictions. Policy checkpoints are compared using complete held-out closed-loop trajectories evaluated with native geometry.
 
 \subsection{Arm Motion Retargeting}
 \label{sec:cart-arm}
 
-Finger retargeting determines contact locations relative to the robot wrist. Arm retargeting places these contacts in the virtual reality (VR) world frame by aligning them with the demonstrated anchors. The tracked human wrist pose provides a reference when the contact geometry underconstrains the rigid wrist pose.
+The hand policy predicts contact locations and a robot wrist correction relative to the demonstrator wrist. Executing this correction with a robot arm requires its composition with the tracked wrist pose in the virtual reality (VR) world frame. If ${}^{V}T_{H,t}$ is the tracked human wrist pose and $T_t=(Q_t,u_t)$ is the predicted correction, the required robot wrist target is ${}^{V}T_{W,t}={}^{V}T_{H,t}T_t$. This composition preserves the fixed reference used by the contact objective.
 
 A single transform \({}^{V}T_B\) relates the robot base frame $B$ to the VR world frame $V$. For paired calibration samples, $(R_i^B,p_i^B)$ is the wrist pose from arm forward kinematics and $(R_i^V,p_i^V)$ is its VR target. The position and orientation residuals are $e_i=Rp_i^B+p-p_i^V$ and $E_i=RR_i^B-R_i^V$. We estimate the alignment by
 \begin{equation}
