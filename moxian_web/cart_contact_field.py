@@ -7,6 +7,81 @@ from torch.nn import functional as F
 
 CONTACT_FIELD_VERSION = 'directional_surface_field_v1'
 
+PAD_OWNERS=(0,)+tuple(2+4*f+k for f in range(5) for k in range(3))
+
+
+class IndependentPadField(nn.Module):
+    """Fixed semantic routing, with no predicted winner or closest-link search."""
+    def __init__(self,width=128,depth=4):
+        super().__init__()
+        self.decoders=nn.ModuleDict()
+        for owner in PAD_OWNERS:
+            layers=[nn.Linear(3,width),nn.Softplus(beta=10)]
+            for _ in range(depth-1):layers.extend((nn.Linear(width,width),nn.Softplus(beta=10)))
+            self.decoders[str(owner)]=nn.Sequential(*layers,nn.Linear(width,6))
+
+    def forward(self,points,links):
+        shape=points.shape;points=points.reshape(-1,3);links=links.reshape(-1)
+        values=points.new_zeros((len(points),6))
+        # The indices are observed/fixed semantic labels, independent of x/q.
+        for owner in links.unique().tolist():
+            ids=(links==owner).nonzero().flatten()
+            values=values.index_copy(0,ids,self.decoders[str(owner)](points[ids]/.05))
+        hit=points+.05*values[:,:3]
+        normal=values[:,3:]/torch.sqrt(values[:,3:].square().sum(-1,keepdim=True)+1.e-12)
+        return hit.reshape(shape),normal.reshape(shape)
+
+
+class PadPotentialField(nn.Module):
+    """P(x)=x-grad U(x), with one scalar squared-distance potential per pad.
+
+    U has a quadratic base about the known pad centre. The scalar residual
+    learns its geometry; a separately supervised normal orients the open pad,
+    whose unsigned squared distance alone cannot identify an outward side.
+    """
+    potential_projection=True
+
+    def __init__(self,centres,width=128,depth=4,scale=.01):
+        super().__init__()
+        self.scale=scale
+        self.register_buffer('centres',torch.as_tensor(centres,dtype=torch.float32))
+        self.decoders=nn.ModuleDict()
+        for owner in PAD_OWNERS:
+            layers=[nn.Linear(3,width),nn.Softplus(beta=10)]
+            for _ in range(depth-1):layers.extend((nn.Linear(width,width),nn.Softplus(beta=10)))
+            output=nn.Linear(width,4)
+            # Initially U is the squared distance to the pad centre. No old
+            # learned projection or checkpoint is embedded in this prior.
+            with torch.no_grad():output.weight[0].zero_();output.bias[0].zero_()
+            self.decoders[str(owner)]=nn.Sequential(*layers,output)
+
+    def values(self,points,links):
+        z=(points-self.centres[links])/self.scale
+        values=points.new_zeros((len(points),4))
+        for owner in links.unique().tolist():
+            ids=(links==owner).nonzero().flatten()
+            values=values.index_copy(0,ids,self.decoders[str(owner)](z[ids]))
+        potential=self.scale**2*(.5*z.square().sum(-1)+values[:,0])
+        normal=values[:,1:]/torch.sqrt(values[:,1:].square().sum(-1,keepdim=True)+1.e-12)
+        return potential,normal
+
+    def project(self,points,links):
+        differentiating=torch.is_grad_enabled() and not torch.is_inference_mode_enabled()
+        shape=points.shape
+        # Inference still needs the input derivative of U. Enabling grad here
+        # never reattaches a native witness; all geometry is the scalar network.
+        with torch.inference_mode(False),torch.enable_grad():
+            x=points if differentiating and points.requires_grad else points.clone().requires_grad_(True)
+            x=x.reshape(-1,3);owners=links.reshape(-1).long()
+            potential,normal=self.values(x,owners)
+            gradient=torch.autograd.grad(potential.sum(),x,create_graph=differentiating,retain_graph=differentiating)[0]
+            hit=(x-gradient).reshape(shape);normal=normal.reshape(shape)
+            potential=potential.reshape(shape[:-1])
+        if not differentiating:return hit.detach(),normal.detach(),potential.detach()
+        return hit,normal,potential
+
+    def forward(self,points,links):return self.project(points,links)[:2]
+
 
 @wp.kernel(enable_backward=False)
 def _projection_derivative(skins:wp.array(dtype=wp.uint64),solids:wp.array(dtype=wp.uint64),

@@ -8,17 +8,23 @@ from dataclasses import replace
 import math
 import torch
 from torch import nn
+from torch.nn import functional as F
 from .cart_network import CartNetwork
 from .cart_objective import CartHand
 from .cart_card_self_contact import SelfContactCardCostObjective
 
 VERSION='card_raw_neural_self_contact_v5_wrist'
 OUTPUT='normalized_delta_fingers_wrist_v1'
-TRANSITION='finger_projection_plus_relative_wrist_delta_v1'
+TRANSITION='smooth_finger_and_relative_wrist_delta_v2'
 ARCHITECTURE='cart_emf_cross_attention128_five_finger_wrist_delta_v1'
 WRIST_LIMITS=(.1,.1,.1,math.pi,math.pi,math.pi)
 WRIST_STEP=(.005,.005,.005,.05,.05,.05)
 REFERENCE_DT=1/120
+
+
+def smooth_bound_unit(x):
+    """Smooth bounded projection; no hard clipping in the learned rollout."""
+    return x+F.softplus(-1-x,beta=50)-F.softplus(x-1,beta=50)
 
 
 def so3_exp(vector):
@@ -93,10 +99,9 @@ class CartWristNetwork(CartNetwork):
         return torch.cat((super().delta_to_radians(delta[...,:20]),delta[...,20:]*self.wrist_step),-1)
 
     def apply_delta(self,current_q,delta,*,normalized=False):
-        finger_u=(super().normalize(current_q[...,:20])+delta[...,:20]).clamp(-1,1)
+        finger_u=smooth_bound_unit(super().normalize(current_q[...,:20])+delta[...,:20])
         fingers=super().unnormalize(finger_u)
-        wrist=current_q[...,20:]+delta[...,20:]*self.wrist_step
-        wrist=torch.maximum(torch.minimum(wrist,self.wrist_limits),-self.wrist_limits)
+        wrist=smooth_bound_unit((current_q[...,20:]+delta[...,20:]*self.wrist_step)/self.wrist_limits)*self.wrist_limits
         state=torch.cat((fingers,wrist),-1)
         return self.normalize(state) if normalized else state
 
@@ -150,7 +155,8 @@ class FloatingWristObjective(SelfContactCardCostObjective):
 
 def wrist_config():
     return dict(architecture=ARCHITECTURE,policy_output=OUTPUT,policy_transition=TRANSITION,
-        state_transition='project_fingers_and_integrate_bounded_relative_wrist_delta',
+        state_transition='smooth_bound_fingers_and_relative_wrist_delta',
+        bound_projection=dict(kind='softplus_smooth_clip',normalized_beta=50.),
         delta_normalization='20 normalized finger increments + 6 scaled wrist increments',
         floating_wrist=dict(frame='fixed_demonstrator_wrist',state_size=26,
             layout=['finger_q_rad:20','robot_wrist_translation_m:3','robot_wrist_rotation_vector_rad:3'],

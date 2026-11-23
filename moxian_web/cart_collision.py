@@ -255,7 +255,7 @@ class SDFLearner:
             from .cart_optim import MuonSGD
             self.optimizer=MuonSGD(self.model,lr=1.e-3,
                 pretrained_lr=self.model.pretrained_lr if hasattr(self.model,'pretrained') else None,
-                contact_lr=1.e-3,vector_lr_scale=.01 if getattr(self.model,'intrinsic',False) else 1.)
+                contact_lr=1.e-3,vector_lr_scale=getattr(self.model,'vector_lr_scale',.01) if getattr(self.model,'intrinsic',False) else 1.)
         elif optimizer_kind!='adamw':raise ValueError('Unknown geometry optimizer')
         elif hasattr(self.model,'pretrained'):
             self.optimizer=torch.optim.AdamW([
@@ -313,7 +313,15 @@ class SDFLearner:
         if not getattr(self.model,'intrinsic',False):self.add_contacts(*self.teacher.random_queries(self.oracle,self.batch_size))
         if getattr(self.collision,'card_nearest_surface',False):
             if getattr(self.model,'intrinsic',False):
-                ids=torch.randint(len(self.teacher.points),(self.batch_size,),device=self.oracle.device)
+                if getattr(self.model.contact_field,'potential_projection',False):
+                    # Independent pads need balanced geometric coverage, rather
+                    # than a budget proportional to their mesh triangle count.
+                    if not hasattr(self.teacher,'balanced_indices'):
+                        self.teacher.balanced_indices=[(self.teacher.owners==owner).nonzero().flatten() for owner in self.teacher.pad_owners]
+                    pools=self.teacher.balanced_indices
+                    ids=torch.cat([pool[torch.randint(len(pool),((self.batch_size+len(pools)-1)//len(pools),),device=self.oracle.device)] for pool in pools])
+                    ids=ids[torch.randperm(len(ids),device=self.oracle.device)[:self.batch_size]]
+                else:ids=torch.randint(len(self.teacher.points),(self.batch_size,),device=self.oracle.device)
                 x=self.teacher.points[ids];l=self.teacher.owners[ids];p=torch.ones_like(l,dtype=torch.bool)
                 sigma=torch.where(torch.rand(len(x),1,device=x.device)<.75,.006,.025)
                 x=x+torch.randn_like(x)*sigma
@@ -342,7 +350,14 @@ class SDFLearner:
         if not self.contact_size:raise ValueError('连续接触场缺少有效真实 mesh 标签')
         ids=torch.randint(self.contact_size,(min(self.contact_size,self.batch_size),))
         c={k:v[ids].to(self.oracle.device) for k,v in self.contact_replay.items()}
-        hit,normal=self.model.contact(c['points'],c['directions'],c['links'],c['palmar'])
+        potential_field=getattr(self.model.contact_field,'potential_projection',False)
+        potential_fit=fit*0
+        if potential_field:
+            contact_points=c['points'].detach().requires_grad_(True)
+            hit,normal,potential=self.model.contact_field.project(contact_points,c['links'])
+            target_potential=.5*(contact_points.detach()-c['hits']).square().sum(-1)
+            potential_fit=F.smooth_l1_loss(potential/.01**2,target_potential/.01**2)
+        else:hit,normal=self.model.contact(c['points'],c['directions'],c['links'],c['palmar'])
         contact_fit=F.smooth_l1_loss(hit/.001,c['hits']/.001)
         contact_normal=(1-F.cosine_similarity(normal,c['normals'])).mean()
         intrinsic=getattr(self.model,'intrinsic',False)
@@ -353,11 +368,18 @@ class SDFLearner:
             points=c['points'][:256];links_c=c['links'][:256];palmar=c['palmar'][:256]
             direction_c=torch.zeros_like(points);step=F.normalize(torch.randn_like(points),dim=-1)*.00005
             target_jacobian,valid=self.teacher.projection_derivative(points,links_c,palmar,step/.00005)
-            ph,_=self.model.contact(points+step,direction_c,links_c,palmar)
-            mh,_=self.model.contact(points-step,direction_c,links_c,palmar)
-            if valid.any():contact_jacobian=F.smooth_l1_loss((ph-mh)[valid]/.0001,target_jacobian[valid])
+            if potential_field:
+                # JP=I-Hessian(U), symmetric by construction. A VJP is thus
+                # exactly the desired JVP; no finite-difference scale mismatch.
+                predicted_jacobian=torch.autograd.grad((hit[:256]*(step/.00005)).sum(),contact_points,create_graph=True,retain_graph=True)[0][:256]
+            else:
+                ph,_=self.model.contact(points+step,direction_c,links_c,palmar)
+                mh,_=self.model.contact(points-step,direction_c,links_c,palmar)
+                predicted_jacobian=(ph-mh)/.0001
+            if valid.any():contact_jacobian=F.smooth_l1_loss(predicted_jacobian[valid],target_jacobian[valid])
         loss=fit+.1*sign+(.5 if intrinsic else .1)*direction+.1*eikonal+contact_fit+(.5 if intrinsic else .1)*contact_normal
         if intrinsic:loss=loss+.5*derivative+2.*contact_jacobian
+        if potential_field:loss=loss+potential_fit
         if not torch.isfinite(loss):raise ValueError('SDF loss 出现 NaN/Inf')
         self.optimizer.zero_grad(set_to_none=True);loss.backward()
         # Do not let the unrelated projection head suppress the SDF update.
@@ -370,7 +392,7 @@ class SDFLearner:
             grad_norm=torch.nn.utils.clip_grad_norm_(parameters,10.,error_if_nonfinite=True)
         self.optimizer.step();self.steps+=1
         result={k:float(v.detach()) for k,v in dict(total=loss,distance=fit,sign=sign,normal=direction,eikonal=eikonal,
-            contact_position=contact_fit,contact_normal=contact_normal,contact_jacobian=contact_jacobian,
+            contact_position=contact_fit,contact_normal=contact_normal,contact_jacobian=contact_jacobian,contact_potential=potential_fit,
             distance_jacobian=derivative,gradient_norm_before_clip=grad_norm,
             gradient_clip_multiplier=(10./(grad_norm+1.e-6)).clamp(max=1.)).items()}
         if self.q_learner is not None:result.update(self.q_learner.update())
@@ -421,7 +443,13 @@ class SDFLearner:
         step=F.normalize(torch.sin(torch.arange(x.numel(),device=x.device).reshape_as(x)+.4),dim=-1)*.00005
         target_jacobian,stable=self.teacher.projection_derivative(x,l,p,step/.00005)
         ph,_=self.model.contact(x+step,d,l,p);mh,_=self.model.contact(x-step,d,l,p)
-        jacobian_error=((ph-mh)/.0001-target_jacobian).norm(dim=-1)
+        predicted_jacobian=(ph-mh)/.0001
+        if getattr(self.model.contact_field,'potential_projection',False):
+            with torch.enable_grad():
+                probe_points=x.detach().requires_grad_()
+                projection,_=self.model.contact(probe_points,d,l,p)
+                predicted_jacobian=torch.autograd.grad((projection*(step/.00005)).sum(),probe_points)[0].detach()
+        jacobian_error=(predicted_jacobian-target_jacobian).norm(dim=-1)
         contact_error=(pred_hit[valid]-hit[valid]).norm(dim=-1)
         normal_error=torch.rad2deg(torch.acos(F.cosine_similarity(pred_normal[valid],normal[valid]).clamp(-1,1)))
         report=dict(distance_mean_mm=float(error.mean())*1000,distance_p95_mm=float(torch.quantile(error,.95))*1000,
@@ -433,6 +461,13 @@ class SDFLearner:
             contact_jacobian_error_mean=float(jacobian_error[stable].mean()) if stable.any() else None,
             contact_jacobian_samples=int(stable.sum()),
             contact_normal_p95_deg=float(torch.quantile(normal_error,.95)) if valid.any() else None)
+        if getattr(self.model.contact_field,'potential_projection',False):
+            u,_=self.model.contact_field.values(x,l)
+            report['contact_potential_mae_mm2']=float((u-.5*(x-hit).square().sum(-1)).abs().mean())*1.e6
+            trace=sum(self.teacher.projection_derivative(x,l,p,torch.eye(3,device=x.device)[k].expand_as(x))[0][:,k] for k in range(3))
+            for name,mask in (('face',trace>1.5),('edge',(trace>.5)&(trace<1.5)),('vertex',trace<.5)):
+                report['contact_'+name+'_samples']=int(mask.sum())
+                report['contact_'+name+'_jacobian_error_mean']=float(jacobian_error[mask].mean()) if mask.any() else None
         if getattr(self.collision,'card_nearest_surface',False):
             with torch.random.fork_rng(devices=[torch.device(self.oracle.device)] if str(self.oracle.device).startswith('cuda') else []):
                 torch.manual_seed(9717)
@@ -446,9 +481,15 @@ class SDFLearner:
             target_j,ok=self.teacher.projection_derivative(far,owners,flags,probe)
             ph,_=self.model.contact(far+probe*.00005,torch.zeros_like(far),owners,flags)
             mh,_=self.model.contact(far-probe*.00005,torch.zeros_like(far),owners,flags)
+            predicted_j=(ph-mh)/.0001
+            if getattr(self.model.contact_field,'potential_projection',False):
+                with torch.enable_grad():
+                    probe_points=far.detach().requires_grad_()
+                    projection,_=self.model.contact(probe_points,torch.zeros_like(far),owners,flags)
+                    predicted_j=torch.autograd.grad((projection*probe).sum(),probe_points)[0].detach()
             report.update(contact_far_samples=int(valid.sum()),
                 contact_far_position_p95_mm=float(torch.quantile(error_far,.95))*1000 if valid.any() else None,
-                contact_far_jacobian_error_mean=float(((ph-mh)/.0001-target_j)[ok].norm(dim=-1).mean()) if ok.any() else None)
+                contact_far_jacobian_error_mean=float((predicted_j-target_j)[ok].norm(dim=-1).mean()) if ok.any() else None)
         if self.q_learner is not None:
             with torch.random.fork_rng(devices=[torch.device(self.oracle.device)] if str(self.oracle.device).startswith('cuda') else []):
                 torch.manual_seed(9716)

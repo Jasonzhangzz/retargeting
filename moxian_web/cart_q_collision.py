@@ -14,7 +14,7 @@ VERSION='q_collision_sobolev_v3'
 GROUPS=[(a,a) for a in range(5)]+[(a,b) for a in range(5) for b in range(a+1,5)]
 
 
-def field_spec(hand,group_sobolev=False):
+def field_spec(hand,group_sobolev=False,independent_decoders=False):
     from .cart_pretrained_sdf import geometry_spec
     spec=dict(kind=VERSION,geometry=geometry_spec(hand),width=256,margin_mm=6.,
         allowed=hand.collision.allowed_mask.tolist() if hasattr(hand.collision,'allowed_mask') else
@@ -24,13 +24,17 @@ def field_spec(hand,group_sobolev=False):
         derivative='analytic_FK_signed_distance_witness_Jacobian_supervision',
         escape='negative_gradient_of_predicted_CARD_clearance_energy_in_radians')
     if group_sobolev:spec.update(kind='q_collision_group_sobolev_v4',group_sobolev=True)
+    if independent_decoders:
+        if not group_sobolev:raise ValueError('Independent collision decoders require grouped derivative supervision')
+        spec.update(kind='q_collision_independent_sobolev_v5',independent_decoders=True,width=128,
+            depth_aggregation='logsumexp_upper_bound',smooth_temperature_mm=.05)
     return spec
 
 
 class QCollisionField(nn.Module):
     def __init__(self,hand,spec):
         super().__init__()
-        if spec!=field_spec(hand,spec.get('group_sobolev',False)):raise ValueError('Q collision geometry/domain/exclusions differ')
+        if spec!=field_spec(hand,spec.get('group_sobolev',False),spec.get('independent_decoders',False)):raise ValueError('Q collision geometry/domain/exclusions differ')
         self.spec=spec
         self.register_buffer('lower',hand.low.clone());self.register_buffer('upper',hand.high.clone())
         ids=[];mask=[]
@@ -39,18 +43,33 @@ class QCollisionField(nn.Module):
             mask.append([1.]*4+([1.]*4 if a!=b else [0.]*4))
         self.register_buffer('joint_ids',torch.tensor(ids,device=hand.device))
         self.register_buffer('mask',hand.tensor(mask))
-        self.embedding=nn.Embedding(15,8)
         w=spec['width']
-        self.network=nn.Sequential(nn.Linear(32,w),nn.Softplus(beta=5),
-            nn.Linear(w,w),nn.Softplus(beta=5),nn.Linear(w,w),nn.Softplus(beta=5),nn.Linear(w,3))
+        if spec.get('independent_decoders',False):
+            self.decoders=nn.ModuleList([nn.Sequential(nn.Linear(24,w),nn.Softplus(beta=5),
+                nn.Linear(w,w),nn.Softplus(beta=5),nn.Linear(w,w),nn.Softplus(beta=5),nn.Linear(w,3)) for _ in GROUPS])
+        else:
+            self.embedding=nn.Embedding(15,8)
+            self.network=nn.Sequential(nn.Linear(32,w),nn.Softplus(beta=5),
+                nn.Linear(w,w),nn.Softplus(beta=5),nn.Linear(w,w),nn.Softplus(beta=5),nn.Linear(w,3))
         self.to(hand.device)
 
     def components(self,q):
         u=(2*(q-self.lower)/(self.upper-self.lower)-1)[:,self.joint_ids]*self.mask
         angle=q[:,self.joint_ids]
-        embedding=self.embedding.weight[None].expand(len(q),-1,-1)
-        features=torch.cat((u,angle.sin()*self.mask,angle.cos()*self.mask,embedding),-1)
-        raw=self.network(features)
+        features=torch.cat((u,angle.sin()*self.mask,angle.cos()*self.mask),-1)
+        if self.spec.get('independent_decoders',False):
+            # Stack independent Linear parameters for batched GEMMs. Each 2-D
+            # matrix remains a separate Muon parameter; no weights are shared.
+            raw=features.transpose(0,1)
+            for k in (0,2,4,6):
+                w=torch.stack([net[k].weight for net in self.decoders])
+                b=torch.stack([net[k].bias for net in self.decoders])
+                raw=torch.bmm(raw,w.transpose(1,2))+b[:,None]
+                if k!=6:raw=F.softplus(raw,beta=5)
+            raw=raw.transpose(0,1)
+        else:
+            embedding=self.embedding.weight[None].expand(len(q),-1,-1)
+            raw=self.network(torch.cat((features,embedding),-1))
         # Positive smooth outputs, in millimetres. Separate depth from CARD's
         # 6 mm safety margin: clearance cost is nonzero before intersection.
         return torch.stack((20*F.softplus(raw[...,0]),5*F.softplus(raw[...,1]),5*F.softplus(raw[...,2])),dim=-1)
@@ -68,8 +87,12 @@ class QCollisionField(nn.Module):
             # or the global 5mm cap, including for these contact groups.
             energy=torch.where(contact_groups,parts[...,2].square(),energy)
         energy=energy.sum(-1)
-        depth=(torch.softmax(parts[...,1]/.05,-1)*parts[...,1]).sum(-1)/1000
+        depth=self.aggregate_depth(parts[...,1])/1000
         return energy,depth,parts[...,2].square().sum(-1)
+
+    def aggregate_depth(self,depth):
+        if self.spec.get('independent_decoders',False):return .05*torch.logsumexp(depth/.05,-1)
+        return (torch.softmax(depth/.05,-1)*depth).sum(-1)
 
     def escape(self,q):
         """Unit direction in joint radians, plus collision depth/probability.
@@ -201,7 +224,7 @@ class QCollisionLearner:
         ids=torch.randint(self.size,(min(self.batch_size,self.size),))
         t={k:v[ids].to(self.model.lower.device) for k,v in self.replay.items()}
         x=t['q'].requires_grad_();parts=self.model.components(x)
-        amplitude=parts[...,0];depth=(torch.softmax(parts[...,1]/.05,-1)*parts[...,1]).sum(-1)
+        amplitude=parts[...,0];depth=self.model.aggregate_depth(parts[...,1])
         potential=(amplitude.square().sum(-1)+.01).sqrt()
         g=torch.autograd.grad(potential.sum(),x,create_graph=True,retain_graph=True)[0]
         dg=torch.autograd.grad(depth.sum(),x,create_graph=True,retain_graph=True)[0]
@@ -248,7 +271,7 @@ class QCollisionLearner:
             truth=self.teacher.label(q)
             x=q.detach().requires_grad_();parts=self.model.components(x)
             amp=(parts[...,0].square().sum(-1)+.01).sqrt()
-            depth=(torch.softmax(parts[...,1]/.05,-1)*parts[...,1]).sum(-1)
+            depth=self.model.aggregate_depth(parts[...,1])
             g=torch.autograd.grad(amp.sum(),x,retain_graph=True)[0]
             dg=torch.autograd.grad(depth.sum(),x,retain_graph=True)[0]
             cap=(parts[...,2].square().sum(-1)+.0001).sqrt()
@@ -304,8 +327,17 @@ def collision_cost(objective,q,rows,frames):
     values=c.distance(tactile,links,configuration=q,pose_ids=ids[:,None].expand_as(links),frames=frames)
     penalties=s.wobj_pseudo**2*(-values*1000-s.allowance_mm).clamp_min(0).square().sum(-1)
     cost_object=q.new_zeros(len(q)).index_add(0,ids,penalties)
+    temperature=getattr(c.model,'smooth_temperature_mm',0.)
     object_depth=q.new_zeros(len(q))
-    if len(values):object_depth=object_depth.scatter_reduce(0,ids,(-values).clamp_min(0).amax(-1),reduce='amax',include_self=True)
-    depth=torch.maximum(depth,object_depth)
+    if temperature and not c.auditing:
+        # Upper smooth maximum over ALL queried links/taxels plus zero. Fixed
+        # ragged lengths depend only on observed contacts, never learned values.
+        pieces=torch.split(-values.reshape(-1)*1000,[n*values.shape[-1] for n in counts])
+        padded=torch.nn.utils.rnn.pad_sequence([torch.cat((q.new_zeros(1),x)) for x in pieces],batch_first=True,padding_value=-torch.inf)
+        object_depth=temperature*torch.logsumexp(padded/temperature,-1)/1000
+        depth=temperature*torch.logsumexp(torch.stack((depth,object_depth),-1)*1000/temperature,-1)/1000
+    else:
+        if len(values):object_depth=object_depth.scatter_reduce(0,ids,(-values).clamp_min(0).amax(-1),reduce='amax',include_self=True)
+        depth=torch.maximum(depth,object_depth)
     cap=cap.add(1.e-8).sqrt().sub(5).clamp_min(0).square()+((object_depth-.005)*1000).clamp_min(0).square()
     return s.wself**2*energy,cost_object,depth,objective.settings.penetration_cap_weight**2*cap

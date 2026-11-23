@@ -4,13 +4,16 @@ CART contact heads stay in link coordinates. Distance queries are transformed
 back to the checkpoint's native fixed-wrist frame and use the actual rollout q.
 """
 from pathlib import Path
+import numpy as np
 import torch
 from torch import nn
 from .cart_data import file_hash
-from .cart_contact_field import ContactField
+from .cart_contact_field import ContactField,IndependentPadField,PadPotentialField,PAD_OWNERS
 
 KIND='configuration_sdf_v1'
 INTRINSIC_KIND='fk_intrinsic_sdf_v1'
+INDEPENDENT_KIND='fk_intrinsic_sdf_independent_decoders_v2'
+POTENTIAL_KIND='fk_intrinsic_sdf_pad_potential_v3'
 
 
 class IntrinsicDistance(nn.Module):
@@ -138,8 +141,14 @@ class PretrainedSDF(nn.Module):
 def fresh_geometry_spec(hand):
     from .cart_q_collision import field_spec
     geometry=geometry_spec(hand)
-    return dict(kind=INTRINSIC_KIND,geometry=geometry,learning_rate=1.e-3,contact_width=256,contact_depth=4,
-        q_collision=field_spec(hand,group_sobolev=True),query='exact_differentiable_inverse_FK_then_intrinsic_link_field',
+    centres=[[0.,0.,0.] for _ in range(21)]
+    for owner in PAD_OWNERS:
+        centres[owner]=np.asarray(hand.surface.contact_surface(owner)['triangles']).reshape(-1,3).mean(0).tolist()
+    return dict(kind=POTENTIAL_KIND,geometry=geometry,learning_rate=1.e-3,contact_width=128,contact_depth=4,
+        contact_decoders='independent_scalar_pad_potentials_v3',contact_centres_m=centres,contact_scale_m=.01,
+        projection='x_minus_autograd_potential_gradient',projection_supervision='potential_value_gradient_and_exact_Hessian_vector',
+        smooth_aggregation_temperature_mm=.05,vector_lr_scale=.1,
+        q_collision=field_spec(hand,group_sobolev=True,independent_decoders=True),query='exact_differentiable_inverse_FK_then_intrinsic_link_field',
         online_supervision='mesh_local_signed_distance_normal_and_contact_replay',
         initialization='random_no_checkpoint')
 
@@ -152,8 +161,17 @@ class IntrinsicSDF(nn.Module):
         self.hand=hand;self.pretrained=IntrinsicDistance().to(hand.device)
         # The attribute preserves optimizer grouping, but these weights are fresh.
         self.pretrained_lr=spec['learning_rate']
-        self.links=nn.Embedding(21,16).to(hand.device)
-        self.contact_field=ContactField(width=spec['contact_width'],depth=spec['contact_depth']).to(hand.device)
+        self.vector_lr_scale=spec.get('vector_lr_scale',.01)
+        self.independent_decoders=spec.get('kind') in (INDEPENDENT_KIND,POTENTIAL_KIND)
+        self.smooth_temperature_mm=spec.get('smooth_aggregation_temperature_mm',0.)
+        if self.independent_decoders:
+            self.links=nn.Identity()
+            if spec['kind']==POTENTIAL_KIND:
+                self.contact_field=PadPotentialField(spec['contact_centres_m'],width=spec['contact_width'],depth=spec['contact_depth'],scale=spec['contact_scale_m']).to(hand.device)
+            else:self.contact_field=IndependentPadField(width=spec['contact_width'],depth=spec['contact_depth']).to(hand.device)
+        else:
+            self.links=nn.Embedding(21,16).to(hand.device)
+            self.contact_field=ContactField(width=spec['contact_width'],depth=spec['contact_depth']).to(hand.device)
 
     def forward(self,local,links):return self.pretrained(local,links)
 
@@ -165,6 +183,8 @@ class IntrinsicSDF(nn.Module):
         return self(local,links)
 
     def contact(self,points,directions,links,palmar):
+        if self.independent_decoders:
+            return self.contact_field(points,links.long())
         return self.contact_field(points,directions,palmar,self.links(links.long()))
 
     def query(self,hand,q,points,links,frames=None):
@@ -176,7 +196,7 @@ class IntrinsicSDF(nn.Module):
 
 
 def restore_geometry(hand,spec):
-    if spec.get('kind') not in (KIND,INTRINSIC_KIND) or not spec.get('q_collision'):
+    if spec.get('kind') not in (KIND,INTRINSIC_KIND,INDEPENDENT_KIND,POTENTIAL_KIND) or not spec.get('q_collision'):
         raise ValueError('CART v9/wrist requires an articulated SDF and q-only self-collision field')
     model=PretrainedSDF(hand,spec) if spec['kind']==KIND else IntrinsicSDF(hand,spec)
     from .cart_q_collision import QCollisionField
