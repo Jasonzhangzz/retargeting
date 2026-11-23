@@ -588,8 +588,8 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 if any(config[k]!=origin[k] for k in required):raise ValueError('初始化 checkpoint 的架构、数据、坐标或碰撞模型配置不匹配')
                 initial=torch.load(source_folder/('resume.pth' if (source_folder/'resume.pth').exists() else 'warmup.pth'),map_location='cpu',weights_only=True)
                 if initialize_checkpoint=='best':
-                    best=torch.load(source_folder/'last.pth',map_location='cpu',weights_only=True)
-                    initial.update(model=best['model'],collision=best['collision'])
+                    best_checkpoint=torch.load(source_folder/'last.pth',map_location='cpu',weights_only=True)
+                    initial.update(model=best_checkpoint['model'],collision=best_checkpoint['collision'])
                 if initialize_from:
                     model.load_state_dict(initial['model'])
                     if transfer_policy_optimizer:optimizer.load_state_dict(initial['policy_optimizer'])
