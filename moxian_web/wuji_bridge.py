@@ -60,7 +60,8 @@ class WujiBridge(SkeletonBridge):
         try:
             proc=subprocess.Popen([str(self.python),'-I',str(self.root/'moxian_web/wuji_worker.py'),
                                    '--event-fd',str(write_fd),'--home',str(self.folder/'wuji2'/key),'--solver',self.backend,
-                                   '--geort-model',getattr(self,'cart_model_path','') if self.backend=='cart' else getattr(self,'geort_model_path','')],
+                                   '--geort-model',getattr(self,'geort_model_path',''),
+                                   '--cart-model',getattr(self,'cart_model_path','')],
                                   stdin=subprocess.PIPE,stdout=self.log,stderr=self.log,text=True,bufsize=1,pass_fds=(write_fd,),env=env)
         except Exception:
             os.close(read_fd);raise

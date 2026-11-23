@@ -678,9 +678,8 @@ def math_ceil(n,d):return (n+d-1)//d
 
 
 def validate_model_geometry(config):
-    name=config.get('architecture_name')
-    if config.get('protocol')!=PROTOCOL or name not in ARCHITECTURES or config.get('architecture')!=ARCHITECTURES[name] or config.get('policy_output')!=POLICY_OUTPUT or config.get('policy_input')!=POLICY_INPUT or config.get('policy_transition')!=POLICY_TRANSITION:
-        raise ValueError('旧 CART 模型与未来帧可微训练架构不兼容，请重新训练')
+    from .cart_deployment import validate_architecture
+    validate_architecture(config)
     if config.get('geometry')!=implementation_identity():raise ValueError('CART 几何／训练实现已变化，请重新训练')
 
 
@@ -689,10 +688,11 @@ class Predictor:
     def __init__(self,folder,device='cpu',allow_smoke=False):
         self.folder=Path(folder);self.device=device
         self.config=json.loads((self.folder/'config.json').read_text());status=json.loads((self.folder/'status.json').read_text())
-        if status['status'] not in (('completed','smoke_test') if allow_smoke else ('completed',)):
-            raise ValueError('只能启用真实几何验收通过的正式 CART 模型')
+        from .cart_deployment import validate_package
+        self.deployment=validate_package(self.folder,allow_smoke=allow_smoke)
         if not allow_smoke and self.config['profile']!='full':raise ValueError('测试模型不能启用')
-        validate_model_geometry(self.config);self.hand=CartHand(device);self.robot=self.hand.robot
+        if self.deployment is None:validate_model_geometry(self.config)
+        self.hand=CartHand(device);self.robot=self.hand.robot
         if self.robot.spec!=self.config['robot'] or self.hand.domain!=self.config['output_domain']:raise ValueError('CART 机器人／关节域不匹配')
         domain=self.config['output_domain']
         self.model=CartNetwork(domain['lower'],domain['upper'],self.config['architecture_name'],self.config['levels'],

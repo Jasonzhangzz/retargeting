@@ -191,6 +191,10 @@ class CartService:
         for folder in sorted((self.root/'models').glob('*'),reverse=True):
             try:
                 status=json.loads((folder/'status.json').read_text());status['id']=folder.name
+                deployment=folder/'deployment.json'
+                if deployment.exists():
+                    imported=json.loads(deployment.read_text())
+                    status.update(imported=True,experimental=imported.get('experimental',False))
                 items.append(status)
             except (OSError,ValueError):pass
         return items
@@ -251,10 +255,10 @@ class CartService:
         return dict(cancellation_requested=True)
     def model_folder(self,key):
         folder=self.root/'models'/safe_id(key)
-        status=json.loads((folder/'status.json').read_text())
-        if status['status']!='completed':raise ValueError('CART 模型尚未完整训练成功')
-        from .cart_training import validate_model_geometry
-        validate_model_geometry(json.loads((folder/'config.json').read_text()))
+        from .cart_deployment import validate_package
+        if validate_package(folder) is None:
+            from .cart_training import validate_model_geometry
+            validate_model_geometry(json.loads((folder/'config.json').read_text()))
         return folder
     def activate(self,key):
         self.model_folder(key);write_json(self.root/'active.json',dict(model=key));self.selected=key

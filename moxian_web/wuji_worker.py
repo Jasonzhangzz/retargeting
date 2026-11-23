@@ -22,6 +22,7 @@ from moxian_web.wuji_window import SourceFrameWindow,FUTURE,HORIZON
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--event-fd',type=int,required=True);ap.add_argument('--home',type=Path,required=True)
     ap.add_argument('--geort-model',default='')
+    ap.add_argument('--cart-model',default='')
     configured_solver=os.environ.get('MOXIAN_WUJI_SOLVER',DEFAULT_SOLVER)
     if configured_solver not in SOLVERS:
         configured_solver=DEFAULT_SOLVER
@@ -56,7 +57,8 @@ def main():
     threading.Thread(target=reader,daemon=True).start();torch.set_num_threads(1)
     rvq=WujiRVQ()
     backend=args.solver;device='cuda:0' if torch.cuda.is_available() else 'cpu'
-    model_path=args.geort_model or None;replay=None;solver=None;topology=None;rebuild=False;version=None;object_sdf=None;last_output_wall_ms=None
+    model_paths={'geort':args.geort_model or None,'cart':args.cart_model or None}
+    model_path=model_paths.get(backend);replay=None;solver=None;topology=None;rebuild=False;version=None;object_sdf=None;last_output_wall_ms=None
     while not stop.is_set():
         try:m=controls.get_nowait()
         except queue.Empty:m=None
@@ -69,6 +71,7 @@ def main():
                 if action not in ('replay_pause',):recent.clear()
                 if action=='model_set':
                     model_path=(m.get('data') or {})['model_path'];backend=(m.get('data') or {}).get('solver','geort');solver=None
+                    model_paths[backend]=model_path
                 elif action=='cart_action_set':
                     error='CART 可微策略不使用动作类别条件'
                 elif action=='replay_load':
@@ -95,7 +98,8 @@ def main():
                 elif action=='solver_set':
                     selected=(m.get('data') or {}).get('solver')
                     if selected not in SOLVERS:error='Unknown Wuji2 solver'
-                    else:backend=selected;solver=None
+                    elif selected in model_paths and not model_paths[selected]:error='请先选择对应求解器的模型'
+                    else:backend=selected;model_path=model_paths.get(selected);solver=None
                 else:error='Unknown WUJI2 control'
                 if error is None and action not in ('replay_pause','replay_seek'):emit({'type':'state','status':'initializing','ready':False,'solution_feasible':False,'display_available':False,
                     'requested_solver_backend':backend,'active_solver_backend':backend,'active_solver_session_id':None})

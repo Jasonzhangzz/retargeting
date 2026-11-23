@@ -136,6 +136,7 @@
             <p id="cartIKStatus" role="status">先点击准备观测、触点与 IK，再选择一段录制查看缓存。</p>
           </section>
           <div class="guide-actions"><label>模型 <select id="cartModels"></select></label><button id="cartSelect" class="button">启用 CART 网络</button><button id="cartEvaluate" class="button">评估验证会话</button><button id="cartDeleteModel" class="text-button">删除所选模型</button></div>
+          <p class="hint">实验模型保留原始验收结果。实时启用需匹配训练标定；录制回放可直接选择模型和对应录制，无需切换当前标定。</p>
           <p class="footnote">输入为当前 Wuji2 关节角与未来10帧 IK 轨迹；Attention 还输入未来触觉三维点和0/1。以 IK 为跟踪基线，网络学习有界修正，输出相对当前状态的归一化 Δq。训练使用指数误差，真实 mesh 验收仍以毫米和角度报告。回放读取缓存 IK，实时对已缓冲帧求解 IK。</p>
           <div class="guide-actions"><button id="cartReplayLoad" class="button">回放所选一段</button><button id="cartReplayPause" class="button">暂停／继续</button><button id="cartReplayStop" class="text-button">返回实时</button></div><input id="cartSeek" aria-label="CART 回放进度" type="range" min="0" max="1" value="0" style="width:100%">
           <p id="cartContactStatus" role="status"></p><p id="cartError" role="alert" style="color:#b44738">CART 控件加载中…</p>

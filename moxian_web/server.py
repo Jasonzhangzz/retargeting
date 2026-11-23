@@ -326,6 +326,13 @@ class Runtime:
                 self.cart_command('cart_replay_stop',{})
             if name=='wuji2_solver_set' and data.get('solver')!='geort' and self.geort.replay_active:
                 self.geort_command('geort_replay_stop',{})
+            if name=='wuji2_solver_set' and data.get('solver')=='cart':
+                key=self.cart.selected
+                if not key:
+                    imported=[m['id'] for m in self.cart.catalog('models') if m.get('imported')]
+                    if len(imported)==1:key=imported[0]
+                if not key:raise ValueError('请先在 CART 面板选择模型')
+                return self.cart_command('cart_model_select',dict(model=key))
             return self.wuji.control(name.removeprefix('wuji2_'),data)
         elif name == 'wuji2_mapping_rebuild':
             return self.wuji.control('rebuild',{})
@@ -490,7 +497,8 @@ class Runtime:
         if name=='cart_model_select':
             key=safe_id(data.get('model'));folder=self.cart.model_folder(key)
             config=json.loads((folder/'config.json').read_text())
-            if self.cart.recorder.latest and config['source']!=self.cart.recorder.latest[0]['source']:raise ValueError('CART 模型与当前标定／设备不匹配')
+            if self.cart.recorder.latest and config['source']!=self.cart.recorder.latest[0]['source']:
+                raise ValueError('CART 模型与当前实时标定不匹配；可选择配套录制并直接点击 CART 回放')
             if self.cart.recorder.latest and config.get('source_binding_version')!=self.cart.recorder.latest[1].get('binding_version'):
                 raise ValueError('CART 模型与当前触觉材料绑定不匹配')
             if not self.wuji.proc or self.wuji.proc.poll() is not None:self.wuji.start(config['source']['serial'])
@@ -499,24 +507,31 @@ class Runtime:
             return dict(selected_model=key,solver='cart')
         if name=='cart_replay_load':
             from .cart_data import manifest
-            if not self.cart.selected:raise ValueError('请先选择完整训练成功的 CART 模型')
+            key=data.get('model') or self.cart.selected
+            if not key:raise ValueError('请先选择 CART 模型')
             folder,meta=manifest(self.cart.root,safe_id(data.get('dataset')))
-            config=json.loads((self.cart.model_folder(self.cart.selected)/'config.json').read_text())
+            model_folder=self.cart.model_folder(safe_id(key))
+            config=json.loads((model_folder/'config.json').read_text())
             if config['source']!=meta['source']:raise ValueError('回放与模型源不兼容')
             if config.get('source_binding_version')!=json.loads((folder/'topology.json').read_text()).get('binding_version'):
                 raise ValueError('回放与模型的触觉材料绑定不兼容')
             if self.cart.recorder.recording.get('active'):raise ValueError('请先停止录制')
             if self.geort.replay_active:self.geort_command('geort_replay_stop',{})
-            if self.wuji.backend!='cart':self.cart_command('cart_model_select',dict(model=self.cart.selected))
+            if not self.cart.replay_active:self.cart.previous_solver=self.wuji.backend
+            if not self.wuji.proc or self.wuji.proc.poll() is not None:self.wuji.start(config['source']['serial'])
+            self.wuji.control('model_set',dict(model_path=str(model_folder),solver='cart'))
+            self.wuji.cart_model_path=str(model_folder);self.cart.selected=safe_id(key)
             self.wuji.control('replay_load',dict(folder=str(folder)))
             self.cart.replay_active=True;self.cart.replay_topology=json.loads((folder/'topology.json').read_text())
-            return dict(loaded=meta['id'])
+            return dict(loaded=meta['id'],selected_model=key,solver='cart')
         if name in ('cart_replay_pause','cart_replay_seek'):
             if name.endswith('seek') and (isinstance(data.get('index'),bool) or not isinstance(data.get('index'),int) or data['index']<0):raise ValueError('定位帧号必须为非负整数')
             return self.wuji.control(name.removeprefix('cart_'),data)
         if name=='cart_replay_stop':
             self.wuji.control('replay_stop',{});self.cart.replay_active=False;self.cart.replay_topology=None;self.wuji.source_version=None
-            return dict(stopped=True)
+            previous=getattr(self.cart,'previous_solver','cart')
+            if previous!='cart':self.wuji.control('solver_set',dict(solver=previous))
+            return dict(stopped=True,solver=previous)
         raise ValueError('未知 CART 命令')
 
     def geort_command(self, name, data):

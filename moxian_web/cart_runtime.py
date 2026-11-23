@@ -18,7 +18,7 @@ from .cart_initialization import RetargetSession
 
 class CartRetarget(GeoRTRetarget):
     def __init__(self,topology,cache=None,device='cpu',model_path=None,**kwargs):
-        if not model_path:raise ValueError('请选择正式训练成功的 CART 可微策略')
+        if not model_path:raise ValueError('请先在 CART 面板选择已训练或已导入的模型')
         self.cart_predictor=Predictor(model_path,device);self.source=SourceAdapter(topology)
         if topology['binding_version']!=self.cart_predictor.config['source_binding_version']:
             raise ValueError('CART 模型与当前触觉材料绑定不匹配')
@@ -38,7 +38,8 @@ class CartRetarget(GeoRTRetarget):
 
     def topology(self):
         return dict(self.surface.topology(self.mapping),algorithm=PROTOCOL,training_mode=self.training_mode,
-                    topology_version=self.topology_version,model_id=self.model_id,model_run_id=self.run_id)
+                    topology_version=self.topology_version,model_id=self.model_id,model_run_id=self.run_id,
+                    experimental=bool((self.cart_predictor.deployment or {}).get('experimental')))
 
     def predict(self,points):return self.last_q
 
@@ -112,6 +113,8 @@ class CartRetarget(GeoRTRetarget):
         result.update(cart_hull=source_overlay,
             cart_robot_hull=dict(ready=True,contact_points_m=robot_points,patch_points_m=[],timestamp_ms=target_frame['timestamp_ms'],geometry_version=target_frame['geometry_version']),
             cart=dict(metrics=metrics,buffering=False,observation_timestamp_ms=row['timestamp_ms'],
+                experimental=bool((self.cart_predictor.deployment or {}).get('experimental')),
+                acceptance_status=(self.cart_predictor.deployment or {}).get('acceptance_status','completed'),
                 buffer_delay_ms=0. if 'cart_future_frames' in frame else stamp-row['timestamp_ms'],self_contacts=len(contacts['self_pairs']),object_contacts=len(contacts['object_contacts']),
                 tactile_status=contacts['tactile_status'],online_search=False,hard_contact_guarantee=False),
             recorded_timestamp_ms=target_frame.get('recorded_timestamp_ms'),contact_ready=False,

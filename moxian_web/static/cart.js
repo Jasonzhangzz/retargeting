@@ -31,7 +31,7 @@
   el('cartLosses').textContent=job.losses||job.sdf_losses?JSON.stringify({losses:job.losses,geometry_losses:job.sdf_losses,validation:job.validation_loss,geometry_validation:job.sdf_validation,metrics:job.metrics,timings:job.timings},null,2):job.result?JSON.stringify(job.result,null,2):'';
   const m=w.cart?.metrics;
   el('cartBufferStatus').textContent=w.cart?.buffering?`等待未来观测 ${w.cart.buffered_frames}/11 帧`:w.cart?.buffer_delay_ms!==undefined?`观测时间 ${w.cart.observation_timestamp_ms.toFixed(1)} ms · 实际缓冲 ${w.cart.buffer_delay_ms.toFixed(1)} ms`:'';
-  el('cartContactStatus').textContent=m?`网络独立诊断 · 间隙 ${m.max_gap_mm.toFixed(2)} mm · 穿透 ${m.max_penetration_mm.toFixed(2)} mm · 骨轴误差 ${m.bone_direction_deg.toFixed(1)}° · ${w.contact_constraints_satisfied===null?'无活动接触':w.contact_constraints_satisfied?'接触达标':'接触未达标'}`:'';
+  el('cartContactStatus').textContent=m?`${w.cart.experimental?'实验模型 · 原验收未通过 · ':''}网络独立诊断 · 间隙 ${m.max_gap_mm.toFixed(2)} mm · 穿透 ${m.max_penetration_mm.toFixed(2)} mm · 骨轴误差 ${m.bone_direction_deg.toFixed(1)}° · ${w.contact_constraints_satisfied===null?'无活动接触':w.contact_constraints_satisfied?'接触达标':'接触未达标'}`:'';
   if(w.playback?.active&&c.replay_active){el('cartSeek').max=Math.max(0,w.playback.frames-1);el('cartSeek').value=w.playback.index;}
  }
  async function action(command,data={}){
@@ -55,7 +55,7 @@
    const [records,models]=await Promise.all(responses.map(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'读取失败');return d.items||[];}));
    recordings=records;
    options(el('cartDatasets'),records,r=>`${r.split==='validation'?'验证':'训练'} · ${r.label||r.id} · ${r.frames}帧 ${r.complete?'已保存':'保存中'}${r.ik?` · IK 已缓存 ${r.ik.valid_frames}/${r.frames}帧`:''}${r.preprocessing?.protocol==='cart_diff_ik_v6'?' · IK／触点观测已准备':' · 需准备观测与 IK'}`);
-   options(el('cartModels'),models,m=>`${m.id} · ${m.status}`);
+   options(el('cartModels'),models,m=>`${m.id} · ${m.experimental?'实验模型 · 验收未通过':m.status}${m.best_epoch?` · epoch ${m.best_epoch}`:''}`);
    el('cartRecordings').replaceChildren(...records.map(r=>{const li=document.createElement('li'),a=document.createElement('a');a.href='/api/cart/recording?id='+encodeURIComponent(r.id);a.textContent=`${r.label||r.id} · 接触数据`;li.appendChild(a);if(r.capture_geometry?.status==='completed'){const geometry=document.createElement('a');geometry.href='/api/cart/geometry?id='+encodeURIComponent(r.id);geometry.textContent=' · Wrist 三维点完整记录';li.appendChild(geometry);}if(r.ik){const ik=document.createElement('a');ik.href='/api/cart/ik?id='+encodeURIComponent(r.id);ik.textContent=' · IK 轨迹缓存 NPZ';li.appendChild(ik);}return li;}));lastRefresh=Date.now();render();
   }catch(error){el('cartError').textContent=error.message;}finally{refreshing=false;}
  }
@@ -78,9 +78,9 @@
  el('cartCancel').onclick=()=>action('cart_cancel');
  el('cartSelect').onclick=async()=>{const result=await action('cart_model_select',{model:el('cartModels').value});if(result){window.wujiRequestedSolver='cart';el('wujiSolver').value='cart';}};
  el('cartEvaluate').onclick=()=>action('cart_evaluate',{model:el('cartModels').value,datasets:selected()});
- el('cartReplayLoad').onclick=()=>action('cart_replay_load',{dataset:selected()[0]});
+ el('cartReplayLoad').onclick=async()=>{const result=await action('cart_replay_load',{dataset:selected()[0],model:el('cartModels').value});if(result){window.wujiRequestedSolver='cart';el('wujiSolver').value='cart';}};
  el('cartReplayPause').onclick=()=>action('cart_replay_pause',{paused:!!state.wuji2?.playback?.playing});
- el('cartReplayStop').onclick=()=>action('cart_replay_stop');el('cartSeek').onchange=()=>action('cart_replay_seek',{index:Number(el('cartSeek').value)});
+ el('cartReplayStop').onclick=async()=>{const result=await action('cart_replay_stop');if(result?.solver){window.wujiRequestedSolver=result.solver;el('wujiSolver').value=result.solver;}};el('cartSeek').onchange=()=>action('cart_replay_seek',{index:Number(el('cartSeek').value)});
  el('cartShowHull').onchange=()=>{window.cartHullVisible=el('cartShowHull').checked;window.updateManoView?.(state,el('poseMode').value==='mano');window.updateWujiView?.(state,el('poseMode').value==='wuji2');window.updateCartPreview?.(state);};
  window.updateCartUI=next=>{state=next||{};render();if(Date.now()-lastRefresh>5000)void refresh();};
  void refresh();

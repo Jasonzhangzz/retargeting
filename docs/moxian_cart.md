@@ -74,3 +74,11 @@ q_next = predictor.predict_next(
 默认输出归一化增量；`normalized=False` 返回弧度。实时路径缓冲真实前瞻窗口，模型不是零延迟策略。断流、seek、输入 epoch 或模型变化重置状态。只有通过原生 mesh、SDF 和接触场验收的正式模型才能启用；5 mm 是训练软惩罚，不能替代真实几何检查。
 
 本机候选权重放在被 Git 忽略的 `data/checkpoints/cart/`，附原始配置和验收状态。1000 轮实验 `remote_card_emf_20261121_muon_v6` 的最优 epoch 为 260，验证 loss 为 0.706505；完整验收未通过，候选权重未作为正式模型启用。
+
+## 导入的实验模型
+
+经用户指定、严格加载和推理验证的候选可以部署到 `output/moxian/cart/models/`，通过 `cart_deployment.register_import(..., experimental=True)` 显式注册。`deployment.json` 绑定 checkpoint、原始配置、验收状态、源标定与本机推理实现的校验和；没有导入记录的 rejected 权重仍然拒绝加载。原始 `status.json` 和 `config.json` 不改写，网页持续显示“实验模型 · 验收未通过”。
+
+当前已部署 epoch 260。网页 CART 面板选择该模型和验证录制 `20261118T135558_05a2628d`，点击“回放所选一段”即可使用，不需要先替换当前实时标定或启用实时 CART。结束回放恢复先前求解器，GeoRT 与 CART 分别保存自己的模型路径。
+
+实时启用仍检查设备、手侧、源标定、材料绑定和关节域。模型训练标定与当前实时标定不一致时，显示明确错误；不会自动覆盖当前标定或跳过身份检查。
