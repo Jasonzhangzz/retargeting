@@ -34,14 +34,14 @@ class CartTracking:
             payload.update({'geometry/'+key:float(value) for key,value in values['sdf_losses'].items()})
             payload['geometry/update']=values.get('sdf_updates',values.get('completed',0))
         if phase=='geometry_validation':
-            payload.update({'geometry/validation_'+key:float(value) for key,value in values['sdf_validation'].items() if value is not None})
+            payload.update({'geometry/validation_'+key:float(value) for key,value in values['sdf_validation'].items() if isinstance(value,(int,float))})
             payload.update({'geometry/update':values['completed'],'geometry/accepted':int(values['accepted'])})
         if phase=='closed_loop_metrics':
-            payload.update({'closed_loop/'+key:float(value) for key,value in values['metrics'].items() if value is not None})
+            payload.update({'closed_loop/'+key:float(value) for key,value in values['metrics'].items() if isinstance(value,(int,float))})
             payload['closed_loop/epoch']=values['epoch']
         if phase=='validation':
-            payload.update({'validation/'+key:float(value) for key,value in values['metrics'].items() if value is not None})
-            payload.update({'validation/sdf_'+key:float(value) for key,value in values['sdf_validation'].items() if value is not None})
+            payload.update({'validation/'+key:float(value) for key,value in values['metrics'].items() if isinstance(value,(int,float))})
+            payload.update({'validation/sdf_'+key:float(value) for key,value in values['sdf_validation'].items() if isinstance(value,(int,float))})
             payload.update({'validation/epoch':values['epoch'],'validation/loss':values['validation_loss'],
                 'validation/best_loss':values['best_validation_loss']})
             payload.update({'validation/raw_cost':values.get('validation_raw_cost',values['validation_loss']),

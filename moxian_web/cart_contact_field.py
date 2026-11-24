@@ -10,6 +10,14 @@ CONTACT_FIELD_VERSION = 'directional_surface_field_v1'
 PAD_OWNERS=(0,)+tuple(2+4*f+k for f in range(5) for k in range(3))
 
 
+def projection_jvp(hit,points,probe,*,potential=False,create_graph=False):
+    """Actual input JVP, including non-symmetric legacy projection networks."""
+    if potential:
+        return torch.autograd.grad((hit*probe).sum(),points,create_graph=create_graph,retain_graph=True)[0]
+    rows=[torch.autograd.grad(hit[:,k].sum(),points,create_graph=create_graph,retain_graph=True)[0] for k in range(3)]
+    return torch.stack([(row*probe).sum(-1) for row in rows],-1)
+
+
 class IndependentPadField(nn.Module):
     """Fixed semantic routing, with no predicted winner or closest-link search."""
     def __init__(self,width=128,depth=4):
@@ -180,6 +188,7 @@ class ContactTeacher:
     """Direction-preserving real-mesh labels, never part of a policy graph."""
     def __init__(self,hand):
         self.hand=hand;self.skins=list(hand.full_meshes);self.pad_owners=[];clouds=[];normals=[];owners=[]
+        self.triangles={};self.areas={}
         # Only anatomical contact links have palmar semantic surfaces.
         for owner in [0]+[2+4*f+k for f in range(5) for k in range(3)]:
             surface=hand.surface.contact_surface(owner);tri=np.asarray(surface['triangles'],np.float32)
@@ -188,10 +197,48 @@ class ContactTeacher:
                 hand.pad_meshes[owner]=wp.Mesh(points=wp.array(tri.reshape(-1,3),dtype=wp.vec3,device=hand.device),
                     indices=wp.array(np.arange(tri.size//3),dtype=int,device=hand.device))
             self.skins[owner]=hand.pad_meshes[owner];self.pad_owners.append(owner)
+            self.triangles[owner]=hand.tensor(tri)
+            self.areas[owner]=hand.tensor(np.linalg.norm(np.cross(tri[:,1]-tri[:,0],tri[:,2]-tri[:,0]),axis=-1)/2)
             clouds.append(hand.tensor(tri.mean(1)));normals.append(hand.tensor(surface['normals']))
             owners.append(torch.full((len(tri),),owner,device=hand.device,dtype=torch.long))
         self.mesh_ids=wp.array([mesh.id for mesh in self.skins],dtype=wp.uint64,device=hand.device)
         self.points=torch.cat(clouds);self.normals=torch.cat(normals);self.owners=torch.cat(owners)
+
+    @torch.no_grad()
+    def area_queries(self,n,*,sigma=None):
+        """Balanced links, uniform surface area, then isotropic query noise."""
+        all_points=[];all_owners=[]
+        for i,owner in enumerate(self.pad_owners):
+            count=n//len(self.pad_owners)+int(i<n%len(self.pad_owners))
+            if not count:continue
+            ids=torch.multinomial(self.areas[owner],count,replacement=True)
+            tri=self.triangles[owner][ids]
+            uv=torch.rand(count,2,device=self.hand.device)
+            uv=torch.where(uv.sum(-1,keepdim=True)>1,1-uv,uv)
+            x=tri[:,0]+uv[:,:1]*(tri[:,1]-tri[:,0])+uv[:,1:]*(tri[:,2]-tri[:,0])
+            all_points.append(x);all_owners.append(torch.full((count,),owner,device=x.device,dtype=torch.long))
+        x=torch.cat(all_points);links=torch.cat(all_owners);order=torch.randperm(n,device=x.device)
+        x=x[order];links=links[order]
+        std=torch.where(torch.rand(n,1,device=x.device)<.75,.006,.025) if sigma is None else sigma
+        return x+torch.randn_like(x)*std,links
+
+    @torch.no_grad()
+    def verified_projection_derivative(self,points,links,palmar,probes):
+        """Audit local mesh derivatives, retaining values at switching queries.
+
+        Only derivative labels crossing a non-smooth branch are masked. Two
+        probe scales distinguish these from float32 cancellation. Native values
+        and penetration audits are never removed from their denominators.
+        """
+        target,valid=self.projection_derivative(points,links,palmar,probes)
+        errors=[]
+        for step in (1.e-5,5.e-6):
+            ph,_,vp=self.label(points+step*probes,torch.zeros_like(points),links,palmar)
+            mh,_,vm=self.label(points-step*probes,torch.zeros_like(points),links,palmar)
+            error=((ph-mh)/(2*step)-target).norm(dim=-1)
+            valid=valid&vp&vm&torch.isfinite(error)&(error<.03)
+            errors.append(error)
+        return target,valid,torch.stack(errors).amax(0)
 
     @torch.no_grad()
     def label(self,points,directions,links,palmar):

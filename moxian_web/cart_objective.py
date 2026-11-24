@@ -32,8 +32,9 @@ def _nearest_contact(skin: wp.uint64, solid: wp.uint64, query: wp.array(dtype=wp
 
 
 class CartHand:
-    def __init__(self, device='cpu'):
-        self.device = str(device); self.robot = RobotAdapter(); self.surface = WujiSurface()
+    def __init__(self, device='cpu', *, contact_surface_policy=None):
+        self.device = str(device); self.robot = RobotAdapter()
+        self.surface = WujiSurface(**({'contact_policy':contact_surface_policy} if contact_surface_policy else {}))
         self.domain = extension_domain(self.robot.lower, self.robot.upper)
         self.low = self.tensor(self.domain['lower']); self.high = self.tensor(self.domain['upper'])
         self.fk = ModelFK(self.robot.model, self.device); self.ids = self.robot.body_ids

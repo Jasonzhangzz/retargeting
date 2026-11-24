@@ -15,7 +15,7 @@ from .cart_wrist import (FloatingCartHand,CartWristNetwork,FloatingWristObjectiv
 from .cart_emf_observations import batch_future,pack_future
 from .cart_collision import CollisionModel,SDFLearner,frozen,geometry_rejection_reasons
 from .cart_objective import CartHand
-from .cart_protocol import PROTOCOL,ARCHITECTURES,FINGERS,POLICY_OUTPUT,POLICY_INPUT,POLICY_TRANSITION,OBJECTIVES,V9_OBJECTIVE
+from .cart_protocol import CONDITIONAL_SDF_OBJECTIVE,LINK_SDF_OBJECTIVE,PROTOCOL,ARCHITECTURES,FINGERS,POLICY_OUTPUT,POLICY_INPUT,POLICY_TRANSITION,OBJECTIVES,V9_OBJECTIVE
 from .cart_fast import DEFAULT_BATCH_SIZE,PreparedBatch,ObservationStore,prepare_windows,choose_parallel_batch
 from .cart_contact_field import CONTACT_FIELD_VERSION
 from .cart_initialization import prepare_ik,attach_ik,perturb_initial_states,IK_VERSION,DEFAULT_INITIAL_NOISE_RAD
@@ -38,6 +38,9 @@ def implementation_identity():
         pretrained_sdf=file_hash(Path(__file__).with_name('cart_pretrained_sdf.py')),
         emf_policy_inputs=file_hash(Path(__file__).with_name('cart_emf_observations.py')),
         q_collision=file_hash(Path(__file__).with_name('cart_q_collision.py')),
+        structured_geometry=file_hash(Path(__file__).with_name('cart_structured_geometry.py')),
+        link_sdf={name:file_hash(Path(__file__).with_name(name)) for name in ('cart_link_sdf.py','cart_link_sdf_training.py','cart_link_sdf_objective.py')},
+        conditional_sdf={name:file_hash(Path(__file__).with_name(name)) for name in ('cart_conditional_sdf.py','cart_conditional_sdf_training.py','cart_conditional_sdf_objective.py')},
         floating_wrist=file_hash(Path(__file__).with_name('cart_wrist.py')),
         initialization=file_hash(Path(__file__).with_name('cart_initialization.py')),
         card_cost={name:file_hash(Path(__file__).parents[1]/name) for name in
@@ -46,6 +49,12 @@ def implementation_identity():
 
 
 def make_objective(hand,collision,kind=WRIST_OBJECTIVE):
+    if kind==CONDITIONAL_SDF_OBJECTIVE:
+        from .cart_conditional_sdf_objective import ConditionalSDFObjective
+        return ConditionalSDFObjective(hand,collision)
+    if kind==LINK_SDF_OBJECTIVE:
+        from .cart_link_sdf_objective import LinkSDFObjective
+        return LinkSDFObjective(hand,collision)
     if kind==WRIST_OBJECTIVE:return FloatingWristObjective(hand,collision)
     if kind==V9_OBJECTIVE:
         from .cart_card_self_contact import ActuatedSelfContactCardCostObjective
@@ -294,7 +303,8 @@ def quality_summary(metrics):
         bone_direction_mean_deg=float(values('bone_direction_deg').mean()) if metrics else None,
         gap_p95_mm=float(np.percentile(measured('max_gap_m')*1000,95)) if resolved else None,
         gap_max_mm=float(measured('max_gap_m').max()*1000) if resolved else None,
-        normal_max_deg=float(measured('max_normal_deg').max()) if resolved else None,
+        normal_max_deg=float(measured('max_normal_deg').max()) if resolved and all(m.get('contact_normal_evaluated',True) for m in resolved) else None,
+        contact_normal_evaluated=all(m.get('contact_normal_evaluated',True) for m in resolved),
         penetration_max_mm=float(values('max_penetration_m').max()*1000) if metrics else None,
         contact_keep_reward=float(np.mean([1-scalar(m['contact_keep_loss'][0]) for m in keep])) if keep else None,
         self_contact_frames=len(self_contacts),
@@ -401,9 +411,18 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
           initial_noise_rad=DEFAULT_INITIAL_NOISE_RAD,attention_precision='auto',validation_interval=10,validation_window_budget=32,
           initialize_geometry_from=None,wandb_project=None,wandb_entity=None,wandb_base_url=None,wandb_mode='online',window_stride=0,
           initialize_sdf_from=None,policy_objective=WRIST_OBJECTIVE,policy_loss_scale=1.e8,initialize_contact_from=None,optimizer_kind='muon_sgd',
-          initialize_q_collision_from=None,transfer_policy_optimizer=True,initialize_checkpoint='resume',fresh_sdf_spec=None):
+          initialize_q_collision_from=None,transfer_policy_optimizer=True,initialize_checkpoint='resume',fresh_sdf_spec=None,
+          geometry_completion='first_accepted'):
+    from .cart_geometry_schedule import COMPLETION,CONVERGED_COMPLETION,EARLY_STOP,SELECTION,FullBudgetSelection,ConvergedSelection
+    if geometry_completion not in ('first_accepted',COMPLETION,CONVERGED_COMPLETION):raise ValueError('Unknown geometry completion schedule')
+    early_geometry_stop=geometry_completion==CONVERGED_COMPLETION
+    complete_geometry_budget=geometry_completion in (COMPLETION,CONVERGED_COMPLETION)
+    if smoke and complete_geometry_budget:raise ValueError('Full geometry schedule requires a production run')
     if architecture not in ARCHITECTURES:raise ValueError('Only attention CART is supported')
-    if policy_objective not in OBJECTIVES:raise ValueError('Only v9 and floating-wrist CART objectives are supported')
+    if policy_objective not in OBJECTIVES:raise ValueError('Unsupported CART objective')
+    conditional_sdf=policy_objective==CONDITIONAL_SDF_OBJECTIVE
+    direct_link_sdf=policy_objective in (LINK_SDF_OBJECTIVE,CONDITIONAL_SDF_OBJECTIVE)
+    floating_wrist=policy_objective in (WRIST_OBJECTIVE,LINK_SDF_OBJECTIVE,CONDITIONAL_SDF_OBJECTIVE)
     from .geort_service import safe_id
     run_id=safe_id(run_id)
     if initialize_from:initialize_from=safe_id(initialize_from)
@@ -465,8 +484,22 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         train_windows=windows(sessions,length,window_stride);validation_windows=windows(validation,length)
         if not train_windows or not validation_windows:raise ValueError('训练与验证各需至少连续 length+10 帧真实观测，不跨断流边界')
         device=device or ('cuda:0' if torch.cuda.is_available() else 'cpu')
-        hand=(FloatingCartHand if policy_objective==WRIST_OBJECTIVE else CartHand)(device)
-        collision=CollisionModel(hand);objective=make_objective(hand,collision,policy_objective)
+        from .wuji_surface import POLICY as LEGACY_PAD_POLICY,COMPLETE_PAD_POLICY
+        pad_policy=COMPLETE_PAD_POLICY if floating_wrist else LEGACY_PAD_POLICY
+        if fresh_sdf_spec is not None:pad_policy=fresh_sdf_spec.get('contact_surface_policy',LEGACY_PAD_POLICY)
+        elif resume or initialize_from or initialize_geometry_from:
+            origin=root/'models'/(run_id if resume else initialize_from or initialize_geometry_from)
+            pad_policy=json.loads((origin/'config.json').read_text()).get('sdf_backend',{}).get('contact_surface_policy',LEGACY_PAD_POLICY)
+        elif initialize_sdf_from or initialize_contact_from:pad_policy=LEGACY_PAD_POLICY
+        hand=(FloatingCartHand if floating_wrist else CartHand)(device,contact_surface_policy=pad_policy)
+        if conditional_sdf:
+            from .cart_conditional_sdf import geometry_spec as direct_spec,ConditionalSDFGeometry
+            collision=CollisionModel(hand,ConditionalSDFGeometry(hand,direct_spec(hand)))
+        elif direct_link_sdf:
+            from .cart_link_sdf import geometry_spec as direct_spec,LinkSDFGeometry
+            collision=CollisionModel(hand,LinkSDFGeometry(hand,direct_spec(hand)))
+        else:collision=CollisionModel(hand)
+        objective=make_objective(hand,collision,policy_objective)
         objective.policy_loss_scale=policy_loss_scale
         card_reports=[]
         if policy_objective in OBJECTIVES:
@@ -475,9 +508,9 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             with torch.random.fork_rng(devices=target_devices):
                 card_reports=attach_card_targets(root,sessions+validation,device,check,progress)
         mean,scale=position_statistics(sessions)
-        model=(CartWristNetwork if policy_objective==WRIST_OBJECTIVE else CartNetwork)(hand.low,hand.high,architecture,position_mean=mean,position_scale=scale).to(device)
+        model=(CartWristNetwork if floating_wrist else CartNetwork)(hand.low,hand.high,architecture,position_mean=mean,position_scale=scale).to(device)
         from .cart_pretrained_sdf import fresh_geometry_spec
-        sdf_spec=fresh_geometry_spec(hand)
+        sdf_spec=direct_spec(hand) if direct_link_sdf else fresh_geometry_spec(hand)
         # Construct replacement geometry after policy initialization, preserving
         # the same seed and initial attention policy in the comparison run.
         from .cart_pretrained_sdf import load_pretrained,restore_geometry
@@ -522,7 +555,16 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         if resume:parallel_size=json.loads((folder/'config.json').read_text())['parallel_batch_size']
         objective.cache_rows=True
         optimizer=policy_optimizer(model,optimizer_kind)
-        learner=SDFLearner(collision,capacity=4096 if smoke else 200000,batch_size=64 if smoke else 2048,optimizer_kind=optimizer_kind)
+        if conditional_sdf:
+            from .cart_conditional_sdf_training import ConditionalSDFLearner
+            learner_type=ConditionalSDFLearner
+        elif direct_link_sdf:
+            from .cart_link_sdf_training import LinkSDFLearner
+            learner_type=LinkSDFLearner
+        else:learner_type=SDFLearner
+        learner=learner_type(collision,capacity=4096 if smoke else 200000,batch_size=64 if smoke else 2048,optimizer_kind=optimizer_kind)
+        if conditional_sdf or getattr(collision.model,'verified_supervision',False):
+            collision.geometry_seed_q=torch.stack([w['initial_q'][...,:20] for w in train_windows]).to(device)
         warmup_steps=(4 if smoke else 2000) if warmup_steps is None else warmup_steps
         if isinstance(warmup_steps,bool) or not isinstance(warmup_steps,int) or warmup_steps<0:raise ValueError('无效 SDF 热启动步数')
         gated=not smoke
@@ -548,6 +590,24 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             learning_rate_schedule=dict(kind='warmup_cosine',warmup_updates=5,minimum_multiplier=.1,
                 total_updates=epochs*math_ceil(len(train_windows),parallel_size)) if optimizer_kind=='muon_sgd' else dict(kind='constant'),
             initialize_contact_from=dict(name=Path(initialize_contact_from).name,sha256=file_hash(initialize_contact_from)) if initialize_contact_from else None)
+        if complete_geometry_budget:
+            config['geometry_gate'].update(completion=geometry_completion,checkpoint_selection=SELECTION,
+                schedule_sha256=file_hash(Path(__file__).with_name('cart_geometry_schedule.py')))
+        if early_geometry_stop:config['geometry_gate']['early_stop']=dict(EARLY_STOP)
+        if getattr(collision.model,'verified_supervision',False):
+            from .cart_geometry_audit import audit_identity
+            config['geometry_implementation']=dict(audit_identity(),**{name:file_hash(Path(__file__).with_name(name)) for name in
+                ('cart_pretrained_sdf.py','cart_wrist.py','cart_optim.py')})
+            config['geometry_gate']['label_audit']='independent_native_values_and_two_scale_derivatives_v1'
+            config['geometry_gate']['contact_jacobian']='exact_AD_on_regular_labels_with_all_query_errors_reported'
+            config['geometry_gate']['q_sampling_prior']='training_split_IK_states_plus_0.04rad_noise_and_stratified_uniform_joint_domain'
+        if not direct_link_sdf and getattr(collision.model.q_collision,'structured',False):
+            config['geometry_gate']['q_sampling_prior']='independent_joint_domain_validation; no q-cost regressor'
+            config['structured_collision']=dict(distance='shared_intrinsic_neural_SDF',kinematics='exact_FK',
+                material_samples='same_native_8_clearance_54_guard',nearest_search=False,
+                aggregation='sum_energy_and_logsumexp_depth',collar_band_m=2.e-6,
+                q_decoder_training=False,contact_projection='fixed_geometry_features_with_smooth_softmin',
+                projection_band_m=5.e-6,normal_temperature_m=5.e-5)
         config.update(micro_batch_size=micro_batch_size,batch_semantics='parallel_windows_per_optimizer_step',
             policy_output=POLICY_OUTPUT,delta_normalization='2*delta_rad/(upper-lower)',state_transition='clamp(normalize(q)+delta,-1,1)',
             policy_input=POLICY_INPUT,policy_transition=POLICY_TRANSITION,policy_reference='none',
@@ -583,10 +643,38 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 collision='intended_finger_group_zero_clearance_with_penetration_energy',
                 clearance_scope='finger_pair_group; noncontact groups retain 6mm',penetration_cap_mm=5.,
                 teacher_only_nearest_search=True))
-        if policy_objective==WRIST_OBJECTIVE:
+        if floating_wrist:
             config.update(wrist_config())
             config['objective']['fixed_wrist']=False
             config['decoder']['wrist_head']=dict(coordinates=6,hidden=[256,256],layout='separate_wrist_mlp')
+        if direct_link_sdf:
+            config.update(contact_selection='observed_point_link_and_exact_link_pair_labels',
+                contact_field_used_by_policy=False,surface_teacher='closed_link_signed_distance_and_stable_first_derivatives',
+                contact_field='none',loss_execution='direct_link_distances_with_exact_FK',
+                direct_link_sdf=dict(decoders=21,input='local_xyz',output='signed_distance_m',
+                    jacobian='autograd_of_same_distance; analytic_FK',nearest_search=False,
+                    contact='observed_anchor_distance_zero',noncontact='all_allowed_material_pairs_resist_penetration',
+                    pair_contact='both_links_distance_zero_at_common_observed_anchor',
+                    continuity='retained_link_distance_and_temporal_distance_difference',
+                    contact_normal_loss=False,material_point_projection=False,
+                    guard='per_query_5mm_squared_hinge;54_fixed_material_points_per_link',
+                    scalar_cost_scaling=scaling))
+            config['geometry_gate'].update(checks='distance_sign_spatial_and_FK_gradients_dense_collision_escape',
+                label_audit='independent_native_values_and_two_scale_derivatives_v1')
+            config['self_contact'].update(closure='both_link_SDFs_zero_at_observed_common_anchor',
+                normal='not_in_objective',query='direct_specified_link_local_SDF',
+                collision='every_allowed_link_pair_penetration_penalty',clearance_scope='exact_link_pair; no_finger_group_exemptions')
+        if conditional_sdf:
+            config.pop('direct_link_sdf',None)
+            config.update(conditional_sdf=sdf_spec,loss_execution='shared_q_encoding_all_link_distances',
+                contact_selection='observed_exact_link_labels',contact_field_used_by_policy=False,
+                surface_teacher='native_closed_link_values_spatial_derivatives_and_q_VJPs')
+            config['geometry_gate'].update(checks='distance_sign_spatial_q_wrist_gradients_v4_norm_guard_and_native_escape',
+                q_sampling_prior='50pct_training_split_IK_plus_0.04rad_noise;50pct_uniform_joint_domain',
+                cap_metric='q_gradient_of_L2_all_positive_penetrations_on_deep_cases; additional_actual_guard_gradient_gate')
+            config['self_contact'].update(collision='6mm_clearance_except_exact_observed_link_pairs_zero_clearance',
+                clearance_scope='exact_link_pair; penetration_never_exempted',query='shared_q_conditioned_signed_distances',
+                guard='v4_relu(L2_all_sample_penetrations_mm-5)^2')
         epoch_start=0;resume_cursor=0;order=None;sums={};batches=0;loss_samples=0;best=float('inf');best_epoch=None
         def state(epoch,next_batch,order):
             return dict(model=model.state_dict(),collision=collision.model.state_dict(),policy_optimizer=optimizer.state_dict(),
@@ -597,7 +685,39 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 numpy_rng=rng.bit_generator.state,torch_rng=torch.get_rng_state(),
                 cuda_rng=torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [])
         def warmup(start):
-            if gated and (folder/'geometry_acceptance.json').exists():
+            if direct_link_sdf:
+                audit_path=folder/'native_label_audit'/'report.json'
+                audit=json.loads(audit_path.read_text()) if audit_path.exists() else {}
+                if not audit.get('accepted'):
+                    progress('geometry_label_audit',completed=0,total=1)
+                    audit=learner.audit_labels(audit_path.parent)
+                    progress('geometry_label_audit',completed=1,total=1,label_audit=audit)
+                if not audit['accepted']:raise ValueError('Native distance/FK label audit failed')
+            if getattr(collision.model,'verified_supervision',False):
+                from .cart_geometry_audit import audit_geometry_labels,audit_identity
+                from .cart_pretrained_sdf import geometry_spec
+                audit_path=folder/'native_label_audit'/'report.json'
+                audit=json.loads(audit_path.read_text()) if audit_path.exists() else {}
+                if (audit.get('implementation_sha256')!=audit_identity() or audit.get('geometry')!=geometry_spec(hand)
+                        or audit.get('contact_surface_policy')!=hand.surface.contact_policy):
+                    progress('geometry_label_audit',completed=0,total=1)
+                    audit=audit_geometry_labels(collision,output=audit_path.parent)
+                    progress('geometry_label_audit',completed=1,total=1,label_audit=audit)
+                if not audit['accepted']:raise ValueError('Native geometry label/gradient audit failed; geometry training was not started')
+            if early_geometry_stop and (folder/'geometry_schedule_status.json').exists():
+                finished=json.loads((folder/'geometry_schedule_status.json').read_text())
+                if finished.get('accepted') and finished.get('completion')==CONVERGED_COMPLETION and finished.get('training_completed_updates')==start:
+                    if geometry_rejection_reasons(learner.validate(*holdout)):raise ValueError('Accepted frozen geometry failed resume validation')
+                    learner.policy_frozen=True;return
+            if complete_geometry_budget:
+                selection_type=ConvergedSelection if early_geometry_stop else FullBudgetSelection
+                selection=selection_type(folder,save_checkpoint,atomic_json,geometry_rejection_reasons)
+                # Include the resumed checkpoint if it has already reached the
+                # validation interval, without resetting learner or RNG state.
+                if start>=warmup_steps:
+                    current=learner.validate(*holdout)
+                    selection.observe(collision.model,current,start)
+            if gated and not complete_geometry_budget and (folder/'geometry_acceptance.json').exists():
                 accepted=json.loads((folder/'geometry_acceptance.json').read_text())
                 current=learner.validate(*holdout)
                 if accepted.get('accepted') and not geometry_rejection_reasons(current):
@@ -615,15 +735,27 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                         metrics=report,rejection_reasons=reasons))
                     progress('geometry_validation',completed=step+1,total=geometry_budget,sdf_validation=report,
                         accepted=not reasons,rejection_reasons=reasons)
-                    if not reasons:
+                    if complete_geometry_budget:selection.observe(collision.model,report,step+1)
+                    if early_geometry_stop:
+                        progress('geometry_convergence',completed=step+1,total=geometry_budget,**selection.state())
+                        if selection.should_stop(step+1):break
+                    if not reasons and not complete_geometry_budget:
                         save_checkpoint(folder/'geometry.pth',dict(collision=collision.model.state_dict(),sdf_validation=report,update=step+1))
                         save_checkpoint(folder/'warmup.pth',dict(state(0,0,None),warmup_next=step+1))
                         learner.policy_frozen=True;return
+            if complete_geometry_budget:
+                decision=selection.finish(collision.model,lambda:learner.validate(*holdout),learner.steps,geometry_budget)
+                report=decision['metrics'];reasons=decision['rejection_reasons']
+                progress('geometry_selection',completed=learner.steps,total=geometry_budget,**decision)
+                if not reasons:
+                    save_checkpoint(folder/'geometry.pth',dict(collision=collision.model.state_dict(),**decision))
+                    save_checkpoint(folder/'warmup.pth',dict(state(0,0,None),warmup_next=learner.steps))
+                    learner.policy_frozen=True;return
             if gated:raise ValueError('Geometry validation failed; policy training was not started. See geometry_acceptance.json')
         if resume:
             saved=json.loads((folder/'config.json').read_text())
             # Initialization belongs to the run's history, not the resume call.
-            for key in ('initialize_from','initialize_geometry_from','initialize_contact_from','initialize_q_collision_from','transfer_policy_optimizer','initialize_checkpoint'):
+            for key in ('initialize_from','initialize_geometry_from','initialize_contact_from','initialize_q_collision_from','transfer_policy_optimizer','initialize_checkpoint','geometry_initialization'):
                 config[key]=saved.get(key)
             if config!=saved:raise ValueError('恢复训练的配置、数据或实现指纹发生变化')
             checkpoint_path=folder/'resume.pth' if (folder/'resume.pth').exists() else folder/'warmup.pth'
@@ -639,6 +771,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
             if torch.cuda.is_available() and restored['cuda_rng']:torch.cuda.set_rng_state_all(restored['cuda_rng'])
             active=True
             tracking=CartTracking(folder,config,project=wandb_project,entity=wandb_entity,base_url=wandb_base_url,mode=wandb_mode,resume=True)
+            progress('resume_checkpoint',checkpoint=checkpoint_path.name,sdf_updates=learner.steps,policy_updates=policy_updates,epoch=epoch_start)
             warmup(restored.get('warmup_next',learner.steps))
         else:
             atomic_json(folder/'config.json',config)
@@ -679,6 +812,12 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
                 else:raise ValueError('初始化来源的连续接触场版本不匹配')
             save_checkpoint(folder/'warmup.pth',dict(state(0,0,None),warmup_next=first_warmup))
             warmup(first_warmup)
+        if complete_geometry_budget:
+            schedule_status=json.loads((folder/'geometry_schedule_status.json').read_text())
+            atomic_json(folder/'geometry_schedule_status.json',dict(schedule_status,stage='policy_training',
+                policy_start_time=time.time(),policy_epochs=epochs))
+            progress('policy_start',epoch=epoch_start+1,epochs=epochs,geometry_update=schedule_status['update'],
+                geometry_training_updates=schedule_status['training_completed_updates'])
         for epoch in range(epoch_start,epochs):
             model.train()
             if order is None:order=rng.permutation(len(train_windows));sums={};batches=0;loss_samples=0
@@ -745,7 +884,7 @@ def train(root,train_ids,validation_ids,run_id,epochs=200,seed=714,batch_size=DE
         model.load_state_dict(checkpoint['model']);collision.model.load_state_dict(checkpoint['collision'])
         progress('full_session_validation')
         report,poses,timings=full_session(model,objective,validation,check)
-        sdf_report=learner.validate(*holdout);reasons=acceptance(report,sdf_report,contact_field_required=True,
+        sdf_report=learner.validate(*holdout);reasons=acceptance(report,sdf_report,contact_field_required=not direct_link_sdf,
             penetration_limit_mm=objective.settings.penetration_limit_m*1000)
         atomic_json(folder/'evaluation.json',dict(metrics=report,sdf_validation=sdf_report,rejection_reasons=reasons,
             inference_ms=dict(mean=float(np.mean(timings)),p95=float(np.percentile(timings,95)))))

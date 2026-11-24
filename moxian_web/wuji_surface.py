@@ -14,6 +14,7 @@ from retarget.env.grasp.hand import HAND_BODIES, hand_tree, rigid_mesh_arrays, p
 from .tactile_surface import CurvedTaxels
 
 POLICY = 'native_semantic_triangles_card_v5'
+COMPLETE_PAD_POLICY = 'complete_visible_palmar_facets_v6'
 CHAINS = ((13,14,15),(1,2,3),(4,5,6),(10,11,12),(7,8,9))
 
 
@@ -35,7 +36,9 @@ def mirror_matrix(topology):
 
 
 class WujiSurface:
-    def __init__(self):
+    def __init__(self,contact_policy=POLICY):
+        if contact_policy not in (POLICY,COMPLETE_PAD_POLICY):raise ValueError('Unknown robot contact surface policy')
+        self.contact_policy=contact_policy;self.contact_surfaces={}
         self.model=mujoco.MjModel.from_xml_string(ET.tostring(hand_tree('wuji2'),encoding='unicode'))
         self.body_ids=[self.model.body(n).id for n in HAND_BODIES]
         self.meshes=[];self.face_offsets=[];self.vertex_offsets=[]
@@ -114,10 +117,34 @@ class WujiSurface:
         Face masks are geometry-derived and auditable, not measured taxel
         registration. They are shared by mapping display and Eq. (2).
         """
+        if self.contact_policy==COMPLETE_PAD_POLICY:return self.complete_contact_surface(owner)
         pool=self.candidates(owner);ids=np.unique(pool['face_ids'])
         mesh=self.meshes[owner]
         return dict(triangles=np.asarray(mesh.triangles)[ids],normals=np.asarray(mesh.face_normals)[ids],
                     face_ids=ids,policy=POLICY,physical_pad_verified=False)
+
+    def complete_contact_surface(self,owner):
+        """All visible palmar facets, without holes from Monte Carlo face selection.
+
+        Visibility is tested at facet centroids. The native solid is unchanged;
+        this is an anatomical contact envelope, not a measured taxel registration.
+        Legacy checkpoints retain their original sampled-facet definition.
+        """
+        if owner in self.contact_surfaces:return self.contact_surfaces[owner]
+        mesh=self.meshes[owner];points=mesh.triangles_center
+        mask=(mesh.face_normals@self.normals[owner])>.25
+        if owner==0:
+            z=points@self.axes[0];mask &= (z>0)&(z<self.lengths[0]*1.12)
+        ids=np.flatnonzero(mask);p=points[ids];n=mesh.face_normals[ids]
+        hits,rays,_=mesh.ray.intersects_location(p+n*.004,-n,multiple_hits=False)
+        visible=np.zeros(len(ids),bool)
+        visible[rays]=np.linalg.norm(hits-p[rays],axis=1)<.00015
+        ids=ids[visible]
+        if not len(ids):raise ValueError(f'No visible palmar surface for link {owner}')
+        result=dict(triangles=np.asarray(mesh.triangles)[ids],normals=np.asarray(mesh.face_normals)[ids],
+                    face_ids=ids,policy=COMPLETE_PAD_POLICY,physical_pad_verified=False)
+        self.contact_surfaces[owner]=result
+        return result
 
     def patch_samples(self, owner, side='front', count=32):
         """Return deterministic local surface samples for one anatomical face.

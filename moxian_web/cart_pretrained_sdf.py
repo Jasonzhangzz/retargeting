@@ -9,11 +9,13 @@ import torch
 from torch import nn
 from .cart_data import file_hash
 from .cart_contact_field import ContactField,IndependentPadField,PadPotentialField,PAD_OWNERS
+from .cart_structured_geometry import KIND as STRUCTURED_KIND
 
 KIND='configuration_sdf_v1'
 INTRINSIC_KIND='fk_intrinsic_sdf_v1'
 INDEPENDENT_KIND='fk_intrinsic_sdf_independent_decoders_v2'
 POTENTIAL_KIND='fk_intrinsic_sdf_pad_potential_v3'
+CONSISTENT_KIND='fk_intrinsic_sdf_verified_pad_v4'
 
 
 class IntrinsicDistance(nn.Module):
@@ -140,17 +142,31 @@ class PretrainedSDF(nn.Module):
 
 def fresh_geometry_spec(hand):
     from .cart_q_collision import field_spec
+    from .wuji_surface import COMPLETE_PAD_POLICY
+    consistent=hand.surface.contact_policy==COMPLETE_PAD_POLICY
     geometry=geometry_spec(hand)
     centres=[[0.,0.,0.] for _ in range(21)]
     for owner in PAD_OWNERS:
         centres[owner]=np.asarray(hand.surface.contact_surface(owner)['triangles']).reshape(-1,3).mean(0).tolist()
-    return dict(kind=POTENTIAL_KIND,geometry=geometry,learning_rate=1.e-3,contact_width=128,contact_depth=4,
+    spec=dict(kind=STRUCTURED_KIND if consistent else POTENTIAL_KIND,geometry=geometry,learning_rate=1.e-3,contact_width=128,contact_depth=4,
         contact_decoders='independent_scalar_pad_potentials_v3',contact_centres_m=centres,contact_scale_m=.01,
         projection='x_minus_autograd_potential_gradient',projection_supervision='potential_value_gradient_and_exact_Hessian_vector',
         smooth_aggregation_temperature_mm=.05,vector_lr_scale=.1,
-        q_collision=field_spec(hand,group_sobolev=True,independent_decoders=True),query='exact_differentiable_inverse_FK_then_intrinsic_link_field',
+        q_collision=field_spec(hand,group_sobolev=True,independent_decoders=True,consistent_supervision=consistent),query='exact_differentiable_inverse_FK_then_intrinsic_link_field',
         online_supervision='mesh_local_signed_distance_normal_and_contact_replay',
         initialization='random_no_checkpoint')
+    if consistent:
+        import hashlib
+        spec.update(contact_surface_policy=COMPLETE_PAD_POLICY,
+            contact_face_sha256={str(l):hashlib.sha256(np.asarray(hand.surface.contact_surface(l)['face_ids'],dtype='<i8').tobytes()).hexdigest() for l in PAD_OWNERS},
+            contact_sampling='balanced_links_area_weighted_barycentric_75pct_6mm_25pct_25mm',
+            derivative_labels='central_analytic_with_two_scale_native_finite_difference_audit')
+        spec.update(contact_decoders='fixed_geometric_features_smooth_softmin_v1',
+            projection='all_face_edge_vertex_features_no_winner_search',
+            projection_band_m=5.e-6,normal_temperature_m=5.e-5,
+            projection_supervision='native_independent_audit_no_Hessian_distillation',
+            q_collision=field_spec(hand,structured=True))
+    return spec
 
 
 class IntrinsicSDF(nn.Module):
@@ -162,11 +178,19 @@ class IntrinsicSDF(nn.Module):
         # The attribute preserves optimizer grouping, but these weights are fresh.
         self.pretrained_lr=spec['learning_rate']
         self.vector_lr_scale=spec.get('vector_lr_scale',.01)
-        self.independent_decoders=spec.get('kind') in (INDEPENDENT_KIND,POTENTIAL_KIND)
+        self.independent_decoders=spec.get('kind') in (INDEPENDENT_KIND,POTENTIAL_KIND,CONSISTENT_KIND,STRUCTURED_KIND)
+        self.verified_supervision=spec.get('kind') in (CONSISTENT_KIND,STRUCTURED_KIND)
+        if self.verified_supervision:
+            expected=fresh_geometry_spec(hand)
+            if any(spec.get(k)!=expected[k] for k in ('contact_surface_policy','contact_face_sha256')):
+                raise ValueError('Contact supervision mesh policy or face identities differ from checkpoint')
         self.smooth_temperature_mm=spec.get('smooth_aggregation_temperature_mm',0.)
         if self.independent_decoders:
             self.links=nn.Identity()
-            if spec['kind']==POTENTIAL_KIND:
+            if spec['kind']==STRUCTURED_KIND:
+                from .cart_structured_geometry import SmoothPadProjection
+                self.contact_field=SmoothPadProjection(hand,band_m=spec['projection_band_m'],normal_temperature_m=spec['normal_temperature_m'])
+            elif spec['kind'] in (POTENTIAL_KIND,CONSISTENT_KIND):
                 self.contact_field=PadPotentialField(spec['contact_centres_m'],width=spec['contact_width'],depth=spec['contact_depth'],scale=spec['contact_scale_m']).to(hand.device)
             else:self.contact_field=IndependentPadField(width=spec['contact_width'],depth=spec['contact_depth']).to(hand.device)
         else:
@@ -196,9 +220,14 @@ class IntrinsicSDF(nn.Module):
 
 
 def restore_geometry(hand,spec):
-    if spec.get('kind') not in (KIND,INTRINSIC_KIND,INDEPENDENT_KIND,POTENTIAL_KIND) or not spec.get('q_collision'):
+    from .cart_conditional_sdf import KIND as CONDITIONAL_KIND,ConditionalSDFGeometry
+    if spec.get('kind')==CONDITIONAL_KIND:return ConditionalSDFGeometry(hand,spec)
+    from .cart_link_sdf import KIND as LINK_KIND,LinkSDFGeometry
+    if spec.get('kind')==LINK_KIND:return LinkSDFGeometry(hand,spec)
+    if spec.get('kind') not in (KIND,INTRINSIC_KIND,INDEPENDENT_KIND,POTENTIAL_KIND,CONSISTENT_KIND,STRUCTURED_KIND) or not spec.get('q_collision'):
         raise ValueError('CART v9/wrist requires an articulated SDF and q-only self-collision field')
     model=PretrainedSDF(hand,spec) if spec['kind']==KIND else IntrinsicSDF(hand,spec)
     from .cart_q_collision import QCollisionField
-    model.q_collision=QCollisionField(hand,spec['q_collision'])
+    from .cart_structured_geometry import Q_KIND,StructuredQCollision
+    model.q_collision=(StructuredQCollision(hand,model.pretrained,spec['q_collision']) if spec['q_collision']['kind']==Q_KIND else QCollisionField(hand,spec['q_collision']))
     return model

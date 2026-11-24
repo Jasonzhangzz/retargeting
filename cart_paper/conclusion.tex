@@ -1,3 +1,12 @@
 % !TeX root = main.tex
 \section{Conclusion}
 \label{sec:conclusion}
+
+% The qualitative baseline comparison follows the author-provided results summary.
+% Fill and verify the pending experimental tables before final submission.
+In this work, we propose CART, a real-time retargeting method that enables a dexterous robot hand to replay human manipulation. Whereas kinematic retargeting primarily seeks postural similarity, CART uses tactile observations to represent task-relevant contacts and trains a network to preserve them across hand embodiments. Pretrained differentiable contact and collision geometry supplies trajectory-level cost gradients for policy optimization using standard BPTT. The network is trained using approximately 5~min of recorded gestures and real-world manipulation data. Each update requires a single forward pass, supporting buffered online execution. Experiments across prehensile and nonprehensile manipulation tasks show higher success rates and retargeting update rates, more stable contacts, and smoother trajectories than the evaluated baselines. These capabilities support high-quality processing of egocentric manipulation demonstrations, real-time data collection, and dexterous teleoperation.
+
+\begin{samepage}
+\textit{Limitations and future work.} Although CART supports real-time, contact-feasible retargeting, its tactile representation omits explicit object state and does not support task-level closed-loop correction. Its lightweight network is designed for retargeting and cannot serve as a standalone System~0 manipulation controller. CART also lacks zero-shot transfer across operators with different hand sizes, requiring retraining for each user despite the modest training cost. Future work could incorporate additional sensing modalities for object-aware feedback and develop a more general network that transfers across human operators.
+
+\end{samepage}

@@ -15,7 +15,7 @@ We propose the Contact-Aware Retargeting Network (CART) for transferring manipul
 The contributions of this paper are summarized as follows:
 \begin{enumerate}
     \item We introduce a contact-aware retargeting network that uses a shared pose and tactile representation and five finger-specific decoders to transfer manipulation skills without object geometry or pose observations.
-    \item We develop a training pipeline covering hand calibration, glove data collection, differentiable objective design, and policy training. In our setup, training uses about 5~min of recorded glove data and takes approximately 3~GPU-hours on a single NVIDIA A800.
+    \item We develop differentiable contact and collision models that provide geometric costs and input derivatives for policy training. The training pipeline includes hand calibration and glove data collection. In our setup, training uses about 5~min of recorded glove data and takes approximately 3~GPU-hours on a single NVIDIA A800.
     \item We develop an arm retargeting procedure that adjusts the end-effector target pose using contact anchors and computes arm motion through efficient inverse kinematics.
     % Add the corresponding task list, baseline results, and timing breakdown in Section~\ref{sec:experiments}.
     \item We evaluate CART on prehensile and nonprehensile manipulation tasks, including in-hand manipulation. In these comparisons, CART maintains contact more reliably and produces smoother trajectories, with shorter inference times relative to the evaluated baselines.

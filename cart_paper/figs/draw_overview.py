@@ -72,8 +72,8 @@ line([(23, 6.6), (23, 5.5)], teal)
 box(6, .7, 43.2, 4.8, "Weighted rollout loss\nTracking · contact · smoothness · collision\nPad potentials, SDF, and self-collision models",
     teal, "#e9f6f1", 6.9)
 line([(6, 3.1), (2, 3.1), (2, 24.5), (6, 24.5)], red, dotted=True)
-ax.text(1, 11.7, "16-step BPTT", rotation=90, fontsize=7, ha="center", va="center", color=red)
-box(38, 29, 22, 11.8, "Native-mesh supervision\n16 pad / 15 collision decoders\nValue / gradient / Hessian fitting\nValidation gate → freeze", gray, "#f1f4f6", 6.6)
+ax.text(1, 11.7, "Policy gradient", rotation=90, fontsize=7, ha="center", va="center", color=red)
+box(38, 29, 22, 11.8, "Differentiable contact / collision\n16 pad / 15 collision decoders\nMesh values + input derivatives\nPretrain → validate → freeze", gray, "#f1f4f6", 6.6)
 line([(60, 30), (61, 30), (61, 3.1), (49.2, 3.1)], gray, dotted=True)
 label(55.1, 5.25, "Frozen geometry", 6.2, gray)
 
