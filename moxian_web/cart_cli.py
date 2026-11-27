@@ -42,32 +42,12 @@ def main():
     for name in ('preprocess','train','evaluate'):
         p=sub.add_parser(name);p.add_argument('--datasets',nargs='+',required=True);p.add_argument('--job-id')
         if name=='train':
-            p.add_argument('--epochs',type=int,default=200);p.add_argument('--smoke-test',action='store_true')
-            p.add_argument('--architecture',choices=('attention',),default='attention')
-            p.add_argument('--batch-size',type=int,default=0,help='Simultaneous windows per optimizer step; 0 selects from free memory')
-            p.add_argument('--micro-batch-size',type=int,default=0,help='Deprecated alias for a simultaneous-window cap; never gradient accumulation')
-            p.add_argument('--attention-precision',choices=('auto','float32','bfloat16'),default='auto',help='Only CUDA attention uses BF16; geometry and output stay FP32')
-            p.add_argument('--validate-every',type=int,default=10,help='Periodic true-mesh selection audit; first and final epochs are always checked')
-            p.add_argument('--validation-windows',type=int,default=32,help='Fixed true-mesh selection window budget; 0 means all. Final full-session acceptance is never sampled.')
-            p.add_argument('--length',type=int,default=16)
-            p.add_argument('--window-stride',type=int,default=0,help='Training window start spacing; 0 keeps length//2. Validation sampling is unchanged.')
-            p.add_argument('--resume-run');p.add_argument('--sdf-warmup-steps',type=int)
-            p.add_argument('--initialize-from',help='Initialize a new run from a compatible five-finger EMF policy checkpoint; not exact resume')
-            p.add_argument('--initialize-checkpoint',choices=('resume','best'),default='resume',help='Best uses last.pth policy/geometry with fresh optimizers; requires --fresh-policy-optimizer')
-            p.add_argument('--initialize-geometry-from',help='Reuse geometry and its optimizer/replay; initialize a fresh delta policy')
-            p.add_argument('--initialize-sdf-from',type=Path,help='Load a q-conditioned Neural SDF checkpoint; may combine with contact/replay initialization')
-            p.add_argument('--initialize-contact-from',type=Path,help='Load only independently pretrained contact-head weights; keep policy and optimizer fresh')
-            p.add_argument('--initialize-q-collision-from',type=Path,help='Import a mesh/Jacobian-supervised q-only self collision field')
-            p.add_argument('--fresh-policy-optimizer',action='store_true',help='Transfer policy weights with a fresh optimizer in a new run')
-            p.add_argument('--policy-loss-scale',type=float,default=1.e8,help='CARD C/(C+scale) on the full batch mean; 0 keeps raw cost')
-            p.add_argument('--optimizer',choices=('adamw','muon_sgd'),default='muon_sgd',help='Policy and geometry optimizers; Muon matrices plus momentum SGD for vectors/embeddings')
-            p.add_argument('--wandb-project');p.add_argument('--wandb-entity')
-            p.add_argument('--wandb-base-url',help='Self-hosted W&B origin, without /home')
-            p.add_argument('--wandb-mode',choices=('online','offline'),default='online')
-            p.add_argument('--initial-noise-rad',type=float,default=.1,help='Uniform IK reset noise in [-amplitude, amplitude]; 0 disables')
-            from .cart_protocol import OBJECTIVES,WRIST_OBJECTIVE
-            p.add_argument('--policy-objective',choices=OBJECTIVES,default=WRIST_OBJECTIVE,
-                help='v9 fixed wrist or floating wrist; both use measured future EMF and neural geometry')
+            p.add_argument('--epochs',type=int,default=1000)
+            p.add_argument('--policy-width',type=int,default=384)
+            p.add_argument('--decoder-width',type=int,default=744)
+            p.add_argument('--micro-batch',type=int,default=512)
+            p.add_argument('--wandb-project',default='cart');p.add_argument('--wandb-entity')
+            p.add_argument('--wandb-base-url');p.add_argument('--wandb-mode',choices=('online','offline'),default='online')
         if name=='evaluate':p.add_argument('--model',required=True)
     cap=sub.add_parser('capture');cap.add_argument('--dataset',required=True);cap.add_argument('--follow',action='store_true');cap.add_argument('--device')
     imp=sub.add_parser('import-emf');imp.add_argument('--dataset',required=True);imp.add_argument('--raw',type=Path,required=True)
@@ -116,21 +96,16 @@ def run(args):
             result=dict(processed=args.datasets)
         elif args.action=='train':
             from .cart_data import manifest
-            from .cart_training import train
+            from .cart_jobs import train
             ids={s:[] for s in ('train','validation')}
             for dataset in args.datasets:
                 _,m=manifest(args.root,dataset);ids[m['split']].append(dataset)
-            result=dict(model=str(train(args.root,ids['train'],ids['validation'],safe_id(args.resume_run) if args.resume_run else key,args.epochs,smoke=args.smoke_test,
-                architecture=args.architecture,batch_size=args.batch_size,micro_batch_size=args.micro_batch_size,length=args.length,resume=bool(args.resume_run),warmup_steps=args.sdf_warmup_steps,initialize_from=args.initialize_from,
-                initial_noise_rad=args.initial_noise_rad,attention_precision=args.attention_precision,
-                validation_interval=args.validate_every,validation_window_budget=args.validation_windows,
-                initialize_geometry_from=args.initialize_geometry_from,wandb_project=args.wandb_project,wandb_entity=args.wandb_entity,
-                wandb_base_url=args.wandb_base_url,wandb_mode=args.wandb_mode,window_stride=args.window_stride,
-                initialize_sdf_from=args.initialize_sdf_from,policy_objective=args.policy_objective,
-                policy_loss_scale=args.policy_loss_scale,initialize_contact_from=args.initialize_contact_from,optimizer_kind=args.optimizer,
-                initialize_q_collision_from=args.initialize_q_collision_from,transfer_policy_optimizer=not args.fresh_policy_optimizer,initialize_checkpoint=args.initialize_checkpoint)))
+            result=dict(model=str(train(args.root,ids['train'],ids['validation'],key,args.epochs,
+                policy_width=args.policy_width,decoder_width=args.decoder_width,
+                micro_batch=args.micro_batch,check=check,progress=progress,
+                project=args.wandb_project,entity=args.wandb_entity,base_url=args.wandb_base_url,mode=args.wandb_mode)))
         else:
-            from .cart_training import evaluate
+            from .cart_jobs import evaluate
             result=evaluate(args.root,safe_id(args.model),args.datasets,check=check)
         atomic_json(folder/'status.json',dict(id=key,status='completed',action=args.action,result=result))
     except BaseException as exc:

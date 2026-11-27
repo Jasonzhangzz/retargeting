@@ -219,25 +219,12 @@ class CartService:
         if action=='train':
             epochs=data.get('epochs',200)
             if isinstance(epochs,bool) or not isinstance(epochs,int) or not 1<=epochs<=2000:raise ValueError('轮数必须为1–2000')
-            architecture=data.get('architecture','attention')
-            if architecture!='attention':raise ValueError('无效 CART 网络结构')
-            batch=data.get('batch_size',0);micro=data.get('micro_batch_size',0)
-            if isinstance(batch,bool) or not isinstance(batch,int) or not 0<=batch<=65536:raise ValueError('并行窗口数必须为 0–65536；0 表示按显存自动选择')
-            if isinstance(micro,bool) or not isinstance(micro,int) or micro<0:raise ValueError('GPU 分块必须为非负整数')
-            noise=data.get('initial_noise_rad',.1)
-            if isinstance(noise,bool) or not isinstance(noise,(int,float)) or not np.isfinite(noise) or not 0<=noise<=.5:raise ValueError('IK 初始噪声幅度须为 0–0.5 rad')
-            command+=['--epochs',str(epochs),'--architecture',architecture,'--batch-size',str(batch),'--micro-batch-size',str(micro)]
-            command+=['--initial-noise-rad',str(noise)]
-            from .cart_protocol import OBJECTIVES,WRIST_OBJECTIVE
-            objective=data.get('policy_objective',WRIST_OBJECTIVE)
-            if objective not in OBJECTIVES:raise ValueError('仅支持 v9 和腕部 pose 版本')
-            command+=['--policy-objective',objective,'--policy-loss-scale','100000000','--optimizer','muon_sgd']
-            stride=data.get('window_stride',0)
-            if isinstance(stride,bool) or not isinstance(stride,int) or not 0<=stride<=65536:raise ValueError('窗口步长必须为 0–65536；0 表示 length//2')
-            command+=['--window-stride',str(stride)]
-            if data.get('initialize_from'):command+=['--initialize-from',safe_id(data['initialize_from'])]
-            if data.get('initialize_geometry_from'):command+=['--initialize-geometry-from',safe_id(data['initialize_geometry_from'])]
-            if data.get('initialize_sdf_from'):command+=['--initialize-sdf-from',str(data['initialize_sdf_from'])]
+            route=data.get('policy_objective','native')
+            if route!='native':raise ValueError('当前仅支持直接几何训练')
+            micro=data.get('batch_size',512) or 512
+            if isinstance(micro,bool) or not isinstance(micro,int) or micro<=0 or 8192%(2*micro):
+                raise ValueError('每卡 micro-batch 必须整除4096；有效 batch 固定8192')
+            command+=['--epochs',str(epochs),'--micro-batch',str(micro)]
             for field in ('wandb_project','wandb_entity','wandb_base_url'):
                 if data.get(field):command+=['--'+field.replace('_','-'),str(data[field])]
             self.stop_preview()

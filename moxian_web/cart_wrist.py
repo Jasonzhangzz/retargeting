@@ -11,9 +11,8 @@ from torch import nn
 from torch.nn import functional as F
 from .cart_network import CartNetwork
 from .cart_objective import CartHand
-from .cart_card_self_contact import SelfContactCardCostObjective
 
-VERSION='card_raw_neural_self_contact_v5_wrist'
+VERSION='cart_floating_wrist_kinematics_v1'
 OUTPUT='normalized_delta_fingers_wrist_v1'
 TRANSITION='smooth_finger_and_relative_wrist_delta_v2'
 ARCHITECTURE='cart_emf_cross_attention128_five_finger_wrist_delta_v1'
@@ -74,9 +73,9 @@ class CartWristNetwork(CartNetwork):
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
         if self.architecture!='attention':raise ValueError('Floating wrist currently requires the attention policy')
-        self.current=nn.Linear(26,128)
-        self.wrist_decoder=nn.Sequential(nn.Linear(128,256),nn.LayerNorm(256),nn.GELU(),
-            nn.Linear(256,256),nn.GELU(),nn.Linear(256,6),nn.Tanh())
+        self.current=nn.Linear(26,self.width)
+        self.wrist_decoder=nn.Sequential(nn.Linear(self.width,self.decoder_width),nn.LayerNorm(self.decoder_width),nn.GELU(),
+            nn.Linear(self.decoder_width,self.decoder_width),nn.GELU(),nn.Linear(self.decoder_width,6),nn.Tanh())
         nn.init.zeros_(self.wrist_decoder[-2].weight);nn.init.zeros_(self.wrist_decoder[-2].bias)
         self.register_buffer('wrist_limits',torch.tensor(WRIST_LIMITS))
         self.register_buffer('wrist_step',torch.tensor(WRIST_STEP))
@@ -104,65 +103,3 @@ class CartWristNetwork(CartNetwork):
         wrist=smooth_bound_unit((current_q[...,20:]+delta[...,20:]*self.wrist_step)/self.wrist_limits)*self.wrist_limits
         state=torch.cat((fingers,wrist),-1)
         return self.normalize(state) if normalized else state
-
-
-class FloatingWristObjective(SelfContactCardCostObjective):
-    def __init__(self,hand,collision):
-        super().__init__(hand,collision)
-        self.settings=replace(self.settings,loss_kind=VERSION)
-
-    def collision_cost(self,q,rows,frames):
-        # Absolute wrist pose cannot change self collision. Tactile penetration
-        # still depends on the moving canonical frames passed alongside q20.
-        return super().collision_cost(q[...,:20],rows,frames)
-
-    def batch(self,q,rows,references=None,targets=None,acceleration=None,previous_rows=None,
-              audit=False,normalizers=None,*,collect_metrics=True):
-        total,parts,metrics=super().batch(q,rows,references,targets,acceleration,
-            previous_rows,audit,normalizers,collect_metrics=collect_metrics)
-        velocity=torch.zeros_like(q)
-        if references is not None:
-            if previous_rows is None or any(row is None for row in previous_rows):
-                raise ValueError('Wrist smoothing requires actual previous observation timestamps')
-            dt=q.new_tensor([(row['timestamp_ms']-previous['timestamp_ms'])/1000
-                for row,previous in zip(rows,previous_rows)])
-            if (dt<=0).any() or (dt>.250001).any():raise ValueError('Invalid wrist smoothing time interval')
-            velocity=state_velocity(q,references,dt)
-        acceleration=torch.zeros_like(q) if acceleration is None else acceleration
-        # CARD translation uses millimetres; rotation uses radians. Rescale
-        # derivatives to one 120 Hz frame so variable recording dt is respected.
-        extra=dict(smooth_translation=self.card.wt**2*(velocity[:,20:23]*(1000*REFERENCE_DT)).square().sum(-1),
-            smooth_rotation=self.card.womega**2*(velocity[:,23:26]*REFERENCE_DT).square().sum(-1),
-            wrist_translation_acceleration=self.card.wt**2*(acceleration[:,20:23]*(1000*REFERENCE_DT**2)).square().sum(-1),
-            wrist_rotation_acceleration=self.card.womega**2*(acceleration[:,23:26]*REFERENCE_DT**2).square().sum(-1))
-        for name,value in extra.items():parts[name]=value.mean()
-        parts['smooth']=parts['smooth_joint']+parts['smooth_translation']+parts['smooth_rotation']
-        parts['acceleration']=acceleration[:,:20].square().mean()
-        parts.update(wrist_translation_speed_mm_s=velocity[:,20:23].norm(dim=-1).mean()*1000,
-            wrist_angular_speed_deg_s=torch.rad2deg(velocity[:,23:26].norm(dim=-1)).mean(),
-            wrist_translation_offset_mm=q[:,20:23].norm(dim=-1).mean()*1000,
-            wrist_rotation_offset_deg=torch.rad2deg(q[:,23:26].norm(dim=-1)).mean())
-        if metrics:
-            limits=q.new_tensor(WRIST_LIMITS)
-            valid=(q[:,20:].abs()<=limits+1.e-6).all(-1)
-            for i,metric in enumerate(metrics):
-                metric['feasible']=metric['feasible']&valid[i:i+1]
-                metric['actuated_gap_m']=metric['max_gap_m']
-                metric['actuated_contact_count']=metric['contact_count']
-                metric['actuated_contact_satisfied']=metric['feasible']
-        return total+sum(value.mean() for value in extra.values()),parts,metrics
-
-
-def wrist_config():
-    return dict(architecture=ARCHITECTURE,policy_output=OUTPUT,policy_transition=TRANSITION,
-        state_transition='smooth_bound_fingers_and_relative_wrist_delta',
-        bound_projection=dict(kind='softplus_smooth_clip',normalized_beta=50.),
-        delta_normalization='20 normalized finger increments + 6 scaled wrist increments',
-        floating_wrist=dict(frame='fixed_demonstrator_wrist',state_size=26,
-            layout=['finger_q_rad:20','robot_wrist_translation_m:3','robot_wrist_rotation_vector_rad:3'],
-            initial_pose='identity_relative_to_demonstrator_wrist',targets='fixed_observed_coordinates',
-            absolute_component_limits=list(WRIST_LIMITS),delta_component_scales=list(WRIST_STEP),
-            smoothing='physical_dt_velocity_and_acceleration_spatial_SO3_log',reference_dt_s=REFERENCE_DT,
-            velocity_weights='CARD wt, womega',acceleration_weights='CARD wt, womega',
-            translation_unit_in_cost='millimetres',self_collision_input='finger_q20_only',
-            palm_contact='active_policy_loss',deployment_requires='execute_wrist_pose_with_robot_arm'))

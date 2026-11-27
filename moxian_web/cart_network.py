@@ -5,12 +5,12 @@ from torch import nn
 from torch.utils.checkpoint import checkpoint
 
 class CrossBlock(nn.Module):
-    def __init__(self):
+    def __init__(self, width=128):
         super().__init__()
-        self.attention = nn.MultiheadAttention(128, 4, batch_first=True, bias=False)
-        self.norm = nn.LayerNorm(128)
-        self.feed = nn.Sequential(nn.Linear(128, 256), nn.GELU(), nn.Linear(256, 128))
-        self.out_norm = nn.LayerNorm(128)
+        self.attention = nn.MultiheadAttention(width, 4, batch_first=True, bias=False)
+        self.norm = nn.LayerNorm(width)
+        self.feed = nn.Sequential(nn.Linear(width, 2*width), nn.GELU(), nn.Linear(2*width, width))
+        self.out_norm = nn.LayerNorm(width)
         self.attention_precision = 'float32'
 
     def forward(self, query, values, padding):
@@ -59,7 +59,8 @@ class CartNetwork(JointDeltaPolicy):
     Each EMF receiver supplies position in metres and two rotation columns.
     """
     def __init__(self, lower, upper, architecture='attention',
-                 position_mean=None, position_scale=None):
+                 position_mean=None, position_scale=None, width=128, decoder_width=None,
+                 tactile_encoder="dense", tactile_groups=None):
         super().__init__()
         if architecture!='attention':
             raise ValueError('CART requires the measured-EMF attention architecture')
@@ -71,15 +72,26 @@ class CartNetwork(JointDeltaPolicy):
         self.register_buffer('position_scale', torch.ones(3)*.1 if position_scale is None else torch.as_tensor(position_scale).float())
         if self.position_mean.shape != (3,) or self.position_scale.shape != (3,) or not torch.isfinite(self.position_mean).all() or not torch.isfinite(self.position_scale).all() or (self.position_scale <= 0).any():
             raise ValueError('Invalid position normalization')
+        if width <= 0 or width % 4:raise ValueError('Policy width must be a positive multiple of four')
+        decoder_width=2*width if decoder_width is None else decoder_width
+        if decoder_width <= 0:raise ValueError('Decoder width must be positive')
+        self.width=width;self.decoder_width=decoder_width
         self.architecture=architecture;self.checkpoint_observations=False
-        self.emf=nn.Linear(9,128);self.touch=nn.Linear(4,128)
-        self.time=nn.Linear(1,128);self.finger=nn.Embedding(5,128)
-        self.sid=nn.Embedding(460,128);self.frame=nn.Embedding(10,128)
-        self.current=nn.Linear(20,128)
-        self.null_touch=nn.Parameter(torch.zeros(1,1,128));self.null_emf=nn.Parameter(torch.zeros(1,1,128))
-        self.blocks=nn.ModuleList([CrossBlock(),CrossBlock()]);self.pool=CrossBlock();incoming=128
-        self.decoders=nn.ModuleList([nn.Sequential(nn.Linear(incoming,256),nn.LayerNorm(256),nn.GELU(),
-            nn.Linear(256,256),nn.GELU(),nn.Linear(256,4),nn.Tanh()) for _ in range(5)])
+        self.emf=nn.Linear(9,width)
+        self.tactile_encoder=tactile_encoder
+        if tactile_encoder=="dense":
+            self.touch=nn.Linear(4,width);self.sid=nn.Embedding(460,width)
+        elif tactile_encoder=="pointnet":
+            from .cart_pointnet import AnatomicalPointEncoder
+            self.touch=AnatomicalPointEncoder(tactile_groups,width)
+        else:raise ValueError("Unknown tactile encoder")
+        self.time=nn.Linear(1,width);self.finger=nn.Embedding(5,width)
+        self.frame=nn.Embedding(10,width)
+        self.current=nn.Linear(20,width)
+        self.null_touch=nn.Parameter(torch.zeros(1,1,width));self.null_emf=nn.Parameter(torch.zeros(1,1,width))
+        self.blocks=nn.ModuleList([CrossBlock(width),CrossBlock(width)]);self.pool=CrossBlock(width);incoming=width
+        self.decoders=nn.ModuleList([nn.Sequential(nn.Linear(incoming,decoder_width),nn.LayerNorm(decoder_width),nn.GELU(),
+            nn.Linear(decoder_width,decoder_width),nn.GELU(),nn.Linear(decoder_width,4),nn.Tanh()) for _ in range(5)])
         # A fresh policy holds its supplied current state, with an identity
         # state path through BPTT. Delta is not limited around a future IK pose.
         for decoder in self.decoders:
@@ -98,8 +110,8 @@ class CartNetwork(JointDeltaPolicy):
         pose=torch.cat(((safe[...,:3]-self.position_mean)/self.position_scale,safe[...,3:]),-1)
         return pose*valid[...,None]
 
-    def sensor_context(self,pose,valid,future_dt,tactile_positions,tactile_state,tv):
-        values=(pose,valid,future_dt,tactile_positions,tactile_state,tv)
+    def sensor_context(self,pose,valid,future_dt,tactile_positions,tactile_state,tv,tactile_tokens=None,tactile_token_valid=None):
+        values=(pose,valid,future_dt,tactile_positions,tactile_state,tv,tactile_tokens,tactile_token_valid)
         if self.checkpoint_observations and torch.is_grad_enabled():
             return checkpoint(self.encode_attention,*values,use_reentrant=False,preserve_rng_state=False)
         return self.encode_attention(*values)
@@ -109,14 +121,28 @@ class CartNetwork(JointDeltaPolicy):
         return self.sensor_context(self.normalized_emf(future_emf,valid),valid,future_dt,
             tactile_positions,tactile_state,tactile_valid.bool())
 
-    def encode_attention(self,pose,valid,future_dt,tactile_positions,tactile_state,tv):
+    def encode_tactile_frames(self,positions,state,valid):
+        """Encode measured frames before window-specific time/position embeddings."""
+        points=torch.where(valid[...,None],positions,0.)
+        state=torch.where(valid,state,0.)
+        normalized=(points-self.position_mean)/self.position_scale*valid[...,None]
+        return self.touch(normalized,state,valid)
+
+    def encode_attention(self,pose,valid,future_dt,tactile_positions,tactile_state,tv,
+                         tactile_tokens=None,tactile_token_valid=None):
         b=len(pose);device=pose.device
-        tp=torch.where(tv[...,None],tactile_positions,0.);ts=torch.where(tv,tactile_state,0.)
-        tx=torch.cat(((tp-self.position_mean)/self.position_scale,ts[...,None]),-1)*tv[...,None]
         frame=self.frame(torch.arange(10,device=device))[None,:,None]
         timing=self.time(future_dt[...,None])[:,:,None]
         e=self.emf(pose)+frame+timing+self.finger(torch.arange(5,device=device))[None,None]
-        t=self.touch(tx)+frame+timing+self.sid(torch.arange(460,device=device))[None,None]
+        if tactile_tokens is not None:
+            t=tactile_tokens;tv=tactile_token_valid
+        elif self.tactile_encoder=='pointnet':
+            t,tv=self.encode_tactile_frames(tactile_positions,tactile_state,tv)
+        else:
+            tp=torch.where(tv[...,None],tactile_positions,0.);ts=torch.where(tv,tactile_state,0.)
+            tx=torch.cat(((tp-self.position_mean)/self.position_scale,ts[...,None]),-1)*tv[...,None]
+            t=self.touch(tx)+self.sid(torch.arange(460,device=device))[None,None]
+        t=t+frame+timing
         t=torch.cat((t.flatten(1,2),self.null_touch.expand(b,-1,-1)),1)
         padding=torch.cat((~tv.flatten(1),torch.zeros(b,1,device=device,dtype=torch.bool)),1)
         e=e.flatten(1,2)
@@ -131,7 +157,7 @@ class CartNetwork(JointDeltaPolicy):
         return self.decode_fingers(context)
 
     def forward(self,current_q,future_emf,emf_valid,future_dt,tactile_positions=None,
-                tactile_state=None,tactile_valid=None,*,validate=True):
+                tactile_state=None,tactile_valid=None,*,validate=True,tactile_tokens=None,tactile_token_valid=None):
         b=len(current_q)
         if current_q.shape!=(b,self.state_size) or future_emf.shape!=(b,10,5,9) or emf_valid.shape!=(b,10,5) or future_dt.shape!=(b,10):
             raise ValueError(f'Expected q[B,{self.state_size}], EMF[B,10,5,9], valid[B,10,5], dt[B,10]')
@@ -141,12 +167,19 @@ class CartNetwork(JointDeltaPolicy):
         if validate and ((future_dt<=0).any() or (future_dt[:,1:]<=future_dt[:,:-1]).any() or (torch.diff(future_dt,dim=1)>.250001).any() or (future_dt[:,0]>.250001).any()):
             raise ValueError('Future timestamps must increase without a stream gap')
         pose=self.normalized_emf(future_emf,valid)
+        if tactile_tokens is not None:
+            if (self.tactile_encoder!='pointnet' or tactile_tokens.shape!=(b,10,6,self.width)
+                    or tactile_token_valid is None or tactile_token_valid.shape!=(b,10,6)):
+                raise ValueError('Expected prepared anatomical tactile tokens[B,10,6,width]')
+            return self.decode_observation_context(current_q,self.sensor_context(pose,valid,future_dt,
+                None,None,None,tactile_tokens,tactile_token_valid))
         if tactile_positions is None or tactile_state is None or tactile_valid is None or tactile_positions.shape!=(b,10,460,3) or tactile_state.shape!=(b,10,460) or tactile_valid.shape!=(b,10,460):
             raise ValueError('Attention requires tactile positions[B,10,460,3], state/valid[B,10,460]')
         tv=tactile_valid.bool()
         if validate and (not torch.isfinite(tactile_positions[tv]).all() or not torch.isfinite(tactile_state[tv]).all() or ((tactile_state[tv]!=0)&(tactile_state[tv]!=1)).any()):
             raise ValueError('Tactile input must contain finite positions and binary states')
         return self.decode_observation_context(current_q,self.sensor_context(pose,valid,future_dt,tactile_positions,tactile_state,tv))
+
 
 
 

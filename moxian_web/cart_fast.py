@@ -57,6 +57,44 @@ class PreparedBatch(list):
         inverse=torch.as_tensor(np.argsort(order),device=self.device)
         return {k:torch.cat(values,0)[inverse] for k,values in outputs.items()}
 
+    def single_step_inputs(self,model,offsets):
+        """Share raw-frame tactile features within one update graph only.
+
+        Warmup and trained windows retain distinct timestamps and frame indices.
+        Repeated frame gathers sum gradients exactly as repeated encoder calls;
+        the caller still detaches the warmup policy state.
+        """
+        groups={}
+        for b,(window,i) in enumerate(zip(self,offsets)):
+            groups.setdefault(window['store'],[]).append((b,window['indices'][i:i+12]))
+        outputs=[{},{}];order=[]
+        frame_chunk=max(1,int(getattr(model,'observation_chunk_size',128)))*10
+        for store,items in groups.items():
+            ids_cpu=np.asarray([idx for _,idx in items],dtype=np.int64)
+            if ids_cpu.shape!=(len(items),12):raise ValueError('Single step needs 12 observed frames')
+            unique,inverse=np.unique(ids_cpu[:,1:],return_inverse=True)
+            ids=torch.as_tensor(ids_cpu,device=self.device)
+            u=torch.as_tensor(unique,device=self.device)
+            pieces=[];masks=[]
+            for start in range(0,len(u),frame_chunk):
+                selected=u[start:start+frame_chunk];values=store.values
+                token,mask=model.encode_tactile_frames(values['tactile_positions'][selected],
+                    values['tactile_state'][selected],values['tactile_valid'][selected])
+                pieces.append(token);masks.append(mask)
+            gather=torch.as_tensor(inverse.reshape(len(items),11),device=self.device)
+            tokens=torch.cat(pieces)[gather];valid=torch.cat(masks)[gather]
+            stamps=store.stamps[ids]
+            emf=store.values['future_emf'][ids[:,1:]]
+            emf_valid=store.values['emf_valid'][ids[:,1:]]
+            order.extend(b for b,_ in items)
+            for shift in range(2):
+                values=dict(future_emf=emf[:,shift:shift+10],emf_valid=emf_valid[:,shift:shift+10],
+                    future_dt=((stamps[:,shift+1:shift+11]-stamps[:,shift:shift+1])/1000).float(),
+                    tactile_tokens=tokens[:,shift:shift+10],tactile_token_valid=valid[:,shift:shift+10])
+                for key,value in values.items():outputs[shift].setdefault(key,[]).append(value)
+        inverse=torch.as_tensor(np.argsort(order),device=self.device)
+        return [{key:torch.cat(values)[inverse] for key,values in output.items()} for output in outputs]
+
 
 def prepare_windows(sessions, windows, device):
     stores={meta['id']:ObservationStore(rows,device) for meta,rows,_ in sessions}

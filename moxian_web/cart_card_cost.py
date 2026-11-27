@@ -1,68 +1,10 @@
-"""CARD source targets and shared semantic-pad geometry for v9 and wrist CART.
-
-The two supported objectives share source charts, pad geometry and CARD
-weights. This module constructs immutable observed targets; the policy loss
-is implemented in cart_card_neural_surface and cart_card_self_contact.
-"""
-from dataclasses import dataclass, asdict
+"""Immutable native CARD source targets for the current normalized reach cost."""
 from pathlib import Path
 from types import SimpleNamespace
 import json
 import numpy as np
 import torch
-from torch.nn import functional as F
-
-from retarget.baseline.card.math import CardSettings
-from retarget.baseline.card.geometry import closest_surface_points
-
 TARGET_VERSION = 'card_source_targets_v1'
-
-
-@dataclass(frozen=True)
-class CardCostSettings:
-    loss_kind: str = 'card_raw_neural_self_contact_v4_actuated'
-    contact_scale_m: float = .01
-    contact_limit_m: float = .0005
-    penetration_limit_m: float = .005
-    normal_deg: float = 30.
-    link_continuity_weight: float = 2.5
-    penetration_cap_weight: float = 40.
-
-    def payload(self):
-        return dict(asdict(self), card=CardSettings().payload(),
-                    reduction='sum_regions_bones_queries_then_mean_window_frames',
-                    collision='neural_signed_surface_clearance_and_active_taxel_penetration',
-                    fixed_wrist=True, source_contacts='CARD_material_anchors_no_pair_inference')
-
-
-def selected_surface(query, triangles):
-    """Exact CARD closest feature, with its local derivative and bounded memory.
-
-    Discrete face/edge selection is piecewise constant. Recompute the selected
-    feature projection with autograd, including the CoP motion within a face.
-    """
-    with torch.no_grad():
-        local, index, bary = closest_surface_points(query.detach(), triangles)
-        active = bary > 1.e-7
-    tri = triangles[index]
-    a, b, c = tri.unbind(1)
-    ab, ac, delta = b-a, c-a, query-a
-    aa, bb, cc = ab.square().sum(-1), (ab*ac).sum(-1), ac.square().sum(-1)
-    det = (aa*cc-bb.square()).clamp_min(1.e-24)
-    ad, cd = (delta*ab).sum(-1), (delta*ac).sum(-1)
-    v, w = (cc*ad-bb*cd)/det, (aa*cd-bb*ad)/det
-    projected = a+v[:,None]*ab+w[:,None]*ac
-    for i, k in ((0,1),(1,2),(2,0)):
-        edge = tri[:,k]-tri[:,i]
-        t = ((query-tri[:,i])*edge).sum(-1)/edge.square().sum(-1).clamp_min(1.e-24)
-        point = tri[:,i]+t.clamp(0,1)[:,None]*edge
-        use = (active.sum(-1)==2)&active[:,i]&active[:,k]
-        projected = torch.where(use[:,None],point,projected)
-    vertex = tri[torch.arange(len(query),device=query.device),bary.argmax(-1)]
-    projected = torch.where((active.sum(-1)==1)[:,None],vertex,projected)
-    # Preserve the reference forward value to its original floating precision.
-    return local+(projected-projected.detach()), index
-
 
 def attach_card_targets(root, sessions, device, check=lambda:None, progress=None):
     """A separate, checksummed target cache; existing capture/IK bytes untouched."""
@@ -134,16 +76,3 @@ def attach_card_targets(root, sessions, device, check=lambda:None, progress=None
         for i,row in enumerate(rows):row['_card_targets']={k:v[i] for k,v in tensors.items()}
         reports.append(dict(dataset=meta['id'],fingerprint=fingerprint,sha256=file_hash(path),frames=len(rows)))
     return reports
-
-
-class CardSurfaceGeometry:
-    def __init__(self,hand,collision):
-        self.hand=hand;self.settings=CardCostSettings();self.collision=collision
-        self.vectorized=True;self.cache_rows=False
-        self.card=CardSettings();self.region_owners=[0]+[2+4*f+k for f in range(5) for k in range(3)]
-        self.pad_triangles=[];self.pad_normals=[];apices=[];psi=[]
-        for owner in self.region_owners:
-            pad=hand.surface.contact_surface(owner);pool=hand.surface.candidates(owner)['points']
-            self.pad_triangles.append(hand.tensor(pad['triangles']));self.pad_normals.append(hand.tensor(pad['normals']))
-            apices.append(pool[np.argmax(pool@hand.surface.axes[owner])]);psi.append(pool.mean(0))
-        self.apices=hand.tensor(apices);self.palm_psi=hand.tensor(psi[0])

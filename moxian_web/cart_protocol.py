@@ -13,7 +13,5 @@ LOOKAHEAD = 10
 FINGERS = ('thumb', 'index', 'middle', 'ring', 'pinky')
 
 V9_OBJECTIVE = 'card_raw_neural_self_contact_v4_actuated'
-WRIST_OBJECTIVE = 'card_raw_neural_self_contact_v5_wrist'
-LINK_SDF_OBJECTIVE = 'card_style_link_sdf_contacts_v6_wrist'
-CONDITIONAL_SDF_OBJECTIVE = 'card_conditional_sdf_v7_wrist'
-OBJECTIVES = (V9_OBJECTIVE, WRIST_OBJECTIVE, LINK_SDF_OBJECTIVE, CONDITIONAL_SDF_OBJECTIVE)
+from .cart_reach_loss import VERSION as WRIST_OBJECTIVE
+OBJECTIVES = (WRIST_OBJECTIVE,)

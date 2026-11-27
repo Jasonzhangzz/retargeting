@@ -39,3 +39,10 @@ MUJOCO_LOG.TXT
 *.pth
 *.ckpt
 /wandb/
+
+# LaTeX intermediate files (keep manuscript and figures).
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.out
